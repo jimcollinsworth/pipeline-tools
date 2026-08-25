@@ -11,6 +11,8 @@ except ImportError:
     PIXELTABLE_AVAILABLE = False
 
 
+from src.db.manager import DBManager
+
 class PromptExecutor:
     @staticmethod
     def format_prompt(template: str, row: Dict[str, Any]) -> str:
@@ -26,7 +28,7 @@ class PromptExecutor:
     def run_sample_test(cls, host: str, model: str, prompt_template: str, system_prompt: str,
                         table_dir: str, table_name: str, sample_count: int = 3) -> List[Dict[str, Any]]:
         """Run prompt test against 1 to N sample rows from table."""
-        full_table_path = f"{table_dir}.{table_name}"
+        full_table_path = DBManager.resolve_table_path(table_dir, table_name)
         table = pxt.get_table(full_table_path)
         
         # Collect sample rows as dicts
@@ -58,17 +60,19 @@ class PromptExecutor:
         Run prompt against table rows and write results back to target column.
         mode: 'replace' (overwrites column value) or 'append' (appends to existing value).
         """
-        full_table_path = f"{table_dir}.{table_name}"
-        table = pxt.get_table(full_table_path)
-        
-        # Check if target_column exists; if not, add it as String
-        existing_cols = list(table.columns.keys())
-        target_col_clean = target_column.strip()
-        if not target_col_clean:
-            return {"status": "error", "message": "Target column name cannot be empty."}
+        full_table_path = DBManager.resolve_table_path(table_dir, table_name)
+        valid_col, safe_col, col_msg = sanitize_identifier(target_column or "llm_summary")
 
-        if target_col_clean not in existing_cols:
-            table.add_column(**{target_col_clean: pxt.String})
+        if not valid_col:
+            return {"status": "error", "message": f"Invalid Target Column name '{target_column}': {col_msg}"}
+
+        table = pxt.get_table(full_table_path)
+
+        
+        # Check existing columns safely
+        cols_list = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
+        if safe_col not in cols_list:
+            table.add_column(**{safe_col: pxt.String})
 
         # Fetch rows
         query = table
@@ -78,23 +82,27 @@ class PromptExecutor:
         records = df.to_dict(orient="records")
         
         client = OllamaClient(host=host)
-        updated_rows = []
+        updated_count = 0
         
         for row in records:
             prompt = cls.format_prompt(prompt_template, row)
             res = client.generate(model=model, prompt=prompt, system=system_prompt)
             
-            existing_val = str(row.get(target_col_clean, "")) if row.get(target_col_clean) is not None else ""
+            existing_val = str(row.get(safe_col, "")) if row.get(safe_col) is not None else ""
             if mode == "append" and existing_val:
                 new_val = f"{existing_val}\n\n{res}"
             else:
                 new_val = res
                 
-            table.update({target_col_clean: new_val}, where=(table.id == row["id"]))
-            updated_rows.append(row["id"])
+            table.update({safe_col: new_val}, where=(table.id == row["id"]))
+            updated_count += 1
 
+        note = f" (Column name formatted as '{safe_col}')" if safe_col != target_column else ""
         return {
             "status": "success",
-            "message": f"Successfully processed {len(updated_rows)} rows and saved to column '{target_col_clean}' ({mode} mode).",
-            "count": len(updated_rows)
+            "message": f"Successfully processed {updated_count} rows and saved to column '{safe_col}'{note} ({mode} mode).",
+            "count": updated_count,
+            "column": safe_col
         }
+
+

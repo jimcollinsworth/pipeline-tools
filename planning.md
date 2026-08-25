@@ -36,14 +36,15 @@ flowchart TD
 
 ## 2. Implementation Roadmap & Task Lists
 
-### Phase 1: Core Foundation & Prompt Playground (Completed)
+### Phase 1: Core Foundation & Prompt Playground (Completed & Tested)
 - [x] **Environment & Core Config Setup**
   - Dependency setup & config module (`config.json` with Ollama, default models, directories).
-  - Minimal automated test suite in `tests/test_app.py` verifying settings, scanner, and Gradio app loading.
+  - Minimal automated test suite in `tests/test_app.py` verifying settings, scanner, Pixeltable table creation, and Gradio app loading.
 - [x] **Pixeltable Schema & Ingestion Core**
   - Unified table definition (`file_name`, `file_path`, `rel_path`, `modality`, `file_type`, `file_size`, `content`, `doc`, `image`, `audio`, `video`, `metadata`, `created_at`).
   - Domain / directory and table name selection in UI.
-  - Ingestion handler: One file $\rightarrow$ One row, with text/markdown extraction.
+  - Ingestion handler: One file $\rightarrow$ One row, with native text/markdown extraction and direct PDF page text extraction via Pixeltable's bundled `pypdfium2` engine into the `content` column.
+
 - [x] **Prompt Iteration Workbench (Gradio UI)**
   - UI Tab: **Ingestion & Data Inspector** (directory selector, file filter, scan summary, and Pixeltable ingestion trigger).
   - UI Tab: **Prompt Playground** (select Ollama model, enter system/user prompts with `{column}` placeholders, test on 1–N sample rows with side-by-side preview).
@@ -51,8 +52,16 @@ flowchart TD
   - UI Tab: **Lineage & DataTables** (view table contents and columns in an interactive data viewer).
   - UI Tab: **Settings & Models** (Ollama server health test and installed model browser).
 
-### Phase 2: Export Engine & Live Monitoring (Next Priority)
+
+### Phase 2: Usability Improvements, Export Engine & Live Monitoring (In Progress)
+- [x] **UI Usability & Persistent Inputs**
+  - Added dynamic select dropdowns for Domain/Directory and Table names in Prompt Playground with automatic auto-refresh when domain changes.
+  - Added Live Table Data Preview & Row Count display in Prompt Playground (updates automatically on table/domain selection and after batch execution).
+  - Fixed table path resolution for preview loading (handles both bare table names `raw_files_test` and domain-prefixed names `eba/raw_files_test` without creating duplicate prefixes).
+  - Automatic error formatting and name sanitization (protects against leading digits, dashes, and invalid characters in table/domain names).
+  - Saved dialog box last entries (persists last-used domain, table name, model, prompt templates, system prompts, and source directory to `config.json` automatically).
 - [ ] **Export Manager**
+
   - Safe sidecar generation: `.meta.yaml`, `.json`, and Markdown summary files next to source files or in an export mirror tree.
   - CSV/Parquet export of structured tables (entities, tags, summaries, chunk lineage).
   - In-place optional YAML frontmatter updates for Markdown files.

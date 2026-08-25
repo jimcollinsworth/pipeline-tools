@@ -1,7 +1,7 @@
 import gradio as gr
 import pandas as pd
 from pathlib import Path
-from src.core.config import get_settings
+from src.core.config import get_settings, update_last_entry, sanitize_identifier
 from src.ingest.scanner import scan_directory
 from src.db.manager import DBManager
 
@@ -47,19 +47,74 @@ def render_ingest_tab():
         with gr.Row():
             domain_input = gr.Textbox(
                 label="Pixeltable Domain / Directory",
-                value="default",
-                placeholder="e.g. project_alpha, knowledge_base",
+                value=settings.last_domain,
+                placeholder="e.g. eba, project_alpha",
                 scale=2
             )
             table_input = gr.Textbox(
                 label="Table Name",
-                value="raw_assets",
-                placeholder="e.g. documents, media_files",
+                value=settings.last_table,
+                placeholder="e.g. raw_assets, documents",
                 scale=2
             )
             ingest_btn = gr.Button("⚡ Ingest Scanned Files into Pixeltable", variant="primary", scale=2)
 
         ingest_status_box = gr.Markdown("#### Ingestion Status: *Ready*")
+
+    def on_scan(path_str, modalities, recursive):
+        if not path_str or not path_str.strip():
+            return "⚠️ Please provide a valid directory path.", [], []
+        
+        p = Path(path_str.strip())
+        if not p.exists():
+            return f"❌ Path does not exist: `{path_str}`", [], []
+        if not p.is_dir():
+            return f"❌ Path is not a directory: `{path_str}`", [], []
+
+        # Save last scanned directory
+        update_last_entry(default_ingest_dir=str(p))
+
+        files = scan_directory(str(p), recursive=recursive, modalities=modalities)
+        if not files:
+            return f"ℹ️ Directory scanned successfully, but no matching files were found in `{path_str}`.", [], []
+
+        # Tally summary stats
+        modality_counts = {}
+        total_bytes = 0
+        for f in files:
+            m = f["modality"]
+            modality_counts[m] = modality_counts.get(m, 0) + 1
+            total_bytes += f["size_bytes"]
+
+        total_mb = round(total_bytes / (1024 * 1024), 2)
+        breakdown = ", ".join([f"**{m}**: {count}" for m, count in modality_counts.items()])
+        summary_text = (
+            f"✅ **Found {len(files)} files** ({total_mb} MB total)\n\n"
+            f"Breakdown: {breakdown}"
+        )
+
+        rows = [
+            [f["name"], f["modality"], f["extension"], f["size"], f["rel_path"], f["abs_path"]]
+            for f in files
+        ]
+
+        return summary_text, rows, files
+
+    def on_ingest(files_data, domain, table_name):
+        if not files_data:
+            return "⚠️ No scanned files to ingest. Please scan a directory first."
+        
+        clean_dir = domain.strip() if domain else "default"
+        clean_tbl = table_name.strip() if table_name else "raw_assets"
+
+        update_last_entry(last_domain=clean_dir, last_table=clean_tbl)
+
+        res = DBManager.ingest_files(clean_dir, clean_tbl, files_data)
+        if res.get("status") == "success":
+            return f"✅ **{res.get('message')}**"
+        else:
+            return f"❌ **Error during ingestion:**\n```\n{res.get('message')}\n```"
+
 
     def on_scan(path_str, modalities, recursive):
         if not path_str or not path_str.strip():

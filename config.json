@@ -3,10 +3,10 @@
   "default_ollama_model": "qwen3.5:9b",
   "gemini_api_key": null,
   "pixeltable_dir": ".pixeltable_data",
-  "default_ingest_dir": "",
+  "default_ingest_dir": "C:\\Users\\jimco\\Documents",
   "export_dir": "exports",
-  "last_domain": "eba",
-  "last_table": "motionsreports",
+  "last_domain": "test_pxt_dir",
+  "last_table": "test_sentence_table",
   "last_system_prompt": "You are a helpful AI assistant extracting entities, summaries, and key metadata from documents.",
   "last_user_prompt": "Analyze the following document:\nFile: {file_name}\n\nContent:\n{content}\n\nProvide a 2-sentence summary and extract top 3 key entities as JSON."
 }

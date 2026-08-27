@@ -22,40 +22,48 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 
 ### Prerequisites
 - Python 3.10+ (Python 3.11+ recommended)
-- Virtual environment tool (env, conda, or uv)
+- `uv` or standard Python `venv` / `pip`
 
 ### Installation & Setup
 
-1. **Clone the repository and activate your environment:**
-   `ash
+1. **Clone the repository and initialize virtual environment:**
+   ```bash
    cd d:\projects\pipeline-tools
-   # If using conda / venv:
-   conda activate pipeline-tools
-   # or
+
+   # Create and activate virtual environment with uv:
+   uv venv
    .\.venv\Scripts\Activate.ps1
-   `
+
+   # Or using standard venv:
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
 
 2. **Install dependencies:**
-   `ash
-   pip install pixeltable gradio pymupdf pyyaml pydantic pandas openai anthropic google-genai
-   `
+   ```bash
+   # Using uv:
+   uv pip install -e .
+
+   # Or using standard pip:
+   pip install -e .
+   ```
 
 3. **Configure API Keys:**
-   Create a .env file or export your environment keys:
-   `ash
+   Create a `.env` file or export your environment keys:
+   ```bash
    OPENAI_API_KEY=your_openai_key
    ANTHROPIC_API_KEY=your_anthropic_key
    GEMINI_API_KEY=your_gemini_key
-   `
+   ```
 
 ---
 
 ## 💻 Usage & DevOps Commands
 
 ### Testing & Verification
-Run the automated test suite without installing any additional dependencies:
+Run the automated test suite to see detailed test names and status:
 ```bash
-.\.venv\Scripts\python.exe -m unittest tests.test_app
+uv run python tests/test_app.py
 ```
 
 ---

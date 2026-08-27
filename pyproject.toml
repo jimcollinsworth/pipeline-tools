@@ -1,7 +1,18 @@
 [project]
 name = "pipeline-tools"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multimodal Ingestion, Prompt Workbench & Export Engine"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.10"
+dependencies = [
+    "pixeltable",
+    "gradio",
+    "pymupdf",
+    "pyyaml",
+    "pydantic",
+    "pandas",
+    "openai",
+    "anthropic",
+    "google-genai",
+]
+

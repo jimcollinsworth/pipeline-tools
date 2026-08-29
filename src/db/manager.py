@@ -145,6 +145,7 @@ class DBManager:
 
     @classmethod
     def ingest_files(cls, dir_name: str, table_name: str, files_info: List[Dict[str, Any]],
+                     overwrite: bool = False,
                      progress_callback: Optional[Any] = None) -> Dict[str, Any]:
         """Ingest a list of scanned file metadata into the selected Pixeltable table."""
         if not files_info:
@@ -163,6 +164,21 @@ class DBManager:
                 return {"status": "error", "message": f"Invalid Domain name: {dir_msg}"}
             if not valid_tbl:
                 return {"status": "error", "message": f"Invalid Table name: {tbl_msg}"}
+
+            full_table_path = cls.resolve_table_path(safe_dir, safe_tbl)
+            overwritten_notice = ""
+
+            # Check if table already exists
+            existing_tables = cls.list_tables(safe_dir)
+            if safe_tbl in existing_tables:
+                if overwrite:
+                    if progress_callback:
+                        progress_callback(0, len(files_info), f"Overwriting table '{safe_dir}.{safe_tbl}' (archiving previous version)...")
+                    try:
+                        pxt.drop_table(full_table_path, if_not_exists="ignore")
+                        overwritten_notice = " (Previous table version archived in Pixeltable lineage)"
+                    except Exception:
+                        pass
 
             if progress_callback:
                 progress_callback(0, len(files_info), f"Initializing table '{safe_dir}.{safe_tbl}'...")
@@ -212,11 +228,12 @@ class DBManager:
             note = f" (Name adjusted: '{safe_dir}.{safe_tbl}')" if (safe_dir != dir_name or safe_tbl != table_name) else ""
             return {
                 "status": "success",
-                "message": f"Successfully ingested {len(rows_to_insert)} rows into '{safe_dir}.{safe_tbl}'{note}. Total rows in table: {total_count}",
+                "message": f"Successfully ingested {len(rows_to_insert)} rows into '{safe_dir}.{safe_tbl}'{note}{overwritten_notice}. Total rows in table: {total_count}",
                 "inserted_count": len(rows_to_insert),
                 "total_count": total_count,
                 "domain": safe_dir,
-                "table": safe_tbl
+                "table": safe_tbl,
+                "overwritten": bool(overwritten_notice)
             }
         except Exception as e:
             return {

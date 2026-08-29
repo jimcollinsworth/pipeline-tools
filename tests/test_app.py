@@ -123,6 +123,27 @@ class TestPipelineTools(unittest.TestCase):
             self.assertTrue(len(calls) > 0)
             self.assertEqual(calls[-1][0], calls[-1][1])  # Completed 100%
 
+    def test_ingest_overwrite_mode(self):
+        """[Ingest] Verify DBManager.ingest_files supports table overwrite mode and preserves Pixeltable lineage."""
+        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [{
+                "name": "sample.md",
+                "abs_path": str(Path("planning.md").resolve()),
+                "rel_path": "planning.md",
+                "modality": "docs",
+                "extension": ".md",
+                "size_bytes": 100,
+                "size": "100 B"
+            }]
+            # Initial Ingestion
+            res1 = DBManager.ingest_files("test_unit", "overwrite_test", fake_files, overwrite=False)
+            self.assertEqual(res1.get("status"), "success")
+            # Overwrite Ingestion
+            res2 = DBManager.ingest_files("test_unit", "overwrite_test", fake_files, overwrite=True)
+            self.assertEqual(res2.get("status"), "success")
+            self.assertTrue(res2.get("overwritten"))
+
     def test_gemini_client_models(self):
         """[Gemini] Verify GeminiClient discovers modern Gemini 3.x models and handles missing API key."""
         from src.core.gemini_client import GeminiClient

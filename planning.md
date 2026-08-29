@@ -60,8 +60,9 @@ flowchart TD
   - Fixed table path resolution for preview loading (handles both bare table names `raw_files_test` and domain-prefixed names `eba/raw_files_test` without creating duplicate prefixes).
   - Automatic error formatting and name sanitization (protects against leading digits, dashes, and invalid characters in table/domain names).
   - Saved dialog box last entries (persists last-used domain, table name, model, prompt templates, system prompts, and source directory to `config.json` automatically).
+- [ ] **Condensed Lightweight Table Preview & Field Summarization**
+  - Enhance lightweight preview mode across DataTables and Prompt Playground to display a high-density, condensed view with aggressive field truncation (e.g. 50-80 characters for large text/content), media badge placeholders (`[PDF]`, `[IMG]`), and concise JSON/dict metadata summaries.
 - [ ] **Export Manager**
-
   - Safe sidecar generation: `.meta.yaml`, `.json`, and Markdown summary files next to source files or in an export mirror tree.
   - CSV/Parquet export of structured tables (entities, tags, summaries, chunk lineage).
   - In-place optional YAML frontmatter updates for Markdown files.

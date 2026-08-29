@@ -62,15 +62,41 @@ class Settings(BaseModel):
         description="Last used user prompt template"
     )
 
+def load_env_file():
+    """Lightweight zero-dependency .env file reader."""
+    env_file = Path(".env")
+    if env_file.exists():
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k, v = k.strip(), v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+load_env_file()
+
 def load_settings() -> Settings:
+    settings = Settings()
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return Settings(**data)
+                settings = Settings(**data)
         except Exception:
             pass
-    return Settings()
+            
+    # Environment variable fallbacks
+    if not settings.gemini_api_key and os.environ.get("GEMINI_API_KEY"):
+        settings.gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    if os.environ.get("OLLAMA_HOST"):
+        settings.ollama_host = os.environ.get("OLLAMA_HOST")
+        
+    return settings
 
 def save_settings(settings: Settings) -> Settings:
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:

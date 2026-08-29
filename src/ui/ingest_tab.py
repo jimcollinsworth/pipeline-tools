@@ -82,22 +82,41 @@ def render_ingest_tab():
         # State to store scanned files in memory for ingestion
         scanned_state = gr.State([])
 
+        domains = DBManager.list_dirs()
+        if not domains:
+            domains = ["default"]
+        initial_domain = settings.last_domain if settings.last_domain in domains else domains[0]
+
+        tables = DBManager.list_tables(initial_domain)
+        if not tables:
+            tables = ["raw_assets"]
+        initial_table = settings.last_table if settings.last_table in tables else tables[0]
+
         gr.Markdown("---")
         gr.Markdown("### 📥 Pixeltable Ingestion Target")
         with gr.Row():
-            domain_input = gr.Textbox(
-                label="Pixeltable Domain / Directory",
-                value=settings.last_domain,
-                placeholder="e.g. eba, project_alpha",
+            domain_dropdown = gr.Dropdown(
+                label="Pixeltable Domain / Directory (Select or type new)",
+                choices=domains,
+                value=initial_domain,
+                allow_custom_value=True,
                 scale=2
             )
-            table_input = gr.Textbox(
-                label="Table Name",
-                value=settings.last_table,
-                placeholder="e.g. raw_assets, documents",
+            table_dropdown = gr.Dropdown(
+                label="Table Name (Select or type new)",
+                choices=tables,
+                value=initial_table,
+                allow_custom_value=True,
                 scale=2
             )
-            ingest_btn = gr.Button("⚡ Ingest Scanned Files into Pixeltable", variant="primary", scale=2)
+            overwrite_check = gr.Checkbox(
+                label="Overwrite if Exists (Preserves Lineage History)",
+                value=False,
+                scale=2
+            )
+
+        with gr.Row():
+            ingest_btn = gr.Button("⚡ Ingest Scanned Files into Pixeltable", variant="primary", scale=1)
 
         with gr.Group(elem_classes=["status-panel"]):
             ingest_status_box = gr.Markdown("#### Ingestion Status: *Ready*")
@@ -108,6 +127,17 @@ def render_ingest_tab():
             return gr.update()
         new_choices = get_directory_choices(selected_path)
         return gr.update(choices=new_choices)
+
+    def on_ingest_domain_change(selected_domain):
+        if not selected_domain:
+            return gr.update(choices=["raw_assets"], value="raw_assets")
+        clean_dir = selected_domain.strip()
+        tables_list = DBManager.list_tables(clean_dir)
+        if not tables_list:
+            tables_list = ["raw_assets"]
+        curr_settings = get_settings()
+        selected_tbl = curr_settings.last_table if curr_settings.last_table in tables_list else tables_list[0]
+        return gr.update(choices=tables_list, value=selected_tbl)
 
     def on_scan(path_str, modalities, recursive, progress=gr.Progress(track_tqdm=True)):
         if not path_str or not path_str.strip():
@@ -156,7 +186,7 @@ def render_ingest_tab():
 
         return summary_text, rows, files, gr.update(choices=updated_choices)
 
-    def on_ingest(files_data, domain, table_name, progress=gr.Progress(track_tqdm=True)):
+    def on_ingest(files_data, domain, table_name, overwrite, progress=gr.Progress(track_tqdm=True)):
         if not files_data:
             gr.Warning("No scanned files to ingest. Scan a directory first.")
             yield "### ⚠️ No Files to Ingest\n> Please scan a directory containing documents/media first."
@@ -177,7 +207,8 @@ def render_ingest_tab():
         update_last_entry(last_domain=clean_dir, last_table=clean_tbl)
 
         total_files = len(files_data)
-        yield f"⏳ **[1/3] Ingestion Started...** Initializing table `{clean_dir}.{clean_tbl}` for {total_files} files..."
+        mode_str = "Overwriting (Archiving previous version)" if overwrite else "Appending to table"
+        yield f"⏳ **[1/3] Ingestion Started...** Target: `{clean_dir}.{clean_tbl}` ({mode_str}) for {total_files} files..."
 
         def cb(cur, total, detail):
             pct = (cur / total) if total else 0.5
@@ -185,15 +216,16 @@ def render_ingest_tab():
 
         try:
             yield f"⏳ **[2/3] Extracting Content & Metadata...** Processing {total_files} files into `{clean_dir}.{clean_tbl}`..."
-            res = DBManager.ingest_files(clean_dir, clean_tbl, files_data, progress_callback=cb)
+            res = DBManager.ingest_files(clean_dir, clean_tbl, files_data, overwrite=overwrite, progress_callback=cb)
             
             if res.get("status") == "success":
+                overwritten_msg = "\n> ℹ️ *Previous version archived in Pixeltable lineage history.*" if res.get("overwritten") else ""
                 gr.Info(f"Successfully ingested {res.get('inserted_count', total_files)} files!")
                 yield (
                     f"### ✅ Ingestion Complete!\n"
                     f"> **Target Table:** `{clean_dir}.{clean_tbl}`\n"
                     f"> **Rows Ingested:** {res.get('inserted_count', total_files)}\n"
-                    f"> **Total Rows in Table:** {res.get('total_count', 'N/A')}\n\n"
+                    f"> **Total Rows in Table:** {res.get('total_count', 'N/A')}{overwritten_msg}\n\n"
                     f"*You can now inspect the ingested data in the **Lineage & DataTables** tab or run prompts in **Prompt Playground**.*"
                 )
             else:
@@ -215,6 +247,12 @@ def render_ingest_tab():
         outputs=[dir_input]
     )
 
+    domain_dropdown.change(
+        fn=on_ingest_domain_change,
+        inputs=[domain_dropdown],
+        outputs=[table_dropdown]
+    )
+
     scan_btn.click(
         fn=on_scan,
         inputs=[dir_input, modality_filters, recursive_check],
@@ -223,6 +261,6 @@ def render_ingest_tab():
 
     ingest_btn.click(
         fn=on_ingest,
-        inputs=[scanned_state, domain_input, table_input],
+        inputs=[scanned_state, domain_dropdown, table_dropdown, overwrite_check],
         outputs=[ingest_status_box]
     )

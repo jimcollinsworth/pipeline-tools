@@ -18,7 +18,18 @@ This document defines core conventions, toolchain rules, architecture patterns, 
 
 ---
 
-## 🏛 2. Architecture & Core Technologies
+## 🔒 2. Secrets Management & Credentials Safety
+
+- **Never Commit Secrets or API Keys**:
+  - API keys (`GEMINI_API_KEY`, etc.), tokens, and passwords must **never** be committed to version control.
+  - Always keep `config.json`, `.env`, and local database/cache directories (`.pixeltable_data/`, `exports/`) in `.gitignore`.
+  - Provide sanitized template files (`config.example.json`, `.env.example`) containing only empty/null placeholders.
+  - When persisting settings locally to `config.json`, ensure `config.json` is untracked and ignored by Git.
+  - Prefer reading sensitive credentials from environment variables (`os.environ.get("GEMINI_API_KEY")`) or `.env` files.
+
+---
+
+## 🏛 3. Architecture & Core Technologies
 
 - **Pixeltable (`src/db/manager.py`)**:
   - Multimodal declarative database layer for document/media ingestion, computed columns, and lineage.
@@ -72,6 +83,10 @@ This document defines core conventions, toolchain rules, architecture patterns, 
 ## 🧠 6. Behavioral Guidelines (Karpathy Guidelines)
 
 Guidelines to reduce common LLM coding pitfalls, biasing toward caution and simplicity over speed:
+
+### 0. Action Rationale & Concise Communication
+- **Always provide a clear reason** before taking any tool action or asking a question.
+- **State issues and solutions concisely in 1 to 2 sentences at most.**
 
 ### 1. Think Before Coding
 *Don't assume. Don't hide confusion. Surface tradeoffs.*

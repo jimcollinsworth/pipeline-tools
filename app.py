@@ -6,47 +6,46 @@ from src.ui.playground_tab import render_playground_tab
 from src.ui.tables_tab import render_tables_tab
 
 def create_app():
-    # Monochromatic Technical / Bauhaus Theme
-    mono_theme = gr.themes.Monochrome(
+    # Clean, High-End Minimalist Monochromatic Theme
+    clean_theme = gr.themes.Monochrome(
         primary_hue=gr.themes.colors.neutral,
         secondary_hue=gr.themes.colors.neutral,
         neutral_hue=gr.themes.colors.neutral,
         text_size="sm",
-        radius_size="none",
-        font=[gr.themes.GoogleFont("JetBrains Mono"), "SF Mono", "Consolas", "monospace"],
-        font_mono=[gr.themes.GoogleFont("JetBrains Mono"), "Consolas", "monospace"]
+        radius_size="sm",
+        font=[gr.themes.GoogleFont("Inter"), "SF Pro Text", "Segoe UI", "sans-serif"],
+        font_mono=[gr.themes.GoogleFont("JetBrains Mono"), "SF Mono", "Consolas", "monospace"]
     ).set(
-        body_background_fill="#f3f0e8",
+        body_background_fill="#f7f5f0",
         body_background_fill_dark="#121212",
-        block_background_fill="#faf8f5",
+        block_background_fill="#ffffff",
         block_background_fill_dark="#181818",
-        block_border_width="1.5px",
-        block_border_color="#1a1a1a",
-        block_border_color_dark="#333333",
-        button_primary_background_fill="#111111",
-        button_primary_background_fill_hover="#333333",
+        block_border_width="0px",
+        block_shadow="none",
+        button_primary_background_fill="#18181b",
+        button_primary_background_fill_hover="#27272a",
         button_primary_text_color="#ffffff",
-        button_primary_border_color="#111111",
-        button_secondary_background_fill="#faf8f5",
-        button_secondary_background_fill_hover="#eae7df",
-        button_secondary_text_color="#111111",
-        button_secondary_border_color="#1a1a1a",
+        button_primary_border_color="#18181b",
+        button_secondary_background_fill="#ffffff",
+        button_secondary_background_fill_hover="#f4f1ea",
+        button_secondary_text_color="#18181b",
+        button_secondary_border_color="#d4d0c8",
         input_background_fill="#ffffff",
-        input_border_color="#1a1a1a",
-        input_border_width="1.5px",
-        table_border_color="#1a1a1a",
-        table_row_focus="#eae7df"
+        input_border_color="#d4d0c8",
+        input_border_width="1px",
+        input_radius="6px",
+        table_border_color="#e5e1d8",
+        table_row_focus="#f4f1ea"
     )
 
     custom_css = """
-    /* Full-Width Layout & Monochromatic Architecture */
+    /* Full-Width Layout & Clean Canvas */
     body, gradio-app, .gradio-container {
         max-width: 98% !important;
         width: 98% !important;
-        margin: 8px auto !important;
-        background-color: #f3f0e8 !important;
-        font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace !important;
-        color: #111111 !important;
+        margin: 6px auto !important;
+        background-color: #f7f5f0 !important;
+        color: #18181b !important;
     }
     
     .tabitem, .tabs, .tab-nav {
@@ -54,147 +53,169 @@ def create_app():
         min-width: 100% !important;
     }
 
+    /* Remove excessive nested boxes and borders */
+    .gr-block, .gr-form, .gr-box, fieldset {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 4px 0 !important;
+    }
+
     /* Minimalist Header */
     .app-header {
-        border-bottom: 2px solid #111111;
-        padding-bottom: 10px;
+        border-bottom: 1px solid #d4d0c8;
+        padding-bottom: 12px;
         margin-bottom: 16px;
     }
     .app-header h1 {
-        font-size: 1.6rem !important;
-        font-weight: 800 !important;
-        letter-spacing: -0.5px !important;
-        text-transform: uppercase !important;
+        font-size: 1.45rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.3px !important;
         margin-bottom: 2px !important;
+        color: #18181b !important;
     }
     .app-header p {
         font-size: 0.85rem !important;
-        color: #555555 !important;
+        color: #71717a !important;
         margin: 0 !important;
     }
 
-    /* Architectural Monospace Tabs */
+    /* Clean Modern Tabs */
     .tab-nav {
-        border-bottom: 1.5px solid #1a1a1a !important;
-        gap: 6px !important;
-        padding-bottom: 4px !important;
-        margin-bottom: 16px !important;
+        border-bottom: 1px solid #d4d0c8 !important;
+        gap: 8px !important;
+        margin-bottom: 20px !important;
+        background: transparent !important;
     }
     .tab-nav button {
-        font-family: 'JetBrains Mono', monospace !important;
-        font-weight: 700 !important;
-        font-size: 0.82rem !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.6px !important;
-        border: 1.5px solid #1a1a1a !important;
-        border-radius: 2px !important;
-        background: #faf8f5 !important;
-        color: #1a1a1a !important;
-        padding: 6px 16px !important;
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        color: #71717a !important;
+        padding: 8px 16px !important;
+        border: none !important;
+        border-radius: 6px !important;
+        background: transparent !important;
         transition: all 0.15s ease !important;
     }
     .tab-nav button.selected, .tab-nav button[aria-selected="true"] {
-        background: #111111 !important;
+        background: #18181b !important;
         color: #ffffff !important;
-        border: 1.5px solid #111111 !important;
     }
     .tab-nav button:hover:not(.selected) {
-        background: #e8e4dc !important;
+        background: #eae6dd !important;
+        color: #18181b !important;
     }
 
-    /* Monochromatic Card Containers & Status Panels */
-    .status-panel, .card-box {
-        margin-top: 16px !important;
+    /* Status Panels - Clean single-card container */
+    .status-panel {
+        margin-top: 14px !important;
         padding: 14px 18px !important;
-        border-radius: 2px !important;
-        border: 1.5px solid #1a1a1a !important;
-        background: #faf8f5 !important;
-        min-height: 80px !important;
-        box-shadow: 2px 2px 0px #1a1a1a !important;
+        border-radius: 6px !important;
+        border: 1px solid #d4d0c8 !important;
+        background: #ffffff !important;
+        min-height: 70px !important;
     }
     .progress-level {
-        margin-bottom: 16px !important;
+        margin-bottom: 12px !important;
     }
 
-    /* Buttons */
+    /* Elegant Buttons */
     button.primary, button[variant="primary"] {
-        background: #111111 !important;
+        background: #18181b !important;
         color: #ffffff !important;
-        border: 1.5px solid #111111 !important;
-        border-radius: 2px !important;
-        font-weight: 700 !important;
-        font-family: 'JetBrains Mono', monospace !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.6px !important;
-        box-shadow: 2px 2px 0px #333333 !important;
+        border: 1px solid #18181b !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        padding: 8px 18px !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
+        transition: background 0.15s ease !important;
     }
     button.primary:hover {
-        background: #2a2a2a !important;
-        box-shadow: 1px 1px 0px #111111 !important;
+        background: #27272a !important;
     }
     button.secondary, button[variant="secondary"] {
-        background: #faf8f5 !important;
-        color: #111111 !important;
-        border: 1.5px solid #1a1a1a !important;
-        border-radius: 2px !important;
-        font-weight: 700 !important;
-        font-family: 'JetBrains Mono', monospace !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.6px !important;
+        background: #ffffff !important;
+        color: #18181b !important;
+        border: 1px solid #d4d0c8 !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
     }
     button.secondary:hover {
-        background: #eae6dd !important;
+        background: #f4f1ea !important;
     }
     button.stop, button[variant="stop"] {
-        background: #111111 !important;
+        background: #18181b !important;
         color: #ffffff !important;
-        border: 1.5px solid #111111 !important;
-        border-radius: 2px !important;
-        font-weight: 700 !important;
-        font-family: 'JetBrains Mono', monospace !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.6px !important;
-        box-shadow: 2px 2px 0px #111111 !important;
+        border: 1px solid #18181b !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
     }
 
-    /* Inputs, Dropdowns, Checkboxes */
-    input, textarea, select, .gr-input, .gr-dropdown {
-        border: 1.5px solid #1a1a1a !important;
-        border-radius: 2px !important;
+    /* Single-layer Clean Inputs */
+    input:not([type="checkbox"]):not([type="radio"]), textarea, select, .gr-dropdown {
+        border: 1px solid #d4d0c8 !important;
+        border-radius: 6px !important;
         background: #ffffff !important;
-        color: #111111 !important;
-        font-family: 'JetBrains Mono', monospace !important;
+        color: #18181b !important;
+    }
+    input:focus, textarea:focus {
+        border-color: #18181b !important;
+        box-shadow: 0 0 0 1px #18181b !important;
+    }
+
+    /* Clean Native Checkboxes */
+    input[type="checkbox"] {
+        accent-color: #18181b !important;
+        width: 16px !important;
+        height: 16px !important;
+        cursor: pointer !important;
+        border-radius: 4px !important;
+    }
+
+    /* Checkbox Group Filter Pills */
+    .gr-checkboxgroup label {
+        border: 1px solid #d4d0c8 !important;
+        border-radius: 6px !important;
+        background: #ffffff !important;
+        padding: 4px 10px !important;
+        transition: all 0.15s ease !important;
+        margin-right: 6px !important;
+    }
+    .gr-checkboxgroup label:has(input:checked) {
+        background: #18181b !important;
+        color: #ffffff !important;
+        border-color: #18181b !important;
+    }
+    .gr-checkboxgroup label:has(input:checked) span {
+        color: #ffffff !important;
     }
     
     /* Clean High-Contrast Data Tables */
     .gr-dataframe, table {
-        border: 1.5px solid #1a1a1a !important;
-        border-radius: 2px !important;
-        font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.84rem !important;
+        border: 1px solid #d4d0c8 !important;
+        border-radius: 6px !important;
         background: #ffffff !important;
+        font-size: 0.85rem !important;
     }
     th {
-        background: #eae7df !important;
-        border-bottom: 1.5px solid #1a1a1a !important;
-        color: #111111 !important;
-        font-weight: 700 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.4px !important;
+        background: #f0ece4 !important;
+        border-bottom: 1px solid #d4d0c8 !important;
+        color: #18181b !important;
+        font-weight: 600 !important;
         font-size: 0.8rem !important;
     }
     td {
-        border-bottom: 1px solid #e5e1d7 !important;
-        color: #111111 !important;
+        border-bottom: 1px solid #f0ece4 !important;
+        color: #27272a !important;
     }
     """
     
-    with gr.Blocks(title="Pipeline Tools // Multimodal Workbench", theme=mono_theme, css=custom_css) as demo:
+    with gr.Blocks(title="Pipeline Tools // Multimodal Workbench", theme=clean_theme, css=custom_css) as demo:
         gr.Markdown(
             """
             <div class="app-header">
-                <h1>⬛ PIPELINE TOOLS // MULTIMODAL WORKBENCH</h1>
-                <p>Declarative Pixeltable Ingestion • Multi-Provider Prompt Engineering (Ollama / Gemini) • Lineage Inspector</p>
+                <h1>PIPELINE TOOLS // Multimodal Workbench</h1>
+                <p>Declarative Ingestion (Pixeltable) • Prompt Engineering (Ollama / Gemini) • Lineage Inspector</p>
             </div>
             """
         )

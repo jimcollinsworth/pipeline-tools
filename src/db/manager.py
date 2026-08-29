@@ -119,7 +119,6 @@ class DBManager:
                 with open(p, "r", encoding="utf-8", errors="ignore") as f:
                     return f.read()
             elif ext == ".pdf":
-                # Use Pixeltable's bundled PDF engine (pypdfium2)
                 try:
                     import pypdfium2 as pdfium
                     pdf = pdfium.PdfDocument(p)
@@ -129,7 +128,10 @@ class DBManager:
                         textpage = page.get_textpage()
                         text = textpage.get_text_range()
                         if text and text.strip():
-                            pages_text.append(text.strip())
+                            # Filter non-printable / raw binary bytes
+                            clean_text = "".join(c for c in text if c.isprintable() or c in "\n\r\t")
+                            if clean_text.strip():
+                                pages_text.append(clean_text.strip())
                     if pages_text:
                         return "\n\n--- PAGE BREAK ---\n\n".join(pages_text)
                     return "[Scanned/Image PDF - no extractable text found]"
@@ -142,7 +144,8 @@ class DBManager:
 
 
     @classmethod
-    def ingest_files(cls, dir_name: str, table_name: str, files_info: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def ingest_files(cls, dir_name: str, table_name: str, files_info: List[Dict[str, Any]],
+                     progress_callback: Optional[Any] = None) -> Dict[str, Any]:
         """Ingest a list of scanned file metadata into the selected Pixeltable table."""
         if not files_info:
             return {"status": "error", "message": "No files provided for ingestion. Please scan a directory first."}
@@ -161,17 +164,26 @@ class DBManager:
             if not valid_tbl:
                 return {"status": "error", "message": f"Invalid Table name: {tbl_msg}"}
 
+            if progress_callback:
+                progress_callback(0, len(files_info), f"Initializing table '{safe_dir}.{safe_tbl}'...")
+
             table = cls.get_or_create_table(safe_dir, safe_tbl)
             rows_to_insert = []
+            total_files = len(files_info)
 
-            for f in files_info:
+            for idx, f in enumerate(files_info):
                 abs_path = f.get("abs_path", "")
                 modality = f.get("modality", "other")
                 ext = f.get("extension", "")
+                file_name = f.get("name", Path(abs_path).name)
+
+                if progress_callback and (idx % 5 == 0 or idx == total_files - 1):
+                    progress_callback(idx + 1, total_files, f"Reading file {idx + 1}/{total_files}: {file_name}")
+
                 content = cls.extract_file_content(abs_path, modality, ext)
 
                 row = {
-                    "file_name": f.get("name", Path(abs_path).name),
+                    "file_name": file_name,
                     "file_path": abs_path,
                     "rel_path": f.get("rel_path", ""),
                     "modality": modality,
@@ -190,6 +202,9 @@ class DBManager:
                     "created_at": datetime.now()
                 }
                 rows_to_insert.append(row)
+
+            if progress_callback:
+                progress_callback(total_files, total_files, f"Committing {len(rows_to_insert)} rows to database...")
 
             table.insert(rows_to_insert, on_error="ignore")
             total_count = table.count()
@@ -211,8 +226,9 @@ class DBManager:
             }
 
     @classmethod
-    def get_table_data(cls, dir_name: str, table_name: str, limit: int = 50) -> Dict[str, Any]:
-        """Fetch rows from Pixeltable table for UI display."""
+    def get_table_data(cls, dir_name: str, table_name: str, limit: int = 50,
+                       lightweight: bool = True) -> Dict[str, Any]:
+        """Fetch rows from Pixeltable table for UI display with lightweight/full toggle."""
         if not PIXELTABLE_AVAILABLE:
             return {
                 "columns": ["Notice"],
@@ -225,6 +241,25 @@ class DBManager:
             
             table = pxt.get_table(full_table_path)
             df = table.limit(limit).collect().to_pandas()
+            
+            display_cols = list(df.columns)
+            if lightweight:
+                # Omit raw binary media handles from preview
+                heavy_cols = {"doc", "image", "audio", "video"}
+                display_cols = [c for c in display_cols if c not in heavy_cols]
+                df = df[display_cols]
+                
+                # Truncate long text columns to 250 chars for fast rendering
+                for col in df.columns:
+                    if df[col].dtype == "object":
+                        df[col] = df[col].apply(
+                            lambda x: (str(x)[:250] + "...") if isinstance(x, str) and len(x) > 250 else (str(x) if x is not None else "")
+                        )
+            else:
+                for col in df.columns:
+                    if df[col].dtype == "object":
+                        df[col] = df[col].apply(lambda x: str(x) if x is not None else "")
+
             return {
                 "columns": list(df.columns),
                 "data": df.fillna("").values.tolist(),

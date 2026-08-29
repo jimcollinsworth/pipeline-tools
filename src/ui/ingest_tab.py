@@ -99,7 +99,8 @@ def render_ingest_tab():
             )
             ingest_btn = gr.Button("⚡ Ingest Scanned Files into Pixeltable", variant="primary", scale=2)
 
-        ingest_status_box = gr.Markdown("#### Ingestion Status: *Ready*")
+        with gr.Group(elem_classes=["status-panel"]):
+            ingest_status_box = gr.Markdown("#### Ingestion Status: *Ready*")
 
     def on_dir_change(selected_path):
         """Update choices dynamically when user selects or types a path."""
@@ -108,22 +109,29 @@ def render_ingest_tab():
         new_choices = get_directory_choices(selected_path)
         return gr.update(choices=new_choices)
 
-    def on_scan(path_str, modalities, recursive):
+    def on_scan(path_str, modalities, recursive, progress=gr.Progress(track_tqdm=True)):
         if not path_str or not path_str.strip():
-            return "⚠️ Please provide a valid directory path.", [], [], gr.update()
+            gr.Warning("Please provide a valid directory path.")
+            return "⚠️ **Please provide a valid directory path.**", [], [], gr.update()
         
         p = Path(path_str.strip())
         if not p.exists():
-            return f"❌ Path does not exist: `{path_str}`", [], [], gr.update()
+            gr.Error(f"Path does not exist: {path_str}")
+            return f"### ❌ Path Not Found\n> Path `{path_str}` does not exist.", [], [], gr.update()
         if not p.is_dir():
-            return f"❌ Path is not a directory: `{path_str}`", [], [], gr.update()
+            gr.Error(f"Path is not a directory: {path_str}")
+            return f"### ❌ Not a Directory\n> Path `{path_str}` is a file, not a directory.", [], [], gr.update()
 
+        progress(0.2, desc=f"Scanning directory: {p.name}...")
         # Save last scanned directory
         update_last_entry(default_ingest_dir=str(p))
         updated_choices = get_directory_choices(str(p))
 
         files = scan_directory(str(p), recursive=recursive, modalities=modalities)
+        progress(1.0, desc=f"Found {len(files)} files.")
+
         if not files:
+            gr.Info(f"No matching files found in {path_str}")
             return f"ℹ️ Directory scanned successfully, but no matching files were found in `{path_str}`.", [], [], gr.update(choices=updated_choices)
 
         # Tally summary stats
@@ -148,24 +156,58 @@ def render_ingest_tab():
 
         return summary_text, rows, files, gr.update(choices=updated_choices)
 
-    def on_ingest(files_data, domain, table_name):
+    def on_ingest(files_data, domain, table_name, progress=gr.Progress(track_tqdm=True)):
         if not files_data:
-            return "⚠️ No scanned files to ingest. Please scan a directory first."
+            gr.Warning("No scanned files to ingest. Scan a directory first.")
+            yield "### ⚠️ No Files to Ingest\n> Please scan a directory containing documents/media first."
+            return
+
         if not domain or not domain.strip():
-            return "⚠️ Please enter a valid Domain/Directory name."
+            gr.Warning("Please enter a valid Domain/Directory name.")
+            yield "### ⚠️ Missing Domain\n> Please enter a Pixeltable domain name (e.g. `default`, `project_alpha`)."
+            return
+
         if not table_name or not table_name.strip():
-            return "⚠️ Please enter a valid Table name."
+            gr.Warning("Please enter a valid Table name.")
+            yield "### ⚠️ Missing Table Name\n> Please enter a target table name (e.g. `raw_assets`)."
+            return
 
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
-
         update_last_entry(last_domain=clean_dir, last_table=clean_tbl)
 
-        res = DBManager.ingest_files(clean_dir, clean_tbl, files_data)
-        if res.get("status") == "success":
-            return f"✅ **{res.get('message')}**"
-        else:
-            return f"❌ **Error during ingestion:** {res.get('message')}"
+        total_files = len(files_data)
+        yield f"⏳ **[1/3] Ingestion Started...** Initializing table `{clean_dir}.{clean_tbl}` for {total_files} files..."
+
+        def cb(cur, total, detail):
+            pct = (cur / total) if total else 0.5
+            progress(pct, desc=detail)
+
+        try:
+            yield f"⏳ **[2/3] Extracting Content & Metadata...** Processing {total_files} files into `{clean_dir}.{clean_tbl}`..."
+            res = DBManager.ingest_files(clean_dir, clean_tbl, files_data, progress_callback=cb)
+            
+            if res.get("status") == "success":
+                gr.Info(f"Successfully ingested {res.get('inserted_count', total_files)} files!")
+                yield (
+                    f"### ✅ Ingestion Complete!\n"
+                    f"> **Target Table:** `{clean_dir}.{clean_tbl}`\n"
+                    f"> **Rows Ingested:** {res.get('inserted_count', total_files)}\n"
+                    f"> **Total Rows in Table:** {res.get('total_count', 'N/A')}\n\n"
+                    f"*You can now inspect the ingested data in the **Lineage & DataTables** tab or run prompts in **Prompt Playground**.*"
+                )
+            else:
+                err_msg = res.get("message", "Unknown error")
+                gr.Error(f"Ingestion failed: {err_msg}")
+                yield (
+                    f"### ❌ Ingestion Failed\n"
+                    f"> **Error Message:**\n"
+                    f"> ```\n> {err_msg}\n> ```\n\n"
+                    f"💡 *Hint: Ensure domain and table identifiers do not contain hyphens `-` or start with numbers.*"
+                )
+        except Exception as e:
+            gr.Error(f"Unexpected error: {str(e)}")
+            yield f"### ❌ Unexpected Ingestion Exception\n```\n{type(e).__name__}: {str(e)}\n```"
 
     dir_input.change(
         fn=on_dir_change,

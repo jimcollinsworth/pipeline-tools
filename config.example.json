@@ -1,0 +1,16 @@
+{
+  "ollama_host": "http://localhost:11434",
+  "default_ollama_model": "llama3.2",
+  "gemini_api_key": null,
+  "default_gemini_model": "gemini-3.6-flash",
+  "default_provider": "Ollama",
+  "pixeltable_dir": ".pixeltable_data",
+  "default_ingest_dir": "",
+  "export_dir": "exports",
+  "last_provider": "Ollama",
+  "last_model": "llama3.2",
+  "last_domain": "default",
+  "last_table": "raw_assets",
+  "last_system_prompt": "You are a helpful AI assistant extracting entities, summaries, and key metadata from documents.",
+  "last_user_prompt": "Analyze the following document:\nFile: {file_name}\n\nContent:\n{content}\n\nProvide a 2-sentence summary and extract top 3 key entities as JSON."
+}

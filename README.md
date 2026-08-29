@@ -6,15 +6,31 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 
 ## 🛠 Features
 
-- **Multimodal Directory Ingestion**: Recursively scans and ingests PDF, Markdown, text, images, audio, and video files into a unified Pixeltable store with automatic metadata tracking.
-- **Sample-First Prompt Playground**: Test entity extraction, summarization, or structured tagging on 1–5 sample rows before running full-scale batch jobs.
-- **Incremental & Cached Execution**: Uses Pixeltable computed columns to ensure LLM operations are cached, incremental, and version-controlled.
+- **Multimodal Directory Ingestion**: Recursively scans and ingests PDF, Markdown, text, images, audio, and video files into a unified Pixeltable store with automatic metadata tracking. Easy selection/type ahead boxes for directory, domain, table, field and other selections.
+- **Sample-First Prompt Playground for data enhancement**: 
+  - Test entity extraction, summarization, or structured tagging on 1–5 sample rows before running full-scale batch jobs.
+  - Tool running for audio/video/image analysis, ie; beats per min, spectrogram, object recognition. Not sure if we want full MCP support, more important is fast calls to CV, audio and other functions, maybe just support python function calling. Initally lets put in a couple useful audio and video data enhancement functions, the outputs would be fed into new/existing columns. We do NOT want extra LLM calls here, but want to take advantage of tool calling if possible.
+- **Incremental & Cached Execution**: 
+  - Uses Pixeltable computed columns to ensure LLM operations are cached, incremental, and version-controlled.
+  - Minimize LLM calls per row, support multiple field/column input/templating into the LLM, and accept multiple field output of the LLM, inserted/appended into table columns. consider a well supported typed data interface with the LLM 
 - **Rich Interactive DataTable**: Inspect multimodal content, embedded media, chunks, and LLM extraction results directly in Gradio.
+- **Chunking and combining**
+  - chunk videos by time/frame, editing breaks (store both the frame signiture for before and after the edit), recognized object (find segments with ? in the video)
+  - ?how does pixeltable store chunked data relationships is there a parent/child UUID
+- **Rich search/filtering**
+  - select based on one or more fields, using semantic and/or exact text
+  - can feed everything into a tool/llm, and output video, audio, images, text, markdown, one document or many (10's not hundreds or more)
 - **Flexible Export Engine**:
-  - Sidecar metadata files (.meta.yaml / .json) co-located or mirrored in an output directory.
-  - Tabular exports (CSV / Parquet) for downstream pipeline stages.
+  - Sidecar metadata files (.meta.yaml) co-located or mirrored in an output directory.
+  - Tabular exports (CSV) for downstream pipeline stages.
   - Markdown summary reports and optional frontmatter injection.
 - **Lineage & Undo**: Full tracking of dataset versions, snapshot tags, and rollback support via Pixeltable.
+- **AI model support**
+  - track model, token usage along with ingestion, enhancement and other tasks
+  - ollama and gemini support - query models show meta data useful for model selection decisions, test connection button.  
+- **Skills support**
+  - want to load in skills for entity analysis, or municipal meeting, or best LLM models to use
+  - 
 
 ---
 
@@ -34,6 +50,7 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
    uv venv
    .\.venv\Scripts\Activate.ps1
 
+\\TODO remove 'standard venv, we are just using uv
    # Or using standard venv:
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
@@ -72,7 +89,11 @@ uv run python tests/test_app.py
 
 ### 1. Launch the Gradio Workbench
 ```bash
-.\.venv\Scripts\python.exe app.py
+# Recommended during active development (auto-reloads on file save):
+uv run gradio app.py
+
+# Or standard execution:
+uv run python app.py
 ```
 Open your browser at `http://localhost:7860`.
 

@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Pipeline Tools Local User Config & Data
+config.json
+.env
+.pixeltable_data/
+exports/

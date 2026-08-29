@@ -101,13 +101,64 @@ class TestPipelineTools(unittest.TestCase):
             self.assertTrue(len(text) > 0)
             self.assertIn("Pipeline Tools", text)
 
+    def test_ingest_progress_callback(self):
+        """[Ingest] Verify DBManager.ingest_files invokes progress callback with step updates."""
+        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
+        if PIXELTABLE_AVAILABLE:
+            calls = []
+            def cb(cur, total, detail):
+                calls.append((cur, total, detail))
+
+            fake_files = [{
+                "name": "sample.md",
+                "abs_path": str(Path("planning.md").resolve()),
+                "rel_path": "planning.md",
+                "modality": "docs",
+                "extension": ".md",
+                "size_bytes": 100,
+                "size": "100 B"
+            }]
+            res = DBManager.ingest_files("test_unit", "progress_test", fake_files, progress_callback=cb)
+            self.assertEqual(res.get("status"), "success")
+            self.assertTrue(len(calls) > 0)
+            self.assertEqual(calls[-1][0], calls[-1][1])  # Completed 100%
+
+    def test_gemini_client_models(self):
+        """[Gemini] Verify GeminiClient discovers modern Gemini 3.x models and handles missing API key."""
+        from src.core.gemini_client import GeminiClient
+        client = GeminiClient()
+        models = client.list_models()
+        model_names = [m["name"] for m in models]
+        self.assertIn("gemini-3.6-flash", model_names)
+        self.assertIn("gemini-3.5-flash-lite", model_names)
+        self.assertIn("gemini-3.1-pro-preview", model_names)
+        
+        # Verify check_connection without key
+        ok, msg = client.check_connection(api_key="")
+        self.assertFalse(ok)
+        self.assertIn("missing", msg.lower())
+
+    def test_llm_service_router(self):
+        """[Router] Verify unified LLMService routes queries and model discovery between Ollama and Gemini."""
+        from src.core.llm_service import LLMService
+        self.assertIn("Ollama", LLMService.PROVIDERS)
+        self.assertIn("Gemini", LLMService.PROVIDERS)
+
+        gemini_models = LLMService.list_models_for_provider("Gemini")
+        self.assertIn("gemini-3.6-flash", gemini_models)
+
+        ollama_models = LLMService.list_models_for_provider("Ollama")
+        self.assertTrue(len(ollama_models) > 0)
+
+
 
 class CleanTestResult(unittest.TestResult):
     """Custom TestResult that captures noise and formats clean visual separators between tests."""
 
-    def __init__(self, stream):
+    def __init__(self, stream, total_tests=1):
         super().__init__()
         self.stream = stream
+        self.total_tests = total_tests
         self.test_start_time = None
         self.test_count = 0
         self.successes = 0
@@ -133,21 +184,21 @@ class CleanTestResult(unittest.TestResult):
         self.successes += 1
         elapsed = time.time() - (self.test_start_time or time.time())
         doc = test._testMethodDoc or test.id()
-        self.stream.write(f"  [{self.test_count}/8] PASS ({elapsed:.3f}s)  {doc}\n")
+        self.stream.write(f"  [{self.test_count}/{self.total_tests}] PASS ({elapsed:.3f}s)  {doc}\n")
         self.stream.write("  " + "-" * 72 + "\n")
 
     def addError(self, test, err):
         super().addError(test, err)
         elapsed = time.time() - (self.test_start_time or time.time())
         doc = test._testMethodDoc or test.id()
-        self.stream.write(f"\n  [{self.test_count}/8] ERROR ({elapsed:.3f}s)  {doc}\n")
+        self.stream.write(f"\n  [{self.test_count}/{self.total_tests}] ERROR ({elapsed:.3f}s)  {doc}\n")
         self.stream.write("  " + "-" * 72 + "\n")
 
     def addFailure(self, test, err):
         super().addFailure(test, err)
         elapsed = time.time() - (self.test_start_time or time.time())
         doc = test._testMethodDoc or test.id()
-        self.stream.write(f"\n  [{self.test_count}/8] FAIL ({elapsed:.3f}s)  {doc}\n")
+        self.stream.write(f"\n  [{self.test_count}/{self.total_tests}] FAIL ({elapsed:.3f}s)  {doc}\n")
         self.stream.write("  " + "-" * 72 + "\n")
 
 
@@ -158,9 +209,9 @@ def run_tests():
     print(header + "\n")
     
     suite = unittest.TestLoader().loadTestsFromTestCase(TestPipelineTools)
-    result = CleanTestResult(sys.stdout)
+    total_count = suite.countTestCases()
+    result = CleanTestResult(sys.stdout, total_tests=total_count)
     
-    # Silence stdout during suite execution so module imports don't print to console
     old_stdout = sys.stdout
     try:
         suite.run(result)

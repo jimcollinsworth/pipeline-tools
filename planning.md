@@ -82,7 +82,8 @@ flowchart TD
 
 | ID | Topic | Status | Description / Decision |
 |---|---|---|---|
-| RES-01 | Pixeltable Chunking vs Table Structure | Complete | Use unified table with text/media columns, chunk views for document-level splitting, and computed columns for LLM calls. |
+| RES-01 | Pixeltable Chunking vs Table Structure | Complete | Use unified table with text/media columns, chunk views for document-level splitting, and computed columns for LLM calls. CV and audio analysis function calling |
 | RES-02 | Multimodal API Abstraction | In Progress | Support OpenAI, Anthropic, Google Gemini (via pixeltable.functions), and local Ollama via unified prompt wrapper. |
 | RES-03 | Large PDF Chunking Strategies | Open | Evaluate page-based vs semantic chunking with PyMuPDF / Pixeltable document splitters. |
 | RES-04 | Safe Sidecar Export Architecture | Open | Ensure sidecars support hash/mtime validation so re-exports avoid duplicating untouched assets. |
+Tool calling support for vision, audio function calling, want single LLM call per row processed but take advantage of LLM tool calling, python functions efficiently. MCP too if it is easy and efficient.

@@ -41,12 +41,16 @@ def sanitize_identifier(name: str) -> Tuple[bool, str, str]:
 class Settings(BaseModel):
     ollama_host: str = Field(default="http://localhost:11434", description="Ollama Server URL")
     default_ollama_model: str = Field(default="llama3.2", description="Default Ollama model for prompts")
-    gemini_api_key: Optional[str] = Field(default=None, description="Gemini API Key (for future use)")
+    gemini_api_key: Optional[str] = Field(default=None, description="Gemini API Key")
+    default_gemini_model: str = Field(default="gemini-3.6-flash", description="Default Gemini model")
+    default_provider: str = Field(default="Ollama", description="Default LLM Provider (Ollama or Gemini)")
     pixeltable_dir: str = Field(default=".pixeltable_data", description="Directory for Pixeltable storage")
     default_ingest_dir: str = Field(default="", description="Default source directory for ingestion")
     export_dir: str = Field(default="exports", description="Default export output directory")
     
     # Persistent UI States
+    last_provider: str = Field(default="Ollama", description="Last selected LLM provider")
+    last_model: str = Field(default="llama3.2", description="Last selected LLM model")
     last_domain: str = Field(default="default", description="Last used Pixeltable domain")
     last_table: str = Field(default="raw_assets", description="Last used Pixeltable table name")
     last_system_prompt: str = Field(

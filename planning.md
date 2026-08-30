@@ -62,6 +62,9 @@ flowchart TD
   - Saved dialog box last entries (persists last-used domain, table name, model, prompt templates, system prompts, and source directory to `config.json` automatically).
 - [ ] **Condensed Lightweight Table Preview & Field Summarization**
   - Enhance lightweight preview mode across DataTables and Prompt Playground to display a high-density, condensed view with aggressive field truncation (e.g. 50-80 characters for large text/content), media badge placeholders (`[PDF]`, `[IMG]`), and concise JSON/dict metadata summaries.
+- [ ] **Audit & Stabilize Table/Domain Dropdown Interactivity & Refresh Lifecycle**
+  - Check approach, code, and test coverage for table load/refresh and domain/table dropdown updating across Ingest, Playground, and DataTables tabs.
+  - Evaluate alternatives for reactive state synchronization in Gradio (e.g. explicit refresh triggers vs change listener cascades) to guarantee reliable updates.
 - [ ] **Export Manager**
   - Safe sidecar generation: `.meta.yaml`, `.json`, and Markdown summary files next to source files or in an export mirror tree.
   - CSV/Parquet export of structured tables (entities, tags, summaries, chunk lineage).
@@ -87,4 +90,5 @@ flowchart TD
 | RES-02 | Multimodal API Abstraction | In Progress | Support OpenAI, Anthropic, Google Gemini (via pixeltable.functions), and local Ollama via unified prompt wrapper. |
 | RES-03 | Large PDF Chunking Strategies | Open | Evaluate page-based vs semantic chunking with PyMuPDF / Pixeltable document splitters. |
 | RES-04 | Safe Sidecar Export Architecture | Open | Ensure sidecars support hash/mtime validation so re-exports avoid duplicating untouched assets. |
+| RES-05 | Table/Domain State & Dropdown Sync | Open | Audit event handlers, change listeners, and test suite across Gradio tabs to ensure robust dropdown options and table view updates. |
 Tool calling support for vision, audio function calling, want single LLM call per row processed but take advantage of LLM tool calling, python functions efficiently. MCP too if it is easy and efficient.

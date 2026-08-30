@@ -103,8 +103,16 @@ def render_playground_tab():
                 )
 
                 gr.Markdown("---")
-                gr.Markdown("#### 5. Apply & Save to Table Column")
+                gr.Markdown("#### 5. Apply & Save to Table Columns")
                 with gr.Row():
+                    output_mode_radio = gr.Radio(
+                        choices=["⚡ Auto-Split JSON Keys into Columns", "📄 Single Target Column"],
+                        value="⚡ Auto-Split JSON Keys into Columns",
+                        label="Output Mode",
+                        scale=3
+                    )
+                
+                with gr.Row(visible=False) as single_col_row:
                     target_column_input = gr.Textbox(
                         label="Target Column Name",
                         value="llm_summary",
@@ -117,6 +125,7 @@ def render_playground_tab():
                         label="Write Mode",
                         scale=1
                     )
+
                 with gr.Row():
                     limit_rows_input = gr.Number(
                         label="Row Limit (0 for all rows in table)",
@@ -124,7 +133,7 @@ def render_playground_tab():
                         precision=0,
                         scale=1
                     )
-                    commit_batch_btn = gr.Button("💾 Execute on Table & Save Column", variant="stop", scale=2)
+                    commit_batch_btn = gr.Button("💾 Execute on Table & Save Columns", variant="stop", scale=2)
 
                 with gr.Group(elem_classes=["status-panel"]):
                     batch_status_markdown = gr.Markdown("#### Batch Status: *Idle*")
@@ -145,6 +154,16 @@ def render_playground_tab():
         
         info_text = f"✅ **Table `{res.get('domain', domain)}.{res.get('table', table_name)}`** ({mode_label}) — Total Rows: **{total}** (showing first {len(data)})"
         return info_text, gr.update(headers=cols, datatype=["str"] * len(cols), value=data)
+
+    def on_output_mode_change(selected_mode):
+        is_single = (selected_mode == "📄 Single Target Column")
+        return gr.update(visible=is_single)
+
+    output_mode_radio.change(
+        fn=on_output_mode_change,
+        inputs=[output_mode_radio],
+        outputs=[single_col_row]
+    )
 
     # Auto-refresh and event handlers
     def on_provider_change(selected_provider):
@@ -182,14 +201,14 @@ def render_playground_tab():
             return load_table_preview(current_domain or "default", tbl_str, lightweight=is_lightweight)
         return "⚠️ Select a table name.", gr.update(headers=[], value=[])
 
-    def on_test_sample(domain, table_name, provider, model, system_prompt, prompt_template, sample_count,
+    def on_test_sample(domain, table_name, provider, model, system_prompt, prompt_template, sample_count, output_mode,
                        progress=gr.Progress(track_tqdm=True)):
         if not domain or not table_name:
             gr.Warning("Domain and Table selection required.")
-            return [["Error", "Domain and Table selection required.", "", "", ""]]
+            return gr.update(headers=["Error"], value=[["Domain and Table selection required."]])
         if not model:
             gr.Warning("Model selection required.")
-            return [["Error", f"{provider} model selection required.", "", "", ""]]
+            return gr.update(headers=["Error"], value=[[f"{provider} model selection required."]])
 
         # Persist prompt inputs
         update_last_entry(
@@ -205,6 +224,8 @@ def render_playground_tab():
             pct = (cur / total) if total else 0.5
             progress(pct, desc=detail)
 
+        is_auto_split = (output_mode == "⚡ Auto-Split JSON Keys into Columns")
+
         try:
             progress(0.1, desc=f"Evaluating prompt on {sample_count} sample rows with [{provider}] {model}...")
             results = PromptExecutor.run_sample_test(
@@ -215,20 +236,43 @@ def render_playground_tab():
                 table_dir=domain.strip(),
                 table_name=table_name.strip(),
                 sample_count=int(sample_count),
+                auto_split=is_auto_split,
                 progress_callback=cb
             )
+
+            if is_auto_split:
+                # Discover all extracted JSON keys across sample rows
+                all_keys = []
+                for r in results:
+                    for k in r.get("extracted_columns", []):
+                        if k not in all_keys:
+                            all_keys.append(k)
+
+                if all_keys:
+                    headers = ["Row ID", "File Name"] + all_keys
+                    rows = []
+                    for r in results:
+                        parsed = r.get("parsed_json", {})
+                        row_vals = [r["row_id"], r["file_name"]] + [str(parsed.get(k, "")) for k in all_keys]
+                        rows.append(row_vals)
+                    gr.Info(f"Evaluated {len(results)} rows: Extracted {len(all_keys)} dynamic columns ({', '.join(all_keys)})!")
+                    return gr.update(headers=headers, datatype=["str"] * len(headers), value=rows)
+
+            # Fallback to standard single output table
+            headers = ["Row ID", "File Name", "Source Snippet", "Rendered Prompt", "Model Output"]
             rows = [
                 [r["row_id"], r["file_name"], r["source_content"], r["prompt_rendered"], r["model_output"]]
                 for r in results
             ]
             gr.Info(f"Evaluated {len(results)} sample rows with [{provider}] {model} successfully!")
-            return rows
+            return gr.update(headers=headers, datatype=["str"] * len(headers), value=rows)
         except Exception as e:
             err_msg = f"{type(e).__name__}: {str(e)}"
             gr.Error(f"Sample test failed: {err_msg}")
-            return [["Error", err_msg, "", "", ""]]
+            return gr.update(headers=["Error"], value=[[err_msg]])
 
-    def on_commit_batch(domain, table_name, provider, model, system_prompt, prompt_template, target_col, mode, limit_num, is_lightweight,
+    def on_commit_batch(domain, table_name, provider, model, system_prompt, prompt_template,
+                        output_mode, target_col, mode, limit_num, is_lightweight,
                         progress=gr.Progress(track_tqdm=True)):
         if not domain or not table_name:
             gr.Warning("Select a valid Domain and Table first.")
@@ -242,6 +286,7 @@ def render_playground_tab():
         limit_val = int(limit_num) if limit_num and int(limit_num) > 0 else None
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
+        is_auto_split = (output_mode == "⚡ Auto-Split JSON Keys into Columns")
         clean_col = target_col.strip() if target_col else "llm_summary"
 
         update_last_entry(
@@ -254,14 +299,15 @@ def render_playground_tab():
         )
 
         limit_desc = f" (Limit: {limit_val} rows)" if limit_val else " (All rows)"
-        yield f"⏳ **[1/2] Initializing Batch Execution...** Running [{provider}] `{model}` on `{clean_dir}.{clean_tbl}`{limit_desc}...", gr.update(), gr.update()
+        mode_desc = "Auto-Splitting JSON Keys" if is_auto_split else f"Single Column `{clean_col}`"
+        yield f"⏳ **[1/2] Initializing Batch Execution ({mode_desc})...** Running [{provider}] `{model}` on `{clean_dir}.{clean_tbl}`{limit_desc}...", gr.update(), gr.update()
 
         def cb(cur, total, detail):
             pct = (cur / total) if total else 0.5
             progress(pct, desc=detail)
 
         try:
-            yield f"⏳ **[2/2] Generating [{provider}] LLM Outputs & Updating Column `{clean_col}`...**", gr.update(), gr.update()
+            yield f"⏳ **[2/2] Generating [{provider}] LLM Outputs & Updating Pixeltable Table...**", gr.update(), gr.update()
             res = PromptExecutor.apply_prompt_to_table(
                 provider=provider,
                 model=model,
@@ -270,23 +316,38 @@ def render_playground_tab():
                 table_dir=clean_dir,
                 table_name=clean_tbl,
                 target_column=clean_col,
+                auto_split=is_auto_split,
                 mode=mode,
                 limit=limit_val,
                 progress_callback=cb
             )
             if res.get("status") == "success":
                 info_text, df_update = load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
-                gr.Info(f"Batch completed: {res.get('count')} rows updated in column '{res.get('column')}'")
-                yield (
-                    f"### ✅ Batch Execution Complete!\n"
-                    f"> **Table:** `{clean_dir}.{clean_tbl}`\n"
-                    f"> **Provider & Model:** [{provider}] `{model}`\n"
-                    f"> **Target Column:** `{res.get('column')}` ({mode} mode)\n"
-                    f"> **Rows Processed:** {res.get('count')}\n\n"
-                    f"*Column updated in Pixeltable. Check updated preview on the right.*",
-                    info_text,
-                    df_update
-                )
+                if is_auto_split:
+                    cols_list = ", ".join(f"`{c}`" for c in res.get("columns", []))
+                    gr.Info(f"Batch completed: {res.get('count')} rows updated across dynamic columns: {cols_list}")
+                    yield (
+                        f"### ✅ Dynamic Multi-Column Extraction Complete!\n"
+                        f"> **Table:** `{clean_dir}.{clean_tbl}`\n"
+                        f"> **Provider & Model:** [{provider}] `{model}`\n"
+                        f"> **Columns Created/Updated:** {cols_list}\n"
+                        f"> **Rows Processed:** {res.get('count')}\n\n"
+                        f"*All unpacked columns are now queryable in Pixeltable. Check updated preview on the right.*",
+                        info_text,
+                        df_update
+                    )
+                else:
+                    gr.Info(f"Batch completed: {res.get('count')} rows updated in column '{res.get('column')}'")
+                    yield (
+                        f"### ✅ Batch Execution Complete!\n"
+                        f"> **Table:** `{clean_dir}.{clean_tbl}`\n"
+                        f"> **Provider & Model:** [{provider}] `{model}`\n"
+                        f"> **Target Column:** `{res.get('column')}` ({mode} mode)\n"
+                        f"> **Rows Processed:** {res.get('count')}\n\n"
+                        f"*Column updated in Pixeltable. Check updated preview on the right.*",
+                        info_text,
+                        df_update
+                    )
             else:
                 err_msg = res.get("message", "Unknown error")
                 gr.Error(f"Batch execution failed: {err_msg}")
@@ -322,14 +383,15 @@ def render_playground_tab():
     
     test_sample_btn.click(
         fn=on_test_sample,
-        inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, sample_count_slider],
+        inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, sample_count_slider, output_mode_radio],
         outputs=[test_results_table]
     )
 
     commit_batch_btn.click(
         fn=on_commit_batch,
-        inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, target_column_input, write_mode_radio, limit_rows_input, preview_mode_toggle],
+        inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, output_mode_radio, target_column_input, write_mode_radio, limit_rows_input, preview_mode_toggle],
         outputs=[batch_status_markdown, table_info_markdown, current_table_preview]
     )
+
 
 

@@ -43,14 +43,28 @@ class LLMService:
 
     @classmethod
     def generate(cls, provider: str, model: str, prompt: str, system: Optional[str] = None,
+                 media_path: Optional[str] = None, json_mode: bool = False,
                  settings: Optional[Settings] = None) -> str:
-        """Unified generate endpoint across providers."""
+        """Unified generate endpoint across providers with multimodal and json_mode support."""
         curr_settings = settings or get_settings()
         prov = (provider or "Ollama").strip().lower()
 
         if prov == "gemini":
             client = GeminiClient(api_key=curr_settings.gemini_api_key)
-            return client.generate(model=model, prompt=prompt, system=system)
+            return client.generate(
+                model=model,
+                prompt=prompt,
+                system=system,
+                media_path=media_path,
+                json_mode=json_mode
+            )
         else:
             client = OllamaClient(host=curr_settings.ollama_host)
-            return client.generate(model=model, prompt=prompt, system=system)
+            return client.generate(
+                model=model,
+                prompt=prompt,
+                system=system or "",
+                media_path=media_path,
+                json_mode=json_mode
+            )
+

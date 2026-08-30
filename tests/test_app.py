@@ -171,6 +171,87 @@ class TestPipelineTools(unittest.TestCase):
         ollama_models = LLMService.list_models_for_provider("Ollama")
         self.assertTrue(len(ollama_models) > 0)
 
+    def test_extract_json_payload_variations(self):
+        """[JSON] Verify robust extraction across pure JSON, markdown blocks, leading/trailing text, and malformed strings."""
+        from src.prompts.executor import extract_json_payload
+
+        # Case 1: Pure JSON string
+        pure = '{"image_summary": "A lake view", "haiku": "Calm blue water shines", "count": 3}'
+        res1 = extract_json_payload(pure)
+        self.assertIsNotNone(res1)
+        self.assertEqual(res1.get("image_summary"), "A lake view")
+        self.assertEqual(res1.get("count"), 3)
+
+        # Case 2: Markdown fenced code block
+        fenced = "Here is the extracted analysis:\n```json\n{\n  \"sentiment\": 0.95,\n  \"tags\": [\"nature\", \"water\"]\n}\n```\nHope that helps!"
+        res2 = extract_json_payload(fenced)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res2.get("sentiment"), 0.95)
+        self.assertEqual(res2.get("tags"), ["nature", "water"])
+
+        # Case 3: Embedded raw braces without markdown fences
+        embedded = "Output: {\"author\": \"Alice\", \"valid\": true} (analyzed at 2026-08-30)"
+        res3 = extract_json_payload(embedded)
+        self.assertIsNotNone(res3)
+        self.assertEqual(res3.get("author"), "Alice")
+        self.assertTrue(res3.get("valid"))
+
+        # Case 4: Invalid/empty/non-JSON text
+        self.assertIsNone(extract_json_payload("Just plain text with no brackets"))
+        self.assertIsNone(extract_json_payload(""))
+        self.assertIsNone(extract_json_payload("{broken json without closing"))
+
+    def test_infer_pixeltable_type(self):
+        """[JSON] Verify Python data values correctly map to Pixeltable scalar and collection types."""
+        from src.prompts.executor import infer_pixeltable_type
+        import pixeltable as pxt
+
+        self.assertEqual(infer_pixeltable_type("sample string"), pxt.String)
+        self.assertEqual(infer_pixeltable_type(42), pxt.Int)
+        self.assertEqual(infer_pixeltable_type(3.1415), pxt.Float)
+        self.assertEqual(infer_pixeltable_type(True), pxt.Bool)
+        self.assertEqual(infer_pixeltable_type(["a", "b", "c"]), pxt.Json)
+        self.assertEqual(infer_pixeltable_type({"nested": "object"}), pxt.Json)
+
+    def test_dynamic_multicolumn_batch_execution(self):
+        """[Playground] Verify PromptExecutor auto-split unpacks JSON keys into distinct table columns."""
+        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
+        from src.prompts.executor import PromptExecutor
+        from unittest.mock import patch
+
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [{
+                "name": "doc_sample.md",
+                "abs_path": str(Path("planning.md").resolve()),
+                "rel_path": "planning.md",
+                "modality": "docs",
+                "extension": ".md",
+                "size_bytes": 100,
+                "size": "100 B"
+            }]
+            DBManager.ingest_files("test_unit", "json_split_test", fake_files, overwrite=True)
+
+            mock_json_response = '{"doc_summary": "Test summary", "doc_haiku": "Lines of code arise", "confidence": 0.98}'
+            with patch("src.core.llm_service.LLMService.generate", return_value=mock_json_response):
+                res = PromptExecutor.apply_prompt_to_table(
+                    model="test-model",
+                    prompt_template="Analyze {file_name}",
+                    system_prompt="Return JSON",
+                    table_dir="test_unit",
+                    table_name="json_split_test",
+                    auto_split=True
+                )
+                self.assertEqual(res.get("status"), "success")
+                self.assertIn("doc_summary", res.get("columns", []))
+                self.assertIn("doc_haiku", res.get("columns", []))
+                self.assertIn("confidence", res.get("columns", []))
+
+                # Verify columns exist in Pixeltable table data
+                table_data = DBManager.get_table_data("test_unit", "json_split_test", limit=5)
+                self.assertIn("doc_summary", table_data.get("columns", []))
+                self.assertIn("doc_haiku", table_data.get("columns", []))
+                self.assertIn("confidence", table_data.get("columns", []))
+
 
 
 class CleanTestResult(unittest.TestResult):

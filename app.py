@@ -238,6 +238,12 @@ def create_app():
 demo = create_app()
 
 if __name__ == "__main__":
+    if "--reload" in sys.argv:
+        import subprocess
+        print("\n🔄 Launching Pipeline Tools in Gradio Auto-Reload mode (watching app.py & src/)...")
+        cmd = [sys.executable, "-m", "gradio", "app.py", "--watch-dirs", "src"]
+        sys.exit(subprocess.call(cmd))
+
     port = 7860
     try:
         demo.launch(
@@ -253,4 +259,5 @@ if __name__ == "__main__":
             sys.exit(1)
         else:
             raise e
+
 

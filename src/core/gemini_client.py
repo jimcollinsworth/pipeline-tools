@@ -70,23 +70,62 @@ class GeminiClient:
         ]
         return model_info
 
-    def generate(self, model: str, prompt: str, system: Optional[str] = None, api_key: Optional[str] = None) -> str:
-        """Generate text using Gemini models."""
+    def generate(
+        self,
+        model: str,
+        prompt: str,
+        system: Optional[str] = None,
+        api_key: Optional[str] = None,
+        media_path: Optional[str] = None,
+        json_mode: bool = False
+    ) -> str:
+        """Generate text or structured JSON using Gemini models with optional multimodal media."""
         client = self.get_client(api_key)
         target_model = model or "gemini-3.6-flash"
 
-        config = None
+        config_kwargs: Dict[str, Any] = {}
         if system and system.strip():
-            config = types.GenerateContentConfig(system_instruction=system.strip())
+            config_kwargs["system_instruction"] = system.strip()
+        if json_mode:
+            config_kwargs["response_mime_type"] = "application/json"
+
+        config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+
+        contents: Any = prompt
+        if media_path and os.path.exists(media_path):
+            import mimetypes
+            mime, _ = mimetypes.guess_type(media_path)
+            if not mime:
+                ext = os.path.splitext(media_path)[1].lower()
+                if ext in [".jpg", ".jpeg"]:
+                    mime = "image/jpeg"
+                elif ext == ".png":
+                    mime = "image/png"
+                elif ext == ".webp":
+                    mime = "image/webp"
+                elif ext == ".pdf":
+                    mime = "application/pdf"
+            
+            if mime and (mime.startswith("image/") or mime == "application/pdf"):
+                try:
+                    with open(media_path, "rb") as f:
+                        media_bytes = f.read()
+                    contents = [
+                        types.Part.from_bytes(data=media_bytes, mime_type=mime),
+                        prompt
+                    ]
+                except Exception:
+                    contents = prompt
 
         try:
             response = client.models.generate_content(
                 model=target_model,
-                contents=prompt,
+                contents=contents,
                 config=config
             )
             if response.text:
                 return response.text.strip()
-            return "[Empty response from Gemini]"
+            return "{}" if json_mode else "[Empty response from Gemini]"
         except Exception as e:
             raise RuntimeError(f"Gemini generation failed: {type(e).__name__}: {str(e)}")
+

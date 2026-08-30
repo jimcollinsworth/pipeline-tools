@@ -1,7 +1,7 @@
 import urllib.request
 import urllib.error
 import json
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
 class OllamaClient:
     def __init__(self, host: str = "http://localhost:11434"):
@@ -46,15 +46,29 @@ class OllamaClient:
         except Exception:
             return []
 
-    def generate(self, model: str, prompt: str, system: str = "") -> str:
-        """Simple single prompt generation against Ollama."""
-        payload = {
+    def generate(self, model: str, prompt: str, system: str = "", media_path: Optional[str] = None, json_mode: bool = False) -> str:
+        """Single prompt generation against Ollama with optional image and json format."""
+        import base64
+        import os
+        payload: Dict[str, Any] = {
             "model": model,
             "prompt": prompt,
             "stream": False
         }
         if system:
             payload["system"] = system
+        if json_mode:
+            payload["format"] = "json"
+
+        if media_path and os.path.exists(media_path):
+            ext = os.path.splitext(media_path)[1].lower()
+            if ext in [".jpg", ".jpeg", ".png", ".webp"]:
+                try:
+                    with open(media_path, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode("utf-8")
+                    payload["images"] = [b64]
+                except Exception:
+                    pass
 
         data_bytes = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(

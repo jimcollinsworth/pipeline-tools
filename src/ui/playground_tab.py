@@ -231,10 +231,10 @@ def render_playground_tab(tab=None):
         update_last_entry(last_provider=selected_provider, last_model=chosen)
         return gr.update(choices=models, value=chosen)
 
-    def on_domain_change(selected_domain, is_lightweight):
-        """Auto-populate tables when domain selection changes and refresh table preview."""
+    def on_domain_change(selected_domain):
+        """Auto-populate tables when domain selection changes."""
         if not selected_domain:
-            return gr.update(choices=[], value=""), "⚠️ Select a valid Domain.", gr.update(headers=[], value=[]), "💡 **Available Column Placeholders:** *None*"
+            return gr.update(choices=[], value="")
         domain_str = selected_domain.strip()
         update_last_entry(last_domain=domain_str)
         
@@ -244,9 +244,7 @@ def render_playground_tab(tab=None):
         
         curr_settings = get_settings()
         selected_tbl = curr_settings.last_table if curr_settings.last_table in discovered_tables else discovered_tables[0]
-        
-        info_text, df_update, cols_text = load_table_preview(domain_str, selected_tbl, lightweight=is_lightweight)
-        return gr.update(choices=discovered_tables, value=selected_tbl), info_text, df_update, cols_text
+        return gr.update(choices=discovered_tables, value=selected_tbl)
 
     def on_table_change(selected_table, current_domain, is_lightweight):
         """Persist last table selection and refresh table preview."""
@@ -471,8 +469,8 @@ def render_playground_tab(tab=None):
 
     domain_dropdown.change(
         fn=on_domain_change,
-        inputs=[domain_dropdown, preview_mode_toggle],
-        outputs=[table_dropdown, table_info_markdown, current_table_preview, available_columns_info]
+        inputs=[domain_dropdown],
+        outputs=[table_dropdown]
     )
 
     table_dropdown.change(
@@ -564,35 +562,25 @@ def render_playground_tab(tab=None):
     )
 
     if tab is not None:
-        def on_tab_select(current_domain, current_table, is_lightweight):
-            latest_domains = DBManager.list_dirs()
-            if not latest_domains:
-                latest_domains = ["default"]
-            
+        def on_tab_select(current_domain, current_table):
+            latest_domains = DBManager.list_dirs() or ["default"]
             curr_settings = get_settings()
             dom = curr_settings.last_domain if curr_settings.last_domain in latest_domains else (
                 current_domain if current_domain in latest_domains else latest_domains[0]
             )
             
-            latest_tables = DBManager.list_tables(dom)
-            if not latest_tables:
-                latest_tables = ["raw_assets"]
-            
+            latest_tables = DBManager.list_tables(dom) or ["raw_assets"]
             tbl = curr_settings.last_table if curr_settings.last_table in latest_tables else (
                 current_table if current_table in latest_tables else latest_tables[0]
             )
             
-            info_text, df_update, cols_text = load_table_preview(dom, tbl, lightweight=is_lightweight)
             return (
                 gr.update(choices=latest_domains, value=dom),
-                gr.update(choices=latest_tables, value=tbl),
-                info_text,
-                df_update,
-                cols_text
+                gr.update(choices=latest_tables, value=tbl)
             )
 
         tab.select(
             fn=on_tab_select,
-            inputs=[domain_dropdown, table_dropdown, preview_mode_toggle],
-            outputs=[domain_dropdown, table_dropdown, table_info_markdown, current_table_preview, available_columns_info]
+            inputs=[domain_dropdown, table_dropdown],
+            outputs=[domain_dropdown, table_dropdown]
         )

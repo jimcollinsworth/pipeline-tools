@@ -194,9 +194,10 @@ def render_tables_tab(tab=None):
 
         return stats_text, gr.update(headers=cols, datatype=datatypes, value=data), cols_text
 
-    def on_domain_change(domain, limit, is_lightweight):
+    def on_domain_change(domain):
+        """Update table dropdown choices when domain selection changes."""
         if not domain:
-            return gr.update(choices=[], value=""), "⚠️ Select a domain.", gr.update(headers=[], value=[]), "💡 **Available Column Placeholders:** *None*"
+            return gr.update(choices=[], value="")
         clean_dir = domain.strip()
         update_last_entry(last_domain=clean_dir)
         tables_list = DBManager.list_tables(clean_dir)
@@ -205,8 +206,7 @@ def render_tables_tab(tab=None):
 
         curr_settings = get_settings()
         selected_tbl = curr_settings.last_table if curr_settings.last_table in tables_list else tables_list[0]
-        stats_text, df_update, cols_text = on_load_table(clean_dir, selected_tbl, limit, is_lightweight)
-        return gr.update(choices=tables_list, value=selected_tbl), stats_text, df_update, cols_text
+        return gr.update(choices=tables_list, value=selected_tbl)
 
     def on_export_provider_change(provider):
         models = LLMService.list_models_for_provider(provider)
@@ -343,8 +343,8 @@ def render_tables_tab(tab=None):
     # Wire event listeners
     domain_dropdown.change(
         fn=on_domain_change,
-        inputs=[domain_dropdown, limit_slider, lightweight_toggle],
-        outputs=[table_dropdown, table_stats_markdown, data_view_table, available_columns_info]
+        inputs=[domain_dropdown],
+        outputs=[table_dropdown]
     )
 
     table_dropdown.change(
@@ -507,35 +507,25 @@ def render_tables_tab(tab=None):
     )
 
     if tab is not None:
-        def on_tab_select(current_domain, current_table, limit, is_lightweight):
-            latest_domains = DBManager.list_dirs()
-            if not latest_domains:
-                latest_domains = ["default"]
-            
+        def on_tab_select(current_domain, current_table):
+            latest_domains = DBManager.list_dirs() or ["default"]
             curr_settings = get_settings()
             dom = curr_settings.last_domain if curr_settings.last_domain in latest_domains else (
                 current_domain if current_domain in latest_domains else latest_domains[0]
             )
             
-            latest_tables = DBManager.list_tables(dom)
-            if not latest_tables:
-                latest_tables = ["raw_assets"]
-            
+            latest_tables = DBManager.list_tables(dom) or ["raw_assets"]
             tbl = curr_settings.last_table if curr_settings.last_table in latest_tables else (
                 current_table if current_table in latest_tables else latest_tables[0]
             )
             
-            stats_text, df_update, cols_text = on_load_table(dom, tbl, limit, is_lightweight)
             return (
                 gr.update(choices=latest_domains, value=dom),
-                gr.update(choices=latest_tables, value=tbl),
-                stats_text,
-                df_update,
-                cols_text
+                gr.update(choices=latest_tables, value=tbl)
             )
 
         tab.select(
             fn=on_tab_select,
-            inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-            outputs=[domain_dropdown, table_dropdown, table_stats_markdown, data_view_table, available_columns_info]
+            inputs=[domain_dropdown, table_dropdown],
+            outputs=[domain_dropdown, table_dropdown]
         )

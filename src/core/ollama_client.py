@@ -11,7 +11,7 @@ class OllamaClient:
         """Test if Ollama server is running and accessible."""
         try:
             req = urllib.request.Request(f"{self.host}/api/version", method="GET")
-            with urllib.request.urlopen(req, timeout=3) as resp:
+            with urllib.request.urlopen(req, timeout=2) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode("utf-8"))
                     return True, f"Connected to Ollama (Version {data.get('version', 'unknown')})"
@@ -25,7 +25,7 @@ class OllamaClient:
         """List locally available models with sizes and parameter counts."""
         try:
             req = urllib.request.Request(f"{self.host}/api/tags", method="GET")
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with urllib.request.urlopen(req, timeout=2) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode("utf-8"))
                     models = data.get("models", [])

@@ -323,10 +323,28 @@ def run_tests():
     result = CleanTestResult(sys.stdout, total_tests=total_count)
     
     old_stdout = sys.stdout
+    old_stderr = sys.stderr
+
+    def handle_test_interrupt(sig=None, frame=None):
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        print("\n\n🛑 Test suite interrupted by user (Ctrl+C). Restored terminal output.\n", flush=True)
+        sys.exit(130)
+
+    try:
+        import signal
+        signal.signal(signal.SIGINT, handle_test_interrupt)
+        signal.signal(signal.SIGTERM, handle_test_interrupt)
+    except Exception:
+        pass
+
     try:
         suite.run(result)
+    except KeyboardInterrupt:
+        handle_test_interrupt()
     finally:
         sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
     print("\n" + header, flush=True)
     print(f"  SUMMARY: {result.successes} Passed, {len(result.failures)} Failed, {len(result.errors)} Errors", flush=True)

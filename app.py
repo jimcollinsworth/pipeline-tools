@@ -1,4 +1,6 @@
 import sys
+import signal
+import atexit
 import gradio as gr
 from src.ui.settings_tab import render_settings_tab
 from src.ui.ingest_tab import render_ingest_tab
@@ -210,6 +212,7 @@ td {
 """
 
 def create_app():
+    print("  [1/4] Initializing Ingestion & Scanner tab (connecting to Pixeltable)...", flush=True)
     with gr.Blocks(title="Pipeline Tools // Multimodal Workbench") as demo:
         gr.Markdown(
             """
@@ -225,26 +228,48 @@ def create_app():
                 render_ingest_tab()
                 
             with gr.Tab("Prompt Playground"):
+                print("  [2/4] Initializing Prompt Playground tab (discovering models & tables)...", flush=True)
                 render_playground_tab()
                 
             with gr.Tab("Lineage & DataTables"):
+                print("  [3/4] Initializing Lineage & DataTables tab...", flush=True)
                 render_tables_tab()
                 
             with gr.Tab("Settings & Models"):
+                print("  [4/4] Initializing Settings & Models tab...", flush=True)
                 render_settings_tab()
 
+    print("  ✅ All workbench tabs and database connections initialized!", flush=True)
     return demo
 demo = None
 
 if __name__ == "__main__":
+    def clean_exit(sig=None, frame=None):
+        print("\n🛑 Shutting down Pipeline Tools cleanly...", flush=True)
+        if demo is not None:
+            try:
+                demo.close()
+            except Exception:
+                pass
+        sys.exit(0)
+
+    try:
+        signal.signal(signal.SIGINT, clean_exit)
+        signal.signal(signal.SIGTERM, clean_exit)
+    except Exception:
+        pass
+    atexit.register(lambda: demo.close() if demo is not None else None)
+
     if "--reload" in sys.argv:
         import subprocess
-        print("\n🔄 Launching Pipeline Tools in Gradio Auto-Reload mode (watching app.py & src/)...")
+        print("\n🔄 Launching Pipeline Tools in Gradio Auto-Reload mode (watching app.py & src/)...", flush=True)
         cmd = [sys.executable, "-m", "gradio", "app.py", "--watch-dirs", "src"]
         sys.exit(subprocess.call(cmd))
 
+    print("\n⏳ Initializing Pipeline Tools workbench & database...", flush=True)
     demo = create_app()
     port = 7860
+    print(f"🚀 Launching Pipeline Tools web server on http://127.0.0.1:{port} ...\n", flush=True)
     try:
         demo.launch(
             server_name="127.0.0.1",
@@ -253,12 +278,13 @@ if __name__ == "__main__":
             theme=clean_theme,
             css=custom_css
         )
-
+    except KeyboardInterrupt:
+        clean_exit()
     except OSError as e:
         if "7860" in str(e) or "port" in str(e).lower():
-            print(f"\n❌ ERROR: Port {port} is already in use!")
-            print(f"ℹ️ An instance of Pipeline Tools is already running on http://127.0.0.1:{port}")
-            print(f"💡 Open http://127.0.0.1:{port} in your browser, or stop the existing process to launch a new one.\n")
+            print(f"\n❌ ERROR: Port {port} is already in use!", flush=True)
+            print(f"ℹ️ An instance of Pipeline Tools is already running on http://127.0.0.1:{port}", flush=True)
+            print(f"💡 Open http://127.0.0.1:{port} in your browser, or stop the existing process to launch a new one.\n", flush=True)
             sys.exit(1)
         else:
             raise e

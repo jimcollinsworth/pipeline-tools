@@ -126,3 +126,6 @@ Guidelines to reduce common LLM coding pitfalls, biasing toward caution and simp
   1. `[Step]` → verify: `[check]`
   2. `[Step]` → verify: `[check]`
   3. `[Step]` → verify: `[check]`
+
+  ### 5. Explaining and Documentation
+  * explain why and what you have done whenever changes are made to any file. simple couple of sentences - why and what

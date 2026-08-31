@@ -7,12 +7,9 @@ requires-python = ">=3.10"
 dependencies = [
     "pixeltable",
     "gradio",
-    "pymupdf",
     "pyyaml",
     "pydantic",
     "pandas",
-    "openai",
-    "anthropic",
     "google-genai",
 ]
 

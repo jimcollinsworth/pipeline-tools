@@ -61,6 +61,23 @@ def render_playground_tab():
                     )
 
                 gr.Markdown("#### 2. System & Prompt Configuration")
+                
+                with gr.Accordion("💡 Prompt Guide & Example Presets (Click to Apply)", open=False):
+                    gr.Markdown(
+                        """
+                        **How Prompts Work with Pixeltable**:
+                        * **System Prompt**: Defines the AI persona, tone, and behavioral constraints across all rows.
+                        * **User Prompt**: Supplies row variables (`{file_name}`, `{content}`, `{rel_path}`, `{modality}`).
+                        * **⚡ Auto-Split Mode**: Any top-level keys in the JSON response automatically become individual table columns!
+                        """
+                    )
+                    with gr.Row():
+                        preset_cv_btn = gr.Button("🖼️ Image Summary + CSV Objects", size="sm")
+                        preset_meta_btn = gr.Button("🔍 Precision Metadata", size="sm")
+                    with gr.Row():
+                        preset_art_btn = gr.Button("🎨 Creative Curator", size="sm")
+                        preset_doc_btn = gr.Button("📄 Document Intelligence", size="sm")
+
                 system_prompt_input = gr.Textbox(
                     label="System Prompt",
                     value=settings.last_system_prompt,
@@ -72,7 +89,7 @@ def render_playground_tab():
                     value=settings.last_user_prompt,
                     lines=6
                 )
-                gr.Markdown("*Tip: Use `{file_name}`, `{content}`, `{rel_path}`, `{modality}` placeholders to inject row values.*")
+                gr.Markdown("*Placeholders: `{file_name}`, `{content}`, `{rel_path}`, `{modality}`, `{file_size}`*")
 
                 gr.Markdown("#### 3. Test on Sample Rows")
                 sample_count_slider = gr.Slider(minimum=1, maximum=10, value=2, step=1, label="Number of Test Rows")
@@ -387,11 +404,49 @@ def render_playground_tab():
         outputs=[test_results_table]
     )
 
+    def on_apply_preset_cv():
+        sys_p = "You are an expert computer vision assistant. Always respond with a clean JSON object containing the requested keys."
+        usr_p = "Analyze this image: {file_name}\n\nReturn a JSON object with exactly these keys:\n1. \"image_summary\": A concise 2-sentence description of the visual scene.\n2. \"detected_objects\": A comma-separated string (CSV) of all distinct objects visible in the image (e.g. \"car, person, tree, dog\").\n3. \"photo_type\": One of [\"landscape\", \"portrait\", \"document\", \"indoor\", \"macro\"]."
+        return sys_p, usr_p, "⚡ Auto-Split JSON Keys into Columns"
+
+    def on_apply_preset_meta():
+        sys_p = "You are an elite multimodal perception and metadata engine. Analyze media with sharp observational precision. Produce concise, factual, high-signal extractions. Always adhere strictly to the requested JSON schema."
+        usr_p = "Analyze the item: {file_name}\n\nExtract and return a JSON object with:\n- \"visual_summary\": 2-sentence factual overview.\n- \"object_tags\": Comma-separated list of key entities/objects.\n- \"dominant_colors\": Primary 3 colors as a CSV list.\n- \"confidence_score\": Estimated confidence level between 0.0 and 1.0."
+        return sys_p, usr_p, "⚡ Auto-Split JSON Keys into Columns"
+
+    def on_apply_preset_art():
+        sys_p = "You are a senior art curator and cultural archivist. Describe visual scenes with rich sensory detail, cinematic clarity, and evocative prose while cataloging subjects, textures, and moods."
+        usr_p = "Examine this image: {file_name}\n\nProvide a JSON response with:\n- \"curator_critique\": An evocative, sensory description of the scene and lighting.\n- \"poetic_haiku\": A 3-line evocative haiku capturing the atmosphere.\n- \"mood_palette\": Comma-separated list of emotional tones and vibes."
+        return sys_p, usr_p, "⚡ Auto-Split JSON Keys into Columns"
+
+    def on_apply_preset_doc():
+        sys_p = "You are a forensic document intelligence specialist. Scrutinize text, diagrams, and media for key entities, dates, quantitative metrics, and actionable summaries. Prioritize factual density and zero hallucination."
+        usr_p = "Analyze the document: {file_name}\n\nContent:\n{content}\n\nExtract JSON containing:\n- \"doc_summary\": 2-3 sentence executive summary.\n- \"key_entities\": Comma-separated list of organizations, people, and locations.\n- \"action_items\": Comma-separated list of key requirements or dates."
+        return sys_p, usr_p, "⚡ Auto-Split JSON Keys into Columns"
+
+    preset_cv_btn.click(
+        fn=on_apply_preset_cv,
+        outputs=[system_prompt_input, prompt_template_input, output_mode_radio]
+    )
+    preset_meta_btn.click(
+        fn=on_apply_preset_meta,
+        outputs=[system_prompt_input, prompt_template_input, output_mode_radio]
+    )
+    preset_art_btn.click(
+        fn=on_apply_preset_art,
+        outputs=[system_prompt_input, prompt_template_input, output_mode_radio]
+    )
+    preset_doc_btn.click(
+        fn=on_apply_preset_doc,
+        outputs=[system_prompt_input, prompt_template_input, output_mode_radio]
+    )
+
     commit_batch_btn.click(
         fn=on_commit_batch,
         inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, output_mode_radio, target_column_input, write_mode_radio, limit_rows_input, preview_mode_toggle],
         outputs=[batch_status_markdown, table_info_markdown, current_table_preview]
     )
+
 
 
 

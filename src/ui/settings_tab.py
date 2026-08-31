@@ -83,21 +83,29 @@ def render_settings_tab():
                 gr.Markdown("---")
                 gr.Markdown("#### ✨ Available Google Gemini Models")
                 gemini_client = GeminiClient(api_key=settings.gemini_api_key)
+                models_list = gemini_client.list_models()
                 gemini_models_data = [
-                    [m["name"], m["description"]]
-                    for m in gemini_client.list_models()
+                    [
+                        m.get("name", ""),
+                        m.get("modalities", "Text, Vision"),
+                        m.get("input_window", "1M tokens"),
+                        m.get("output_limit", "8K tokens"),
+                        m.get("cost_tier", "Standard"),
+                        m.get("description", "")
+                    ]
+                    for m in models_list
                 ]
                 gemini_models_table = gr.Dataframe(
-                    headers=["Model Name", "Capabilities & Context Window"],
-                    datatype=["str", "str"],
+                    headers=["Model Identifier", "Modalities", "Context Window", "Max Output", "Cost Tier", "Capabilities & Description"],
+                    datatype=["str", "str", "str", "str", "str", "str"],
                     value=gemini_models_data,
                     interactive=False,
                     wrap=True,
-                    max_height=200
+                    max_height=240
                 )
                 default_gemini_dropdown = gr.Dropdown(
                     label="Default Gemini Model",
-                    choices=[m["name"] for m in gemini_client.list_models()],
+                    choices=[m["name"] for m in models_list],
                     value=settings.default_gemini_model or "gemini-3.6-flash",
                     allow_custom_value=True
                 )
@@ -129,10 +137,27 @@ def render_settings_tab():
         client = GeminiClient(api_key=api_key)
         ok, msg = client.check_connection(api_key=api_key)
         if ok:
-            gr.Info(msg)
+            models = client.list_models(api_key=api_key)
+            rows = [
+                [
+                    m.get("name", ""),
+                    m.get("modalities", "Text, Vision"),
+                    m.get("input_window", "1M tokens"),
+                    m.get("output_limit", "8K tokens"),
+                    m.get("cost_tier", "Standard"),
+                    m.get("description", "")
+                ]
+                for m in models
+            ]
+            names = [m["name"] for m in models]
+            curr_settings = get_settings()
+            selected = curr_settings.default_gemini_model if curr_settings.default_gemini_model in names else (names[0] if names else "gemini-3.6-flash")
+            gr.Info(f"Connected to Google Gemini! Discovered {len(models)} models.")
+            return msg, rows, gr.update(choices=names, value=selected)
         else:
             gr.Error(msg)
-        return msg
+            return msg, gr.update(), gr.update()
+
 
     def on_save_settings(host, def_ollama, gemini_key, def_gemini, def_provider, pt_dir, exp_dir):
         curr = get_settings()
@@ -163,7 +188,7 @@ def render_settings_tab():
     test_gemini_btn.click(
         fn=test_gemini_key,
         inputs=[gemini_key_input],
-        outputs=[gemini_status_box]
+        outputs=[gemini_status_box, gemini_models_table, default_gemini_dropdown]
     )
 
     save_all_btn.click(

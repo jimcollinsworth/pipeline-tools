@@ -13,7 +13,7 @@ An interactive multimodal workbench and ETL engine designed to:
 3. Provide an interactive **Gradio Workbench** to design, test, and iterate on LLM prompts (entity extraction, summarization, metadata generation) on a single row or sample subset before running against full datasets.
 4. Export enriched metadata into sidecars (.meta.yaml, .json), tabular datasets (CSV/Parquet), Markdown summaries, and optional YAML frontmatter.
 
-`mermaid
+```mermaid
 flowchart TD
     A[Source Directories: PDF, MD, TXT, IMG, AV] --> B[Ingest & Chunking Engine]
     B --> C[(Pixeltable Unified DB)]
@@ -30,7 +30,7 @@ flowchart TD
     E --> F1[Sidecar Files: .meta.yaml / .json]
     E --> F2[Consolidated CSV / Parquet]
     E --> F3[Synthesized Markdown Reports]
-`
+```
 
 ---
 
@@ -43,7 +43,7 @@ flowchart TD
 - [x] **Pixeltable Schema & Ingestion Core**
   - Unified table definition (`file_name`, `file_path`, `rel_path`, `modality`, `file_type`, `file_size`, `content`, `doc`, `image`, `audio`, `video`, `metadata`, `created_at`).
   - Domain / directory and table name selection in UI.
-  - Ingestion handler: One file $\rightarrow$ One row, with native text/markdown extraction and direct PDF page text extraction via Pixeltable's bundled `pypdfium2` engine into the `content` column.
+  - Ingestion handler: One file → One row, with native text/markdown extraction and direct PDF page text extraction via Pixeltable's bundled `pypdfium2` engine into the `content` column.
 
 - [x] **Prompt Iteration Workbench (Gradio UI)**
   - UI Tab: **Ingestion & Data Inspector** (directory selector, file filter, scan summary, and Pixeltable ingestion trigger).
@@ -91,4 +91,4 @@ flowchart TD
 | RES-03 | Large PDF Chunking Strategies | Open | Evaluate page-based vs semantic chunking with PyMuPDF / Pixeltable document splitters. |
 | RES-04 | Safe Sidecar Export Architecture | Open | Ensure sidecars support hash/mtime validation so re-exports avoid duplicating untouched assets. |
 | RES-05 | Table/Domain State & Dropdown Sync | Open | Audit event handlers, change listeners, and test suite across Gradio tabs to ensure robust dropdown options and table view updates. |
-Tool calling support for vision, audio function calling, want single LLM call per row processed but take advantage of LLM tool calling, python functions efficiently. MCP too if it is easy and efficient.
+| RES-06 | Tool Calling & MCP Integration | Open | Single LLM call per row with tool calling support for vision and audio functions. Evaluate MCP integration for efficiency. |

@@ -9,28 +9,27 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 - **Multimodal Directory Ingestion**: Recursively scans and ingests PDF, Markdown, text, images, audio, and video files into a unified Pixeltable store with automatic metadata tracking. Easy selection/type ahead boxes for directory, domain, table, field and other selections.
 - **Sample-First Prompt Playground for data enhancement**: 
   - Test entity extraction, summarization, or structured tagging on 1–5 sample rows before running full-scale batch jobs.
-  - Tool running for audio/video/image analysis, ie; beats per min, spectrogram, object recognition. Not sure if we want full MCP support, more important is fast calls to CV, audio and other functions, maybe just support python function calling. Initally lets put in a couple useful audio and video data enhancement functions, the outputs would be fed into new/existing columns. We do NOT want extra LLM calls here, but want to take advantage of tool calling if possible.
+  - Support Python function calling for audio/video/image analysis (e.g., beats per minute, spectrograms, object recognition) to feed into table columns without additional LLM calls.
 - **Incremental & Cached Execution**: 
   - Uses Pixeltable computed columns to ensure LLM operations are cached, incremental, and version-controlled.
-  - Minimize LLM calls per row, support multiple field/column input/templating into the LLM, and accept multiple field output of the LLM, inserted/appended into table columns. consider a well supported typed data interface with the LLM 
+  - Minimize LLM calls per row, support multiple field/column input/templating into the LLM, and accept structured typed output inserted/appended into table columns.
 - **Rich Interactive DataTable**: Inspect multimodal content, embedded media, chunks, and LLM extraction results directly in Gradio.
-- **Chunking and combining**
-  - chunk videos by time/frame, editing breaks (store both the frame signiture for before and after the edit), recognized object (find segments with ? in the video)
-  - ?how does pixeltable store chunked data relationships is there a parent/child UUID
-- **Rich search/filtering**
-  - select based on one or more fields, using semantic and/or exact text
-  - can feed everything into a tool/llm, and output video, audio, images, text, markdown, one document or many (10's not hundreds or more)
+- **Chunking and Combining**:
+  - Chunk videos by time/frame, editing breaks (storing frame signatures for before and after the edit), and recognized objects.
+  - Manage chunked data relationships with parent/child hierarchies.
+- **Rich Search and Filtering**:
+  - Select records based on multiple fields using semantic and/or exact text search.
+  - Export query results across modalities (video, audio, images, text, markdown) to single or multiple documents.
 - **Flexible Export Engine**:
   - Sidecar metadata files (.meta.yaml) co-located or mirrored in an output directory.
   - Tabular exports (CSV) for downstream pipeline stages.
   - Markdown summary reports and optional frontmatter injection.
 - **Lineage & Undo**: Full tracking of dataset versions, snapshot tags, and rollback support via Pixeltable.
-- **AI model support**
-  - track model, token usage along with ingestion, enhancement and other tasks
-  - ollama and gemini support - query models show meta data useful for model selection decisions, test connection button.  
-- **Skills support**
-  - want to load in skills for entity analysis, or municipal meeting, or best LLM models to use
-  - 
+- **AI Model Support**:
+  - Track model and token usage alongside ingestion and enhancement tasks.
+  - Built-in support for Ollama and Gemini, including model metadata for selection decisions and connection testing.
+- **Skills Support**:
+  - Load reusable skills for tasks like entity analysis, domain-specific tasks (e.g., municipal meetings), and model routing.
 
 ---
 
@@ -44,48 +43,36 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 
 1. **Clone the repository and initialize virtual environment:**
    ```bash
-   cd d:\projects\pipeline-tools
+   cd pipeline-tools
 
    # Create and activate virtual environment with uv:
    uv venv
    .\.venv\Scripts\Activate.ps1
-
-\\TODO remove 'standard venv, we are just using uv
-   # Or using standard venv:
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
    ```
+
 
 2. **Install dependencies:**
    ```bash
    # Using uv:
    uv pip install -e .
-
-   # Or using standard pip:
-   pip install -e .
    ```
 
 3. **Configure API Keys:**
    Create a `.env` file or export your environment keys:
    ```bash
-   OPENAI_API_KEY=your_openai_key
-   ANTHROPIC_API_KEY=your_anthropic_key
    GEMINI_API_KEY=your_gemini_key
+   # OLLAMA_HOST=http://localhost:11434  # optional, defaults to localhost
    ```
 
 ---
 
-## 💻 Usage & DevOps Commands
+## 💻 Usage & Workflows
 
 ### Testing & Verification
 Run the automated test suite to see detailed test names and status:
 ```bash
 uv run python tests/test_app.py
 ```
-
----
-
-## 💻 Usage & Workflows
 
 ### 1. Launch the Gradio Workbench
 ```bash

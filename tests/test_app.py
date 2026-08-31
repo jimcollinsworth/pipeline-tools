@@ -25,7 +25,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.core.config import get_settings, Settings
 from src.core.ollama_client import OllamaClient
 from src.ingest.scanner import scan_directory, classify_modality
-from app import create_app
 
 class TestPipelineTools(unittest.TestCase):
     """Automated test suite for Pipeline Tools core components and Gradio UI."""
@@ -52,6 +51,7 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_gradio_app_initialization(self):
         """[UI] Verify Gradio Workbench Block component initializes without errors."""
+        from app import create_app
         demo = create_app()
         self.assertIsNotNone(demo)
         self.assertTrue(hasattr(demo, "launch"))
@@ -268,6 +268,9 @@ class CleanTestResult(unittest.TestResult):
     def startTest(self, test):
         self.test_count += 1
         self.test_start_time = time.time()
+        doc = test._testMethodDoc or test.id()
+        self.stream.write(f"  [{self.test_count}/{self.total_tests}] RUNNING: {doc}...\n")
+        self.stream.flush()
         self._stdout_buffer = io.StringIO()
         self._stderr_buffer = io.StringIO()
         self._orig_stdout = sys.stdout
@@ -288,27 +291,32 @@ class CleanTestResult(unittest.TestResult):
         doc = test._testMethodDoc or test.id()
         self.stream.write(f"  [{self.test_count}/{self.total_tests}] PASS ({elapsed:.3f}s)  {doc}\n")
         self.stream.write("  " + "-" * 72 + "\n")
+        self.stream.flush()
 
     def addError(self, test, err):
         super().addError(test, err)
         elapsed = time.time() - (self.test_start_time or time.time())
         doc = test._testMethodDoc or test.id()
         self.stream.write(f"\n  [{self.test_count}/{self.total_tests}] ERROR ({elapsed:.3f}s)  {doc}\n")
+        self.stream.write(f"      {err[0].__name__}: {err[1]}\n")
         self.stream.write("  " + "-" * 72 + "\n")
+        self.stream.flush()
 
     def addFailure(self, test, err):
         super().addFailure(test, err)
         elapsed = time.time() - (self.test_start_time or time.time())
         doc = test._testMethodDoc or test.id()
         self.stream.write(f"\n  [{self.test_count}/{self.total_tests}] FAIL ({elapsed:.3f}s)  {doc}\n")
+        self.stream.write(f"      {err[0].__name__}: {err[1]}\n")
         self.stream.write("  " + "-" * 72 + "\n")
+        self.stream.flush()
 
 
 def run_tests():
     header = "=" * 76
-    print("\n" + header)
-    print("  PIPELINE TOOLS AUTOMATED TEST SUITE")
-    print(header + "\n")
+    print("\n" + header, flush=True)
+    print("  PIPELINE TOOLS AUTOMATED TEST SUITE", flush=True)
+    print(header + "\n", flush=True)
     
     suite = unittest.TestLoader().loadTestsFromTestCase(TestPipelineTools)
     total_count = suite.countTestCases()
@@ -320,9 +328,9 @@ def run_tests():
     finally:
         sys.stdout = old_stdout
 
-    print("\n" + header)
-    print(f"  SUMMARY: {result.successes} Passed, {len(result.failures)} Failed, {len(result.errors)} Errors")
-    print(header + "\n")
+    print("\n" + header, flush=True)
+    print(f"  SUMMARY: {result.successes} Passed, {len(result.failures)} Failed, {len(result.errors)} Errors", flush=True)
+    print(header + "\n", flush=True)
     return len(result.failures) == 0 and len(result.errors) == 0
 
 

@@ -58,17 +58,138 @@ class GeminiClient:
                 return False, f"❌ Permission denied: {err_msg}"
             return False, f"❌ Connection failed: {err_msg}"
 
-    def list_models(self) -> List[Dict[str, str]]:
-        """Return list of supported Gemini models with descriptions."""
-        model_info = [
-            {"name": "gemini-3.6-flash", "description": "1M tokens — Fast, balanced, state-of-the-art general model (Recommended)"},
-            {"name": "gemini-3.5-flash-lite", "description": "1M tokens — Lowest latency & cost for high-throughput execution"},
-            {"name": "gemini-3.1-pro-preview", "description": "1M tokens — Advanced reasoning, complex analysis, and coding"},
-            {"name": "gemini-3.1-flash-lite", "description": "Cost-efficient, ultra-fast performance for lightweight tasks"},
-            {"name": "gemma-4-31b-it", "description": "Gemma 4 Dense 31B instruction-tuned open weights"},
-            {"name": "gemma-4-26b-a4b-it", "description": "Gemma 4 MoE 26B total / 4B active parameters"},
+    def list_models(self, api_key: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Dynamically query available Gemini models from Google API with rich metadata."""
+        key = api_key or self.api_key
+        if key and key.strip() and GEMINI_AVAILABLE:
+            try:
+                client = genai.Client(api_key=key.strip())
+                live_models = []
+                for m in client.models.list():
+                    raw_name = getattr(m, "name", "")
+                    clean_name = raw_name.replace("models/", "").strip() if raw_name else ""
+                    if not clean_name:
+                        continue
+
+                    # Filter for generative chat/vision models (exclude embeddings, aqa, and legacy bison)
+                    name_lower = clean_name.lower()
+                    if "embedding" in name_lower or "aqa" in name_lower or "bison" in name_lower:
+                        continue
+
+                    supported = getattr(m, "supported_actions", []) or getattr(m, "supported_generation_methods", [])
+                    is_gen = True
+                    if supported:
+                        is_gen = any("generatecontent" in str(s).lower() for s in supported)
+
+                    if is_gen and ("gemini" in name_lower or "gemma" in name_lower):
+                        display = getattr(m, "display_name", "") or clean_name
+                        input_limit = getattr(m, "input_token_limit", None)
+                        output_limit = getattr(m, "output_token_limit", None)
+                        
+                        input_str = f"{input_limit:,} tokens" if input_limit else "1,048,576 tokens"
+                        output_str = f"{output_limit:,} tokens" if output_limit else "8,192 tokens"
+                        
+                        # Inferred modalities
+                        modalities = "Text, Vision, PDF, Audio, Video" if "flash" in name_lower or "pro" in name_lower else "Text, Code"
+                        
+                        # Inferred cost tier
+                        if "gemma" in name_lower:
+                            cost_tier = "Open Weights (Free)"
+                        elif "flash-lite" in name_lower:
+                            cost_tier = "Ultra Low ($0.038 / 1M tokens)"
+                        elif "flash" in name_lower:
+                            cost_tier = "Standard ($0.075 / 1M tokens)"
+                        elif "pro" in name_lower:
+                            cost_tier = "Advanced ($1.25 / 1M tokens)"
+                        else:
+                            cost_tier = "Pay-as-you-go"
+
+                        desc = getattr(m, "description", "") or display
+                        
+                        live_models.append({
+                            "name": clean_name,
+                            "display_name": display,
+                            "modalities": modalities,
+                            "input_window": input_str,
+                            "output_limit": output_str,
+                            "cost_tier": cost_tier,
+                            "description": desc.strip()[:140]
+                        })
+
+                if live_models:
+                    live_models.sort(key=lambda x: (x["name"].startswith("gemini"), x["name"]), reverse=True)
+                    return live_models
+            except Exception:
+                pass
+
+        # Fallback baseline list if offline or API key is not yet configured
+        return [
+            {
+                "name": "gemini-3.7-flash",
+                "display_name": "Gemini 3.7 Flash",
+                "modalities": "Text, Vision, PDF, Audio, Video",
+                "input_window": "1,048,576 tokens",
+                "output_limit": "8,192 tokens",
+                "cost_tier": "Standard ($0.075 / 1M tokens)",
+                "description": "Next-gen hybrid reasoning & coding speed"
+            },
+            {
+                "name": "gemini-3.6-flash",
+                "display_name": "Gemini 3.6 Flash",
+                "modalities": "Text, Vision, PDF, Audio, Video",
+                "input_window": "1,048,576 tokens",
+                "output_limit": "8,192 tokens",
+                "cost_tier": "Standard ($0.075 / 1M tokens)",
+                "description": "Fast, balanced, state-of-the-art general model (Recommended)"
+            },
+            {
+                "name": "gemini-3.5-flash-lite",
+                "display_name": "Gemini 3.5 Flash-Lite",
+                "modalities": "Text, Vision, PDF",
+                "input_window": "1,048,576 tokens",
+                "output_limit": "8,192 tokens",
+                "cost_tier": "Ultra Low ($0.038 / 1M tokens)",
+                "description": "Lowest latency & cost for high-throughput batch execution"
+            },
+            {
+                "name": "gemini-3.1-pro-preview",
+                "display_name": "Gemini 3.1 Pro",
+                "modalities": "Text, Vision, PDF, Audio, Video",
+                "input_window": "2,097,152 tokens",
+                "output_limit": "8,192 tokens",
+                "cost_tier": "Advanced ($1.25 / 1M tokens)",
+                "description": "Advanced reasoning, complex analysis, and coding"
+            },
+            {
+                "name": "gemini-3.1-flash-lite",
+                "display_name": "Gemini 3.1 Flash-Lite",
+                "modalities": "Text, Vision, PDF",
+                "input_window": "1,048,576 tokens",
+                "output_limit": "8,192 tokens",
+                "cost_tier": "Ultra Low ($0.038 / 1M tokens)",
+                "description": "Cost-efficient, ultra-fast performance for lightweight tasks"
+            },
+            {
+                "name": "gemma-4-31b-it",
+                "display_name": "Gemma 4 31B IT",
+                "modalities": "Text, Code",
+                "input_window": "131,072 tokens",
+                "output_limit": "8,192 tokens",
+                "cost_tier": "Open Weights (Free)",
+                "description": "Gemma 4 Dense 31B instruction-tuned open weights"
+            },
+            {
+                "name": "gemma-4-26b-a4b-it",
+                "display_name": "Gemma 4 26B A4B",
+                "modalities": "Text, Code",
+                "input_window": "131,072 tokens",
+                "output_limit": "8,192 tokens",
+                "cost_tier": "Open Weights (Free)",
+                "description": "Gemma 4 MoE 26B total / 4B active parameters"
+            },
         ]
-        return model_info
+
+
 
     def generate(
         self,

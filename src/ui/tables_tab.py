@@ -49,6 +49,19 @@ def render_tables_tab(tab=None):
             lightweight_toggle = gr.Checkbox(label="⚡ Lightweight Preview", value=True, scale=1)
             load_table_btn = gr.Button("🔍 Load / Refresh Table", variant="primary", scale=1)
 
+        with gr.Row():
+            undo_table_btn = gr.Button("↩️ Undo Last Operation", variant="secondary", scale=2)
+            delete_table_btn = gr.Button("🗑️ Delete Table", variant="secondary", scale=2)
+            delete_domain_btn = gr.Button("⚠️ Delete Domain & All Tables", variant="secondary", scale=2)
+
+        # Deletion confirmation drawer
+        with gr.Group(visible=False, elem_classes=["status-panel"]) as delete_confirm_group:
+            confirm_message_markdown = gr.Markdown("### ⚠️ Confirm Permanent Deletion")
+            with gr.Row():
+                confirm_delete_action_btn = gr.Button("❌ Yes, Permanently Delete", variant="primary", scale=2)
+                cancel_delete_action_btn = gr.Button("↩️ Cancel", variant="secondary", scale=1)
+            pending_delete_type_state = gr.State("")
+
         table_stats_markdown = gr.Markdown("#### Table Stats: *Click 'Load / Refresh Table' or select a table to view data.*")
 
         data_view_table = gr.Dataframe(
@@ -417,6 +430,91 @@ def render_tables_tab(tab=None):
             custom_filename_input
         ],
         outputs=[export_status_box, export_preview_markdown, download_file_component]
+    )
+
+    def on_undo_table(domain, table_name, limit, is_lightweight):
+        clean_dir = domain.strip() if domain else "default"
+        clean_tbl = table_name.strip() if table_name else "raw_assets"
+        res = DBManager.undo_last_operation(clean_dir, clean_tbl)
+        status_msg = res.get("message", "Undo completed.")
+        prefix = "✅" if res.get("status") == "success" else ("ℹ️" if res.get("status") == "info" else "❌")
+        stats_text, df_update, cols_text = on_load_table(clean_dir, clean_tbl, limit, is_lightweight)
+        combined_stats = f"#### Undo Status: {prefix} {status_msg}\n\n{stats_text}"
+        return combined_stats, df_update, cols_text
+
+    undo_table_btn.click(
+        fn=on_undo_table,
+        inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
+        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+    )
+
+    def on_request_delete_table(domain, table_name):
+        clean_dir = domain.strip() if domain else "default"
+        clean_tbl = table_name.strip() if table_name else "raw_assets"
+        msg = f"### ⚠️ Confirm Table Deletion\n\nAre you sure you want to permanently delete table **`{clean_dir}.{clean_tbl}`**?\n\n*All rows and computed columns in this table will be permanently deleted.*"
+        return gr.update(visible=True), msg, "table"
+
+    delete_table_btn.click(
+        fn=on_request_delete_table,
+        inputs=[domain_dropdown, table_dropdown],
+        outputs=[delete_confirm_group, confirm_message_markdown, pending_delete_type_state]
+    )
+
+    def on_request_delete_domain(domain):
+        clean_dir = domain.strip() if domain else "default"
+        tables = DBManager.list_tables(clean_dir)
+        tbls_msg = f"connected tables: {', '.join(f'`{t}`' for t in tables)}" if tables else "empty domain"
+        msg = f"### ⚠️ Confirm Domain & All Tables Deletion\n\nAre you sure you want to permanently delete domain **`{clean_dir}`** and all its tables ({tbls_msg})?\n\n*This will drop the entire domain folder and all contained tables.*"
+        return gr.update(visible=True), msg, "domain"
+
+    delete_domain_btn.click(
+        fn=on_request_delete_domain,
+        inputs=[domain_dropdown],
+        outputs=[delete_confirm_group, confirm_message_markdown, pending_delete_type_state]
+    )
+
+    cancel_delete_action_btn.click(
+        fn=lambda: gr.update(visible=False),
+        outputs=[delete_confirm_group]
+    )
+
+    def on_confirm_delete(delete_type, domain, table_name, limit, is_lightweight):
+        clean_dir = domain.strip() if domain else "default"
+        clean_tbl = table_name.strip() if table_name else "raw_assets"
+        
+        if delete_type == "table":
+            res = DBManager.delete_table_with_details(clean_dir, clean_tbl)
+        else:
+            res = DBManager.delete_domain_with_details(clean_dir)
+
+        latest_domains = DBManager.list_dirs()
+        if not latest_domains:
+            latest_domains = ["default"]
+        new_dom = latest_domains[0]
+
+        latest_tables = DBManager.list_tables(new_dom)
+        if not latest_tables:
+            latest_tables = ["raw_assets"]
+        new_tbl = latest_tables[0]
+
+        update_last_entry(last_domain=new_dom, last_table=new_tbl)
+        stats_text, df_update, cols_text = on_load_table(new_dom, new_tbl, limit, is_lightweight)
+        prefix = "✅" if res.get("status") == "success" else "❌"
+        del_msg = f"#### Status: {prefix} {res.get('message', '')}\n\n{stats_text}"
+
+        return (
+            gr.update(visible=False),
+            gr.update(choices=latest_domains, value=new_dom),
+            gr.update(choices=latest_tables, value=new_tbl),
+            del_msg,
+            df_update,
+            cols_text
+        )
+
+    confirm_delete_action_btn.click(
+        fn=on_confirm_delete,
+        inputs=[pending_delete_type_state, domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
+        outputs=[delete_confirm_group, domain_dropdown, table_dropdown, table_stats_markdown, data_view_table, available_columns_info]
     )
 
     if tab is not None:

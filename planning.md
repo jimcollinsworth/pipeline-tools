@@ -85,16 +85,11 @@ flowchart TD
   - Key criteria: Execution speed (~1-2s headless script vs ~30-90s subagent), zero-dependency constraints, and rich JavaScript DOM/cascade testing.
 
 ### Phase 3: Pixeltable Lineage, Undo & Multimodal Extensions (Planned)
-- [ ] **Pixeltable Lineage & Simple 'Undo Last Operation' Architecture (Major Feature)**
-  - **Concept & Mechanics**: Every mutating Pixeltable operation (`insert`, `add_column`, `update`, `delete`) increments the immutable table version counter (`v0 -> v1 -> v2...`).
-  - **Design Specification**:
-    - **1-Click '↩️ Undo Last Operation' Button**: Provides an instant, safe way to revert the most recent batch prompt run, dropped column, or row ingestion.
-    - **Revert Mechanics**: If the last operation added columns (e.g. LLM Auto-Split columns), Undo safely drops them; if rows were inserted/updated, Undo rolls the table back to snapshot `v - 1`.
-    - **Version History Drawer**: Visual list of past table revisions with timestamps, row counts, added columns, and 1-click rollback to any historical version.
-  - **Implementation Roadmap**:
-    - Implement `DBManager.undo_last_operation(domain, table)` and `DBManager.get_version_history(domain, table)`.
-    - Add UI controls in Data Enhancement and View & Export with status feedback.
-    - Hardened unit tests verifying column dropping, version restoration, and computed column preservation.
+- [x] **Pixeltable Lineage & 1-Click 'Undo Last Operation' Architecture**
+  - Instant 1-click **↩️ Undo Last Operation** button on Data Enhancement and View & Export tabs.
+  - Automatically reverts newly added LLM columns (dropping auto-split and single columns) and restores baseline schema.
+  - Safe 2-step **🗑️ Delete Table** and **⚠️ Delete Domain & All Tables** buttons with confirmation drawers, on-screen status summaries, and detailed logging.
+  - Comprehensive unit tests in `tests/test_app.py` verifying column dropping, table dropping, and domain teardown.
 - [ ] **Hugging Face & YOLO Vision Classification Engines**
   - Integrate Ultralytics YOLO classifiers (e.g., `keremberke/yolov8m-painting-classification`) and Hugging Face vision models alongside Ollama/Gemini.
   - Full 27-class art taxonomy classification:

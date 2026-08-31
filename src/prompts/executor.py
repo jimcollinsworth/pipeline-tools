@@ -244,6 +244,11 @@ class PromptExecutor:
                     updated_count += 1
 
             cols_summary = ", ".join(f"`{c}`" for c in cols_type_map.keys())
+            DBManager.record_operation(
+                dir_name=table_dir,
+                table_name=table_name,
+                op_data={"action": "add_columns", "columns": list(cols_type_map.keys()), "rows_updated": updated_count}
+            )
             return {
                 "status": "success",
                 "message": f"Successfully processed {updated_count} rows via [{provider}] '{model}'. Unpacked into {len(cols_type_map)} dynamic columns: {cols_summary}",
@@ -291,6 +296,11 @@ class PromptExecutor:
                 updated_count += 1
 
             note = f" (Column name formatted as '{safe_col}')" if safe_col != target_column else ""
+            DBManager.record_operation(
+                dir_name=table_dir,
+                table_name=table_name,
+                op_data={"action": "single_column", "column": safe_col, "rows_updated": updated_count}
+            )
             return {
                 "status": "success",
                 "message": f"Successfully processed {updated_count} rows using [{provider}] '{model}' and saved to column '{safe_col}'{note} ({mode} mode).",

@@ -24,6 +24,11 @@ logging.getLogger("google_genai").setLevel(logging.ERROR)
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+try:
+    import pixeltable as pxt
+except ImportError:
+    pxt = None
+
 from src.core.config import get_settings, Settings, sanitize_identifier
 from src.core.ollama_client import OllamaClient
 from src.ingest.scanner import scan_directory, classify_modality
@@ -462,6 +467,57 @@ class TestPipelineTools(unittest.TestCase):
             res = DBManager.get_table_data(self.TEST_DOMAIN, new_table_name, limit=5, lightweight=True)
             self.assertIn("file_name", res.get("columns", []))
             self.assertEqual(res.get("total_rows"), 0)
+
+    def test_undo_last_operation(self):
+        """[Database] Verify 1-click Undo drops newly added LLM columns and reverts table schema."""
+        if PIXELTABLE_AVAILABLE:
+            tbl_name = "test_undo_tbl"
+            table = DBManager.create_or_get_table(self.TEST_DOMAIN, tbl_name)
+            
+            # Add custom columns
+            table.add_column(test_generated_col1=pxt.String, if_exists="ignore")
+            table.add_column(test_generated_col2=pxt.String, if_exists="ignore")
+            
+            # Record operation
+            DBManager.record_operation(
+                self.TEST_DOMAIN, tbl_name,
+                {"action": "add_columns", "columns": ["test_generated_col1", "test_generated_col2"]}
+            )
+
+            # Verify columns exist before undo
+            res_before = DBManager.get_table_data(self.TEST_DOMAIN, tbl_name, limit=1)
+            self.assertIn("test_generated_col1", res_before.get("columns", []))
+            self.assertIn("test_generated_col2", res_before.get("columns", []))
+
+            # Execute 1-click undo
+            undo_res = DBManager.undo_last_operation(self.TEST_DOMAIN, tbl_name)
+            self.assertEqual(undo_res.get("status"), "success")
+            self.assertIn("test_generated_col1", undo_res.get("dropped_columns", []))
+
+            # Verify columns were dropped after undo
+            res_after = DBManager.get_table_data(self.TEST_DOMAIN, tbl_name, limit=1)
+            self.assertNotIn("test_generated_col1", res_after.get("columns", []))
+            self.assertNotIn("test_generated_col2", res_after.get("columns", []))
+
+    def test_delete_table_and_domain_with_details(self):
+        """[Database] Verify delete_table_with_details and delete_domain_with_details remove resources cleanly."""
+        if PIXELTABLE_AVAILABLE:
+            dom = "test_del_domain"
+            t1 = "temp_del_t1"
+            t2 = "temp_del_t2"
+            DBManager.create_or_get_table(dom, t1)
+            DBManager.create_or_get_table(dom, t2)
+
+            # 1. Delete single table
+            res_t1 = DBManager.delete_table_with_details(dom, t1)
+            self.assertEqual(res_t1.get("status"), "success")
+            self.assertNotIn(t1, DBManager.list_tables(dom))
+            self.assertIn(t2, DBManager.list_tables(dom))
+
+            # 2. Delete entire domain
+            res_dom = DBManager.delete_domain_with_details(dom)
+            self.assertEqual(res_dom.get("status"), "success")
+            self.assertNotIn(dom, DBManager.list_dirs())
 
 
 

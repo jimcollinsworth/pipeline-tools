@@ -14,9 +14,97 @@ except ImportError:
 
 
 
+import logging
 from src.core.config import sanitize_identifier
 
+logger = logging.getLogger("pipeline_tools.db")
+
+BASELINE_COLUMNS = {
+    "id", "file_name", "file_path", "rel_path", "modality", "file_type",
+    "file_size", "content", "doc", "image", "audio", "video", "metadata",
+    "created_at", "thumbnail", "media_preview"
+}
+
 class DBManager:
+    BASELINE_COLUMNS = BASELINE_COLUMNS
+    _operation_history: Dict[str, List[Dict[str, Any]]] = {}
+
+    @classmethod
+    def record_operation(cls, dir_name: str, table_name: str, op_data: Dict[str, Any]) -> None:
+        """Record a table mutating operation in the in-memory stack for undo capabilities."""
+        full_path = cls.resolve_table_path(dir_name, table_name)
+        if full_path not in cls._operation_history:
+            cls._operation_history[full_path] = []
+        op_data["timestamp"] = datetime.now().isoformat()
+        cls._operation_history[full_path].append(op_data)
+        logger.info(f"Recorded operation for `{full_path}`: {op_data.get('action', 'unknown')}")
+
+    @classmethod
+    def get_last_operation(cls, dir_name: str, table_name: str) -> Optional[Dict[str, Any]]:
+        """Get the most recent operation recorded for a table."""
+        full_path = cls.resolve_table_path(dir_name, table_name)
+        history = cls._operation_history.get(full_path, [])
+        return history[-1] if history else None
+
+    @classmethod
+    def undo_last_operation(cls, dir_name: str, table_name: str) -> Dict[str, Any]:
+        """Revert the most recent operation (drops added columns or restores table state)."""
+        if not PIXELTABLE_AVAILABLE:
+            return {"status": "error", "message": "Pixeltable is not available."}
+        try:
+            full_path = cls.resolve_table_path(dir_name, table_name)
+            table = pxt.get_table(full_path)
+            
+            # Check history stack first
+            history = cls._operation_history.get(full_path, [])
+            last_op = history.pop() if history else None
+            
+            dropped_columns = []
+            
+            if last_op and last_op.get("action") == "add_columns" and last_op.get("columns"):
+                for col in last_op["columns"]:
+                    try:
+                        table.drop_column(col)
+                        dropped_columns.append(col)
+                    except Exception as e:
+                        logger.warning(f"Could not drop column '{col}' during undo: {e}")
+            elif last_op and last_op.get("action") == "single_column" and last_op.get("column"):
+                col = last_op["column"]
+                try:
+                    table.drop_column(col)
+                    dropped_columns.append(col)
+                except Exception as e:
+                    logger.warning(f"Could not drop column '{col}' during undo: {e}")
+            else:
+                # Fallback: Detect all non-baseline custom columns on table
+                tbl_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
+                custom_cols = [c for c in tbl_cols if c not in cls.BASELINE_COLUMNS]
+                if custom_cols:
+                    for col in custom_cols:
+                        try:
+                            table.drop_column(col)
+                            dropped_columns.append(col)
+                        except Exception as e:
+                            logger.warning(f"Could not drop custom column '{col}' during undo fallback: {e}")
+                else:
+                    return {
+                        "status": "info",
+                        "message": f"Table `{full_path}` is already at its baseline initial schema. No custom columns or operations to undo."
+                    }
+
+            if dropped_columns:
+                msg = f"↩️ Successfully reverted last operation on `{full_path}`: Dropped {len(dropped_columns)} column(s) ({', '.join(f'`{c}`' for c in dropped_columns)})."
+                logger.info(msg)
+                return {"status": "success", "message": msg, "dropped_columns": dropped_columns}
+            else:
+                return {
+                    "status": "info",
+                    "message": f"No custom columns found to revert on `{full_path}`."
+                }
+        except Exception as e:
+            err_msg = f"Failed to undo last operation on `{dir_name}.{table_name}`: {str(e)}"
+            logger.error(err_msg, exc_info=True)
+            return {"status": "error", "message": err_msg}
     @staticmethod
     def list_dirs() -> List[str]:
         """List all pixeltable directories/domains."""
@@ -115,29 +203,66 @@ class DBManager:
 
     create_or_get_table = get_or_create_table
 
-    @staticmethod
-    def drop_table(dir_name: str, table_name: str) -> bool:
-        """Drop a Pixeltable table cleanly."""
+    @classmethod
+    def drop_table(cls, dir_name: str, table_name: str) -> bool:
+        """Drop a Pixeltable table cleanly with logging."""
         if not PIXELTABLE_AVAILABLE:
             return False
         try:
-            full_path = DBManager.resolve_table_path(dir_name, table_name)
+            full_path = cls.resolve_table_path(dir_name, table_name)
             pxt.drop_table(full_path, if_not_exists="ignore")
+            if full_path in cls._operation_history:
+                del cls._operation_history[full_path]
+            logger.info(f"🗑️ Deleted Pixeltable table `{full_path}` and all associated data.")
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to drop table `{dir_name}.{table_name}`: {e}", exc_info=True)
             return False
 
-    @staticmethod
-    def drop_dir(dir_name: str, force: bool = True) -> bool:
-        """Drop a Pixeltable directory/domain and its tables."""
+    @classmethod
+    def drop_dir(cls, dir_name: str, force: bool = True) -> bool:
+        """Drop a Pixeltable directory/domain and its tables with logging."""
         if not PIXELTABLE_AVAILABLE:
             return False
         try:
             _, safe_dir, _ = sanitize_identifier(dir_name or "default")
+            tables = cls.list_tables(safe_dir)
             pxt.drop_dir(safe_dir, force=force, if_not_exists="ignore")
+            for t in tables:
+                p = f"{safe_dir}.{t}"
+                if p in cls._operation_history:
+                    del cls._operation_history[p]
+            logger.info(f"⚠️ Deleted Pixeltable domain `{safe_dir}` and connected tables: {tables}")
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to drop directory `{dir_name}`: {e}", exc_info=True)
             return False
+
+    @classmethod
+    def delete_table_with_details(cls, dir_name: str, table_name: str) -> Dict[str, Any]:
+        """Delete a Pixeltable table and return detailed on-screen feedback."""
+        full_path = cls.resolve_table_path(dir_name, table_name)
+        success = cls.drop_table(dir_name, table_name)
+        if success:
+            msg = f"🗑️ **Successfully deleted table `{full_path}`.** All records and computed columns have been removed."
+            return {"status": "success", "message": msg, "table": full_path}
+        else:
+            msg = f"❌ **Failed to delete table `{full_path}`.** Table may not exist or database was locked."
+            return {"status": "error", "message": msg, "table": full_path}
+
+    @classmethod
+    def delete_domain_with_details(cls, dir_name: str) -> Dict[str, Any]:
+        """Delete a Pixeltable domain/directory and all connected tables with detailed on-screen feedback."""
+        _, safe_dir, _ = sanitize_identifier(dir_name or "default")
+        tables_before = cls.list_tables(safe_dir)
+        success = cls.drop_dir(safe_dir, force=True)
+        if success:
+            tbls_str = f" Connected tables removed: {', '.join(f'`{t}`' for t in tables_before)}." if tables_before else " (Empty domain)."
+            msg = f"⚠️ **Successfully deleted domain `{safe_dir}`.**{tbls_str}"
+            return {"status": "success", "message": msg, "domain": safe_dir, "deleted_tables": tables_before}
+        else:
+            msg = f"❌ **Failed to delete domain `{safe_dir}`.** Domain may not exist or is protected."
+            return {"status": "error", "message": msg, "domain": safe_dir}
 
     @staticmethod
     def extract_file_content(file_path: str, modality: str, file_type: str) -> str:

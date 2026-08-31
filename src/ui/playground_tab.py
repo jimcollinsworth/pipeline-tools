@@ -176,6 +176,7 @@ def render_playground_tab(tab=None):
                         scale=1
                     )
                     commit_batch_btn = gr.Button("💾 Execute on Table & Save Columns", variant="primary", scale=2)
+                    undo_batch_btn = gr.Button("↩️ Undo Last Operation", variant="secondary", scale=1)
 
                 with gr.Group(elem_classes=["status-panel"]):
                     batch_status_markdown = gr.Markdown("#### Batch Status: *Idle*")
@@ -531,6 +532,22 @@ def render_playground_tab(tab=None):
     commit_batch_btn.click(
         fn=on_commit_batch,
         inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, output_mode_radio, target_column_input, write_mode_radio, limit_rows_input, preview_mode_toggle],
+        outputs=[batch_status_markdown, table_info_markdown, current_table_preview, available_columns_info]
+    )
+
+    def on_undo_batch(domain, table_name, is_lightweight):
+        clean_dir = domain.strip() if domain else "default"
+        clean_tbl = table_name.strip() if table_name else "raw_assets"
+        res = DBManager.undo_last_operation(clean_dir, clean_tbl)
+        status_msg = res.get("message", "Undo completed.")
+        prefix = "✅" if res.get("status") == "success" else ("ℹ️" if res.get("status") == "info" else "❌")
+        batch_msg = f"#### Batch Status: {prefix} {status_msg}"
+        info_text, df_update, cols_text = load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
+        return batch_msg, info_text, df_update, cols_text
+
+    undo_batch_btn.click(
+        fn=on_undo_batch,
+        inputs=[domain_dropdown, table_dropdown, preview_mode_toggle],
         outputs=[batch_status_markdown, table_info_markdown, current_table_preview, available_columns_info]
     )
 

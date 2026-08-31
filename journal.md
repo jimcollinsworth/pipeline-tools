@@ -132,3 +132,25 @@ This journal records verbatim developer instructions, architectural directives, 
    - If the last operation was row ingestion/updates, Undo restores the table to version `v - 1`.
 3. **Roadmap Tracking**:
    - Defined Phase 3 task and `RES-11` in `planning.md`.
+
+---
+
+## 📅 2026-08-31: 1-Click 'Undo Last Operation' & Table/Domain Deletion Management
+
+**Context:** Implementation of instant 1-click operation reversion and safe database management with confirmation workflows.
+
+**Verbatim Instruction:**
+> `add the undo last operation button 1 click, sounds good, i think we have the history now in the runs button view but it can probably be improved. add new tests for the undo.`
+> `second add delete table and delete domain (and the connected tables) buttons , right under the load table button in view/export. provide a confirmation message before deleting and detail messages onscreen and logs on what was deleted.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **1-Click 'Undo Last Operation'**:
+   - Added `DBManager.undo_last_operation(domain, table)` and `DBManager.record_operation()` stack tracking.
+   - Reverts newly generated LLM columns (dropping auto-split and single columns cleanly) or rolls back to the baseline table schema.
+   - Accessible on both **Data Enhancement** and **View & Export** with real-time UI refresh.
+2. **Safe Deletion Management (Table & Domain)**:
+   - Added `🗑️ Delete Table` and `⚠️ Delete Domain & All Tables` directly beneath the table selector in View & Export.
+   - Implemented a 2-step confirmation drawer displaying exact target table/domain names and connected table lists before execution.
+   - Comprehensive status logging (`logging.getLogger("pipeline_tools.db")`) and on-screen summary cards detailing deleted resources and row counts.
+3. **Automated Verification**:
+   - Added `test_undo_last_operation` and `test_delete_table_and_domain_with_details` in `tests/test_app.py` (27/27 tests passing).

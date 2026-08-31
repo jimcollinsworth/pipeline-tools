@@ -41,3 +41,35 @@ This journal records verbatim developer instructions, architectural directives, 
 1. **Scope & Roadmap Placement**: Scheduled as a planned Phase 3 major feature. Documentation and architectural specifications recorded in `planning.md` and `README.md` without adding heavy runtime dependencies now.
 2. **Unified Data Enhancement Integration**: Vision classification models will be exposed alongside LLM providers in the Data Enhancement tab, outputting structured JSON (`painting_style`, `confidence`, `probabilities`) that automatically unpacks into Pixeltable columns via the auto-split engine.
 3. **Domain Taxonomy**: Support full 27-class art taxonomy across historical movements, impressionism, cubism, ukiyo-e, and modern genres.
+
+---
+
+## 📅 2026-08-31: Embedded Multimodal Media & Lightweight vs. Full Mode
+
+**Context:** Enabling rich embedded multimodal media (images, audio, video, PDF documents) inside Pixeltable tables with performance optimization.
+
+**Verbatim Instruction:**
+> `add these to the plan, and work on the embedded media in the tables, ask me how if needed. view the media only when not in lightweigh mode`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Lightweight vs. Full Media Toggle**:
+   - **⚡ Lightweight Mode (`lightweight=True`)**: Omit raw binary columns (`doc`, `image`, `audio`, `video`), truncate text to 250 characters for fast response.
+   - **🔍 Full Media Mode (`lightweight=False`)**: Generate HTML thumbnails (`<img>`), inline audio controls (`<audio>`), video players (`<video>`), and PDF badges (`[📄 View PDF]`) directly inside table cells.
+2. **Interactive Selected Record Media Inspector Drawer**:
+   - Clicking any row in View & Export or Data Enhancement opens a dedicated media viewer below the table with full-size image, audio/video playback, and extracted text.
+
+---
+
+## 📅 2026-08-31: Strict 3-File Documentation Architecture Policy
+
+**Context:** Clarifying and constraining the repository documentation structure to avoid extraneous documentation files.
+
+**Verbatim Instruction:**
+> `i didn't ask for a walkthrough.md doc, we only have readme, planning and journal authorized. make sure our agents file has that rule. you can propose new docs but don't create. make sure my last few instructions are also updated in journal. remove walkthrough and put content elsewhere - readme is what, how to use, planning is steps to build, design`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Single Source of Truth (3 Authorized Docs)**:
+   - `README.md`: What the tool is, capabilities, toolchain, and how to use.
+   - `planning.md`: Steps to build, system architecture, engineering design, tasks, and research items.
+   - `journal.md`: Verbatim developer directives, mentoring notes, and architectural decisions.
+2. **No Arbitrary Docs**: Never generate extra markdown files (e.g. `walkthrough.md`, `specs.md`) without prior explicit authorization. Rule codified permanently in `AGENTS.md`.

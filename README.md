@@ -20,7 +20,10 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 - **Rich Search and Filtering**:
   - Select records based on multiple fields using semantic and/or exact text search.
   - Export query results across modalities (video, audio, images, text, markdown) to single or multiple documents.
-- **Flexible Export Engine (Integrated in DataTables)**:
+- **Embedded Multimodal Media & Inspector**: 
+  - Toggle between fast **⚡ Lightweight Mode** and **🔍 Full Media Mode** with inline HTML thumbnails (`<img>`), audio controls (`<audio>`), video players (`<video>`), and PDF badges.
+  - Interactive **🔬 Selected Record Media Inspector** drawer opens on row selection for deep inspection of full-resolution images, audio playback, video playback, and extracted text.
+- **Flexible Export Engine (Integrated in View & Export)**:
   - **LLM-Synthesized Markdown Reports**: Aggregate entire tables or selected rows into cohesive Markdown reports using customizable prompts and selectable columns.
   - **Direct Formatted Document Export**: Generate structured Markdown documents directly from table data without additional LLM calls.
   - Automatic saving to `exports/` with live preview and one-click download.
@@ -50,7 +53,6 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
    .\.venv\Scripts\Activate.ps1
    ```
 
-
 2. **Install dependencies:**
    ```bash
    # Using uv:
@@ -71,7 +73,7 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 ### Testing & Verification
 Run the automated test suite to see detailed test names and status:
 ```bash
-uv run python tests/test_app.py
+uv run python -m tests
 ```
 
 ### 1. Launch the Gradio Workbench
@@ -101,12 +103,13 @@ Open your browser at `http://localhost:7860`.
 
 3. **📊 View & Export**:
    - Inspect stored data, column values, and newly added LLM output columns.
+   - Toggle **⚡ Lightweight Preview** off to view embedded HTML image thumbnails, audio players, and video widgets.
+   - Click any row to open the **🔬 Selected Record Media Inspector** drawer for full-resolution preview.
    - Configure prompt-driven Markdown exports (*Entity & Keyword Intelligence*, *Visual & Scene Breakdown*, *Thematic Summary*, *Direct Catalog*).
    - Save directly to `exports/` with live UI preview and instant download.
 
 4. **⚙️ Settings & Models**:
    - Check Ollama server connection, inspect installed models table, and save default configurations.
-
 
 ---
 
@@ -116,9 +119,10 @@ Open your browser at `http://localhost:7860`.
   - Pixeltable unified schema definition.
   - PyMuPDF / Markdown / Text chunkers.
   - Gradio UI with dry-run sample testing & batch execution.
-- [ ] **Phase 2: Live Progress & Export Engine**
-  - Background task worker with live log streaming.
-  - Sidecar .meta.yaml, CSV, and Markdown report generators.
+- [x] **Phase 2: Test Hardening, Media Inspection & Export Engine**
+  - Test suite isolation with automated teardown hooks.
+  - In-table HTML media thumbnails, audio/video players, and interactive Media Inspector drawer.
+  - Prompt-driven Markdown report exports.
 - [ ] **Phase 3: Lineage & Multimodal Expansion**
   - Snapshot explorer and rollback UI.
   - Hugging Face model hub & Ultralytics YOLO vision classification engines (e.g. WikiArt 27-movement painting classifier) with dynamic table auto-split columns.
@@ -126,7 +130,10 @@ Open your browser at `http://localhost:7860`.
 
 ---
 
-## 📄 Documentation
+## 📄 Authorized Documentation
 
-- [planning.md](planning.md) — Comprehensive task tracking, issues, and research notes.
-- [journal.md](journal.md) — Developer directives, architectural decisions, and key mentoring history.
+This project strictly adheres to a 3-document architecture:
+
+- **[README.md](README.md)** — What the tool is, capabilities, toolchain, and how to use.
+- **[planning.md](planning.md)** — Steps to build, system architecture, engineering design, tasks, and research items.
+- **[journal.md](journal.md)** — Chronological record of developer directives, mentoring notes, and key architectural decisions.

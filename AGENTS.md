@@ -127,5 +127,12 @@ Guidelines to reduce common LLM coding pitfalls, biasing toward caution and simp
   2. `[Step]` → verify: `[check]`
   3. `[Step]` → verify: `[check]`
 
-  ### 5. Explaining and Documentation
-  * explain why and what you have done whenever changes are made to any file. simple couple of sentences - why and what
+### 5. Explaining and Documentation
+- **Authorized Documentation Files Only**:
+  - Exclusively maintain and use the three authorized project documentation files:
+    1. `README.md`: What the tool is, capabilities, toolchain, and how to use.
+    2. `planning.md`: Architecture, system design, tasks, roadmap, and research items.
+    3. `journal.md`: Verbatim developer directives, mentoring notes, and key architectural decisions.
+  - **NEVER** create additional arbitrary documentation files (such as `walkthrough.md`, `specs.md`, etc.) without explicit user authorization. You may propose new documentation files, but never create them unprompted.
+- **Explain Changes**:
+  - Explain why and what you have done whenever changes are made to any file in 1-2 simple, concise sentences.

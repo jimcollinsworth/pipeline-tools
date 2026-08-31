@@ -154,3 +154,30 @@ This journal records verbatim developer instructions, architectural directives, 
    - Comprehensive status logging (`logging.getLogger("pipeline_tools.db")`) and on-screen summary cards detailing deleted resources and row counts.
 3. **Automated Verification**:
    - Added `test_undo_last_operation` and `test_delete_table_and_domain_with_details` in `tests/test_app.py` (27/27 tests passing).
+
+---
+
+## 📅 2026-08-31: Unified AI-Driven Markdown Document Export
+
+**Context:** Resolving UI ambiguity in View & Export tab regarding "Direct Template" vs "LLM Synthesis".
+
+**Verbatim Instruction:**
+> `direct tempate - language seems incorrect or confusing . i believe we still are using an llm? where is the template? /grill-me`
+> `i think #2, AI every time, we can put {table_context} to get it all at once or column names for row level. so remove the export mode i guess`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Removed Ambiguous Export Mode Toggle**:
+   - Eliminated the confusing `Export Mode` radio toggle.
+   - All document exports are now 100% unified under the AI Synthesis Engine (Ollama / Gemini).
+2. **Unified Context & Prompt Variables**:
+   - Uses `{table_context}` to pass full multi-record table data blocks for dataset-wide synthesis.
+   - Retains `{domain}`, `{table}`, and `{total_rows}` dynamic placeholders.
+3. **4 Refined AI Presets**:
+   - `🏷️ Entity & Keyword Intelligence`: Structured tables of named entities & taxonomy keywords.
+   - `🎨 Visual & Multimodal Scene Analysis`: Spatial composition, color palettes, and lighting conditions.
+   - `📋 Thematic Summary & Executive Brief`: Narrative briefing with trends, outliers, and takeaways.
+   - `📁 Structured Media Catalog Dossier`: Systematic record-by-record catalog with badges, extracted summaries, and an index table.
+4. **Streamlined UI Layout**:
+   - Arranged AI Provider, Model Identifier, and Max Records slider in a clean single row.
+   - Live Markdown preview and instant download button directly beneath generation.
+   - All 27 automated tests passing.

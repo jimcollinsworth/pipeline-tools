@@ -48,7 +48,6 @@ class MarkdownExporter:
             )
         },
         "Thematic Summary & Executive Brief": {
-            "mode": "llm",
             "system_prompt": (
                 "Synthesize dataset records into a structured analytical briefing. "
                 "Group findings by cross-cutting themes, identify statistical patterns and unique outlier records, "
@@ -64,18 +63,25 @@ class MarkdownExporter:
                 "- **Strategic Takeaways**: Key conclusions and recommendations based on the findings."
             )
         },
-        "Direct Structured Catalog": {
-            "mode": "direct",
-            "system_prompt": "",
+        "Structured Media Catalog Dossier": {
+            "system_prompt": (
+                "Format the dataset into an exhaustive, highly-structured Markdown catalog dossier. "
+                "Present each record with clean metadata badges, extracted summaries, object tags, and technical properties. "
+                "Conclude with an indexing summary table."
+            ),
             "prompt_template": (
-                "### 📄 {file_name}\n"
-                "- **Modality:** `{modality}` | **Format:** `{file_type}` | **Size:** {file_size}\n"
-                "- **Relative Path:** `{rel_path}`\n"
-                "- **Content / Summary:**\n"
-                "> {visual_summary}\n"
-                "- **Tags / Entities:** `{object_tags}`\n"
-                "- **Dominant Colors:** `{dominant_colors}`\n"
-                "- **Scene Type:** `{scene_type}`"
+                "Generate a structured media catalog dossier for the following {total_rows} records from '{domain}.{table}':\n\n"
+                "{table_context}\n\n"
+                "Format each record systematically with:\n"
+                "### 📄 [file_name]\n"
+                "- **Attributes:** `[modality]` | `[file_type]` | `[file_size]` | `[rel_path]`\n"
+                "- **Summary:** [Concise visual/text summary]\n"
+                "- **Entities & Tags:** `[comma-separated tags]`\n"
+                "---\n\n"
+                "### 📊 Collection Index Table\n"
+                "| # | File Name | Modality | Primary Classification | Key Tags |\n"
+                "|---|---|---|---|---|\n"
+                "(Populate table for all records)"
             )
         }
     }

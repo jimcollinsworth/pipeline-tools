@@ -413,22 +413,22 @@ def render_playground_tab():
     )
 
     def on_apply_preset_cv():
-        sys_p = "You are an expert computer vision assistant. Always respond with a clean JSON object containing the requested keys."
+        sys_p = "Process media records and extract visual scene descriptions, comma-separated object detection tags, and scene classifications. Always output a strict, parseable JSON object matching the requested schema."
         usr_p = "Analyze this image: {file_name}\n\nReturn a JSON object with exactly these keys:\n1. \"image_summary\": A concise 2-sentence description of the visual scene.\n2. \"detected_objects\": A comma-separated string (CSV) of all distinct objects visible in the image (e.g. \"car, person, tree, dog\").\n3. \"photo_type\": One of [\"landscape\", \"portrait\", \"document\", \"indoor\", \"macro\"]."
         return sys_p, usr_p, "⚡ Auto-Split JSON Keys into Columns"
 
     def on_apply_preset_meta():
-        sys_p = "You are an elite multimodal perception and metadata engine. Analyze media with sharp observational precision. Produce concise, factual, high-signal extractions. Always adhere strictly to the requested JSON schema."
+        sys_p = "Extract precise multimodal metadata, visual summaries, categorical entity tags, and dominant color taxonomies. Always return a strict JSON payload matching the requested keys."
         usr_p = "Analyze the item: {file_name}\n\nExtract and return a JSON object with:\n- \"visual_summary\": 2-sentence factual overview.\n- \"object_tags\": Comma-separated list of key entities/objects.\n- \"dominant_colors\": Primary 3 colors as a CSV list.\n- \"confidence_score\": Estimated confidence level between 0.0 and 1.0."
         return sys_p, usr_p, "⚡ Auto-Split JSON Keys into Columns"
 
     def on_apply_preset_art():
-        sys_p = "You are a senior art curator and cultural archivist. Describe visual scenes with rich sensory detail, cinematic clarity, and evocative prose while cataloging subjects, textures, and moods."
+        sys_p = "Analyze visual and aesthetic attributes including lighting direction, color temperature, atmospheric composition, and sensory descriptors. Return structured JSON matching the requested keys."
         usr_p = "Examine this image: {file_name}\n\nProvide a JSON response with:\n- \"curator_critique\": An evocative, sensory description of the scene and lighting.\n- \"poetic_haiku\": A 3-line evocative haiku capturing the atmosphere.\n- \"mood_palette\": Comma-separated list of emotional tones and vibes."
         return sys_p, usr_p, "⚡ Auto-Split JSON Keys into Columns"
 
     def on_apply_preset_doc():
-        sys_p = "You are a forensic document intelligence specialist. Scrutinize text, diagrams, and media for key entities, dates, quantitative metrics, and actionable summaries. Prioritize factual density and zero hallucination."
+        sys_p = "Extract factual document intelligence including key entities (organizations, individuals, locations), executive summaries, and action items. Maintain zero hallucination and return valid JSON."
         usr_p = "Analyze the document: {file_name}\n\nContent:\n{content}\n\nExtract JSON containing:\n- \"doc_summary\": 2-3 sentence executive summary.\n- \"key_entities\": Comma-separated list of organizations, people, and locations.\n- \"action_items\": Comma-separated list of key requirements or dates."
         return sys_p, usr_p, "⚡ Auto-Split JSON Keys into Columns"
 

@@ -60,23 +60,34 @@ def render_tables_tab():
         with gr.Group(elem_classes=["status-panel"]):
             gr.Markdown("### 📝 Prompt-Driven Markdown Document Export")
 
-            with gr.Row():
-                preset_entity_btn = gr.Button("🏷️ Entity & Keyword Intelligence", size="sm")
-                preset_visual_btn = gr.Button("🎨 Visual & Scene Breakdown", size="sm")
-                preset_summary_btn = gr.Button("📋 Thematic Summary & Executive Brief", size="sm")
-                preset_catalog_btn = gr.Button("📁 Direct Structured Catalog", size="sm")
+            with gr.Accordion("💡 Prompt Guide & Example Presets (Click to Apply)", open=False):
+                gr.Markdown(
+                    """
+                    **How Markdown Export Works**:
+                    * **🤖 LLM Synthesis Mode**: Synthesizes table records (`{table_context}`) with Ollama or Gemini into a structured Markdown report.
+                    * **📄 Direct Template Mode**: Formats rows using column placeholders (`{file_name}`, `{visual_summary}`, `{object_tags}`) without an LLM.
+                    """
+                )
+                with gr.Row():
+                    preset_entity_btn = gr.Button("🏷️ Entity & Keyword Intelligence", size="sm")
+                    preset_visual_btn = gr.Button("🎨 Visual & Scene Breakdown", size="sm")
+                with gr.Row():
+                    preset_summary_btn = gr.Button("📋 Thematic Summary & Executive Brief", size="sm")
+                    preset_catalog_btn = gr.Button("📁 Direct Structured Catalog", size="sm")
 
             with gr.Row():
-                preset_dropdown = gr.Dropdown(
-                    label="📑 Load Prompt Preset",
-                    choices=list(MarkdownExporter.PRESETS.keys()),
-                    value="Entity & Keyword Intelligence",
-                    scale=3
-                )
                 export_mode_radio = gr.Radio(
                     label="Export Mode",
                     choices=["🤖 LLM Synthesis (AI-Generated)", "📄 Direct Template (No LLM)"],
                     value="🤖 LLM Synthesis (AI-Generated)",
+                    scale=2
+                )
+                export_rows_slider = gr.Slider(
+                    minimum=1,
+                    maximum=200,
+                    value=25,
+                    step=1,
+                    label="Max Records to Include",
                     scale=2
                 )
 
@@ -94,24 +105,16 @@ def render_tables_tab():
                     allow_custom_value=True,
                     scale=2
                 )
-                export_rows_slider = gr.Slider(
-                    minimum=1,
-                    maximum=200,
-                    value=25,
-                    step=1,
-                    label="Max Records to Include",
-                    scale=1
-                )
 
             available_columns_info = gr.Markdown(
                 "💡 **Available Column Placeholders:** *Load a table above to see available columns.*"
             )
 
             system_prompt_input = gr.Textbox(
-                label="System Prompt (Defines AI focus & output constraints)",
+                label="System Prompt",
                 value=MarkdownExporter.PRESETS["Entity & Keyword Intelligence"]["system_prompt"],
                 lines=2,
-                placeholder="Enter system role/instructions or leave empty for default concise response..."
+                placeholder="Enter system instructions or leave empty for default concise response..."
             )
 
             export_prompt_input = gr.Textbox(
@@ -190,13 +193,6 @@ def render_tables_tab():
 
     def load_preset(preset_key):
         preset = MarkdownExporter.PRESETS.get(preset_key)
-        if not preset:
-            return gr.update(), gr.update(), gr.update(), gr.update()
-        mode_val = "🤖 LLM Synthesis (AI-Generated)" if preset["mode"] == "llm" else "📄 Direct Template (No LLM)"
-        return preset_key, mode_val, preset["system_prompt"], preset["prompt_template"]
-
-    def on_preset_dropdown_change(preset_name):
-        preset = MarkdownExporter.PRESETS.get(preset_name)
         if not preset:
             return gr.update(), gr.update(), gr.update()
         mode_val = "🤖 LLM Synthesis (AI-Generated)" if preset["mode"] == "llm" else "📄 Direct Template (No LLM)"
@@ -297,34 +293,28 @@ def render_tables_tab():
         outputs=[export_model_dropdown]
     )
 
-    preset_dropdown.change(
-        fn=on_preset_dropdown_change,
-        inputs=[preset_dropdown],
-        outputs=[export_mode_radio, system_prompt_input, export_prompt_input]
-    )
-
     preset_entity_btn.click(
         fn=lambda: load_preset("Entity & Keyword Intelligence"),
         inputs=[],
-        outputs=[preset_dropdown, export_mode_radio, system_prompt_input, export_prompt_input]
+        outputs=[export_mode_radio, system_prompt_input, export_prompt_input]
     )
 
     preset_visual_btn.click(
         fn=lambda: load_preset("Visual & Scene Breakdown"),
         inputs=[],
-        outputs=[preset_dropdown, export_mode_radio, system_prompt_input, export_prompt_input]
+        outputs=[export_mode_radio, system_prompt_input, export_prompt_input]
     )
 
     preset_summary_btn.click(
         fn=lambda: load_preset("Thematic Summary & Executive Brief"),
         inputs=[],
-        outputs=[preset_dropdown, export_mode_radio, system_prompt_input, export_prompt_input]
+        outputs=[export_mode_radio, system_prompt_input, export_prompt_input]
     )
 
     preset_catalog_btn.click(
         fn=lambda: load_preset("Direct Structured Catalog"),
         inputs=[],
-        outputs=[preset_dropdown, export_mode_radio, system_prompt_input, export_prompt_input]
+        outputs=[export_mode_radio, system_prompt_input, export_prompt_input]
     )
 
     export_mode_radio.change(

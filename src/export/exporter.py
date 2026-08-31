@@ -15,8 +15,9 @@ class MarkdownExporter:
         "Entity & Keyword Intelligence": {
             "mode": "llm",
             "system_prompt": (
-                "You are an information extraction system. Extract, aggregate, and structure all key entities, "
-                "people, organizations, locations, and categorical keywords from the dataset into organized Markdown tables and lists."
+                "Extract, disambiguate, and structure named entities (persons, organizations, locations, artifacts) "
+                "and domain taxonomy keywords from the dataset into organized Markdown tables and categorized lists. "
+                "Adhere strictly to factual record context without extrapolating."
             ),
             "prompt_template": (
                 "Extract structured entity intelligence from the following {total_rows} records in '{domain}.{table}':\n\n"
@@ -32,8 +33,9 @@ class MarkdownExporter:
         "Visual & Multimodal Scene Analysis": {
             "mode": "llm",
             "system_prompt": (
-                "You are a computer vision and media analyst. Analyze visual composition, color distributions, "
-                "lighting conditions, and scene classifications across the provided dataset."
+                "Analyze visual composition, spatial framing, dominant color palettes (RGB/HSL taxonomy), "
+                "lighting conditions (ambient, artificial, directional), and scene geometry across the provided media records. "
+                "Produce a rigorous, structured visual taxonomy report."
             ),
             "prompt_template": (
                 "Analyze the visual and environmental characteristics across these {total_rows} media records from '{domain}.{table}':\n\n"
@@ -48,8 +50,9 @@ class MarkdownExporter:
         "Thematic Summary & Executive Brief": {
             "mode": "llm",
             "system_prompt": (
-                "You are an executive intelligence analyst. Synthesize the dataset into a high-level narrative "
-                "executive brief highlighting macro trends, recurring themes, notable anomalies, and strategic takeaways."
+                "Synthesize dataset records into a structured analytical briefing. "
+                "Group findings by cross-cutting themes, identify statistical patterns and unique outlier records, "
+                "and summarize core data takeaways with crisp, high-density Markdown."
             ),
             "prompt_template": (
                 "Synthesize a narrative executive brief based on the {total_rows} records in '{domain}.{table}':\n\n"

@@ -49,7 +49,7 @@ flowchart TD
   - UI Tab: **Ingestion & Data Inspector** (directory selector, file filter, scan summary, and Pixeltable ingestion trigger).
   - UI Tab: **Prompt Playground** (select Ollama model, enter system/user prompts with `{column}` placeholders, test on 1–N sample rows with side-by-side preview).
   - Column commit workflow: Apply tested prompt across table rows with **Replace** or **Append** modes to new or existing columns.
-  - UI Tab: **Lineage & DataTables** (view table contents and columns in an interactive data viewer).
+  - UI Tab: **DataTables** (view table contents, inspect columns, and export prompt-driven Markdown documents).
   - UI Tab: **Settings & Models** (Ollama server health test and installed model browser).
 
 
@@ -60,18 +60,17 @@ flowchart TD
   - Fixed table path resolution for preview loading (handles both bare table names `raw_files_test` and domain-prefixed names `eba/raw_files_test` without creating duplicate prefixes).
   - Automatic error formatting and name sanitization (protects against leading digits, dashes, and invalid characters in table/domain names).
   - Saved dialog box last entries (persists last-used domain, table name, model, prompt templates, system prompts, and source directory to `config.json` automatically).
+- [ ] **Prompt-Driven Markdown Document Export (DataTables Tab)**
+  - Integrated export drawer inside the **DataTables** tab with dual mode support:
+    1. **LLM Synthesis Report**: Multi-row aggregation via custom prompt template referencing table columns (`{file_name}`, `{content}`, `{llm_summary}`) processed by Ollama or Gemini.
+    2. **Direct Template Document**: Formatted Markdown document generated directly from row columns without LLM inference.
+  - Helper pills/tags showing active table columns for easy inclusion in prompts.
+  - Automatic file saving to `exports/{domain}_{table}_{timestamp}.md` with real-time UI preview and instant download component.
 - [ ] **Condensed Lightweight Table Preview & Field Summarization**
   - Enhance lightweight preview mode across DataTables and Prompt Playground to display a high-density, condensed view with aggressive field truncation (e.g. 50-80 characters for large text/content), media badge placeholders (`[PDF]`, `[IMG]`), and concise JSON/dict metadata summaries.
 - [ ] **Audit & Stabilize Table/Domain Dropdown Interactivity & Refresh Lifecycle**
   - Check approach, code, and test coverage for table load/refresh and domain/table dropdown updating across Ingest, Playground, and DataTables tabs.
   - Evaluate alternatives for reactive state synchronization in Gradio (e.g. explicit refresh triggers vs change listener cascades) to guarantee reliable updates.
-- [ ] **Export Manager**
-  - Safe sidecar generation: `.meta.yaml`, `.json`, and Markdown summary files next to source files or in an export mirror tree.
-  - CSV/Parquet export of structured tables (entities, tags, summaries, chunk lineage).
-  - In-place optional YAML frontmatter updates for Markdown files.
-- [ ] **Live Progress & Execution Monitor**
-  - Background task worker for full directory batch runs.
-  - Live log streaming and step progress bar inside Gradio.
 
 ### Phase 3: Pixeltable Lineage, Undo & Multimodal Extensions (Planned)
 - [ ] **Lineage & Snapshots UI**

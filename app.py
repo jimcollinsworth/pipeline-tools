@@ -231,8 +231,8 @@ def create_app():
                 print("  [2/4] Initializing Prompt Playground tab (discovering models & tables)...", flush=True)
                 render_playground_tab()
                 
-            with gr.Tab("Lineage & DataTables"):
-                print("  [3/4] Initializing Lineage & DataTables tab...", flush=True)
+            with gr.Tab("DataTables"):
+                print("  [3/4] Initializing DataTables & Export tab...", flush=True)
                 render_tables_tab()
                 
             with gr.Tab("Settings & Models"):

@@ -1,4 +1,5 @@
 import unittest
+import os
 import sys
 import io
 import time
@@ -251,6 +252,74 @@ class TestPipelineTools(unittest.TestCase):
                 self.assertIn("doc_summary", table_data.get("columns", []))
                 self.assertIn("doc_haiku", table_data.get("columns", []))
                 self.assertIn("confidence", table_data.get("columns", []))
+
+    def test_markdown_export_direct_template(self):
+        """[Export] Verify MarkdownExporter creates formatted Markdown files using column placeholders."""
+        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
+        from src.export.exporter import MarkdownExporter
+
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [{
+                "name": "export_doc.md",
+                "abs_path": str(Path("planning.md").resolve()),
+                "rel_path": "planning.md",
+                "modality": "docs",
+                "extension": ".md",
+                "size_bytes": 250,
+                "size": "250 B"
+            }]
+            DBManager.ingest_files("test_unit", "export_test", fake_files, overwrite=True)
+
+            template = "### Item: {file_name}\n- Modality: {modality}\n- Size: {file_size}"
+            res = MarkdownExporter.generate_report(
+                domain="test_unit",
+                table_name="export_test",
+                prompt_template=template,
+                mode="direct",
+                max_rows=10,
+                custom_filename="test_direct_export"
+            )
+            self.assertEqual(res.get("status"), "success")
+            self.assertTrue(os.path.exists(res.get("file_path")))
+            self.assertIn("export_doc.md", res.get("markdown_content"))
+            self.assertIn("Modality: docs", res.get("markdown_content"))
+
+    def test_markdown_export_llm_synthesis(self):
+        """[Export] Verify MarkdownExporter generates synthesized multi-row reports with LLMService."""
+        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
+        from src.export.exporter import MarkdownExporter
+        from unittest.mock import patch
+
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [{
+                "name": "synthesis_doc.md",
+                "abs_path": str(Path("planning.md").resolve()),
+                "rel_path": "planning.md",
+                "modality": "docs",
+                "extension": ".md",
+                "size_bytes": 300,
+                "size": "300 B"
+            }]
+            DBManager.ingest_files("test_unit", "synthesis_test", fake_files, overwrite=True)
+
+            mock_synthesis = "## Executive Summary\nAll documents show consistent data pipeline integration."
+            with patch("src.core.llm_service.LLMService.generate", return_value=mock_synthesis):
+                res = MarkdownExporter.generate_report(
+                    domain="test_unit",
+                    table_name="synthesis_test",
+                    prompt_template="Synthesize {total_rows} items from {domain}.{table}",
+                    system_prompt="Executive analyst role",
+                    provider="Ollama",
+                    model="test-model",
+                    mode="llm",
+                    max_rows=5,
+                    custom_filename="test_synthesis_export"
+                )
+                self.assertEqual(res.get("status"), "success")
+                self.assertTrue(os.path.exists(res.get("file_path")))
+                self.assertIn("Executive Summary", res.get("markdown_content"))
+                self.assertIn("synthesis_test", res.get("markdown_content"))
+                self.assertIn("test_synthesis_export", res.get("file_name"))
 
 
 

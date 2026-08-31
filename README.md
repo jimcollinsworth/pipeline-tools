@@ -20,10 +20,10 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 - **Rich Search and Filtering**:
   - Select records based on multiple fields using semantic and/or exact text search.
   - Export query results across modalities (video, audio, images, text, markdown) to single or multiple documents.
-- **Flexible Export Engine**:
-  - Sidecar metadata files (.meta.yaml) co-located or mirrored in an output directory.
-  - Tabular exports (CSV) for downstream pipeline stages.
-  - Markdown summary reports and optional frontmatter injection.
+- **Flexible Export Engine (Integrated in DataTables)**:
+  - **LLM-Synthesized Markdown Reports**: Aggregate entire tables or selected rows into cohesive Markdown reports using customizable prompts and selectable columns.
+  - **Direct Formatted Document Export**: Generate structured Markdown documents directly from table data without additional LLM calls.
+  - Automatic saving to `exports/` with live preview and one-click download.
 - **Lineage & Undo**: Full tracking of dataset versions, snapshot tags, and rollback support via Pixeltable.
 - **AI Model Support**:
   - Track model and token usage alongside ingestion and enhancement tasks.
@@ -99,8 +99,10 @@ Open your browser at `http://localhost:7860`.
    - Enter a target column name (e.g. `llm_summary`, `entities`) and select **replace** or **append** mode.
    - Click **💾 Execute on Table & Save Column** to apply the prompt to table rows.
 
-3. **📊 Lineage & DataTables**:
-   - Enter Domain and Table name to inspect stored data, column values, and newly added LLM output columns.
+3. **📊 DataTables & Markdown Export**:
+   - Inspect stored data, column values, and newly added LLM output columns.
+   - Configure custom synthesis prompts to export table columns to Markdown reports (LLM Synthesis or Direct Template).
+   - Save directly to `exports/` with live UI preview and instant download.
 
 4. **⚙️ Settings & Models**:
    - Check Ollama server connection, inspect installed models table, and save default configurations.

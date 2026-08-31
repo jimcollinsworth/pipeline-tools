@@ -104,6 +104,13 @@ class DBManager:
             primary_key=["id"],
             if_exists="ignore"
         )
+        # Add native thumbnail computed column for images if not already present
+        try:
+            tbl_cols = table.columns if hasattr(table, "columns") else (list(table._schema.keys()) if hasattr(table, "_schema") else [])
+            if "thumbnail" not in tbl_cols and hasattr(table, "add_computed_column"):
+                table.add_computed_column(thumbnail=table.image.resize((64, 64)), if_exists="ignore")
+        except Exception:
+            pass
         return table
 
     @staticmethod
@@ -267,6 +274,46 @@ class DBManager:
             }
 
     @classmethod
+    def pil_to_base64_data_uri(cls, img, size: tuple = (60, 60)) -> str:
+        """Convert a PIL Image instance to a base64 data URI."""
+        if img is None:
+            return ""
+        try:
+            from PIL import Image, ImageOps
+            import base64
+            import io
+            if not isinstance(img, Image.Image):
+                return ""
+            img = ImageOps.exif_transpose(img)
+            img.thumbnail(size, Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in getattr(img, "info", {})):
+                img.save(buf, format="PNG")
+                mime = "image/png"
+            else:
+                img = img.convert("RGB")
+                img.save(buf, format="JPEG", quality=80)
+                mime = "image/jpeg"
+            b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+            return f"data:{mime};base64,{b64_str}"
+        except Exception:
+            return ""
+
+    @classmethod
+    def generate_image_thumbnail_base64(cls, file_path: str, size: tuple = (64, 64)) -> str:
+        """Generate lightweight base64 thumbnail for instant, error-free inline table rendering."""
+        if not file_path:
+            return ""
+        try:
+            if not os.path.exists(file_path):
+                return ""
+            from PIL import Image
+            with Image.open(file_path) as img:
+                return cls.pil_to_base64_data_uri(img, size=size)
+        except Exception:
+            return ""
+
+    @classmethod
     def format_media_preview_html(cls, file_path: str, modality: str = "", file_type: str = "") -> str:
         """Format web-safe HTML preview element for image, audio, video, or doc file."""
         if not file_path:
@@ -276,13 +323,16 @@ class DBManager:
         ext = (file_type or Path(file_path).suffix).lower()
 
         if mod == "images" or ext in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".svg"]:
-            return f'<img src="/gradio_api/file={safe_path}" alt="media" style="max-height:64px; max-width:96px; border-radius:4px; object-fit:cover; vertical-align:middle; box-shadow:0 1px 3px rgba(0,0,0,0.12);" />'
+            b64_thumb = cls.generate_image_thumbnail_base64(file_path, size=(60, 60))
+            if b64_thumb:
+                return f'<div style="display:flex; justify-content:center; align-items:center;"><img src="{b64_thumb}" alt="thumbnail" style="height:54px; width:54px; min-width:54px; border-radius:6px; object-fit:cover; box-shadow:0 1px 3px rgba(0,0,0,0.18); display:block; margin:auto;" /></div>'
+            return f'<div style="display:flex; justify-content:center; align-items:center;"><img src="/gradio_api/file={safe_path}" alt="img" style="height:54px; width:54px; min-width:54px; border-radius:6px; object-fit:cover; box-shadow:0 1px 3px rgba(0,0,0,0.18); display:block; margin:auto;" /></div>'
         elif mod == "audio" or ext in [".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"]:
-            return f'<audio controls src="/gradio_api/file={safe_path}" style="height:32px; width:160px; vertical-align:middle;"></audio>'
+            return f'<audio controls preload="none" src="/gradio_api/file={safe_path}" style="height:28px; width:150px; vertical-align:middle;"></audio>'
         elif mod == "video" or ext in [".mp4", ".webm", ".mov", ".avi", ".mkv"]:
-            return f'<video controls src="/gradio_api/file={safe_path}" style="max-height:70px; max-width:120px; border-radius:4px; vertical-align:middle;"></video>'
+            return f'<video controls preload="none" src="/gradio_api/file={safe_path}" style="height:54px; width:84px; border-radius:6px; object-fit:cover; vertical-align:middle;"></video>'
         elif ext == ".pdf" or mod == "docs":
-            return f'<a href="/gradio_api/file={safe_path}" target="_blank" style="text-decoration:none; padding:3px 8px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:4px; font-size:12px; font-weight:500;">📄 View PDF</a>'
+            return f'<a href="/gradio_api/file={safe_path}" target="_blank" style="text-decoration:none; padding:4px 8px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:4px; font-size:12px; font-weight:500;">📄 View PDF</a>'
         return ""
 
     @classmethod
@@ -305,7 +355,7 @@ class DBManager:
             display_cols = list(df.columns)
             if lightweight:
                 # Omit raw binary media handles and HTML preview from lightweight view
-                heavy_cols = {"doc", "image", "audio", "video", "media_preview"}
+                heavy_cols = {"doc", "image", "audio", "video", "thumbnail", "media_preview"}
                 display_cols = [c for c in display_cols if c not in heavy_cols]
                 df = df[display_cols]
 
@@ -317,16 +367,21 @@ class DBManager:
                         )
             else:
                 # In Full Mode: Add media_preview HTML column and omit raw internal binary column pointers
-                heavy_cols = {"doc", "image", "audio", "video"}
+                heavy_cols = {"doc", "image", "audio", "video", "thumbnail"}
                 display_cols = [c for c in display_cols if c not in heavy_cols]
 
                 if "file_path" in df.columns:
                     mod_col = df["modality"] if "modality" in df.columns else [""] * len(df)
                     type_col = df["file_type"] if "file_type" in df.columns else [""] * len(df)
-                    previews = [
-                        cls.format_media_preview_html(str(fp), str(mod), str(ft))
-                        for fp, mod, ft in zip(df["file_path"], mod_col, type_col)
-                    ]
+                    thumb_col = df["thumbnail"] if "thumbnail" in df.columns else [None] * len(df)
+
+                    previews = []
+                    for fp, mod, ft, thumb in zip(df["file_path"], mod_col, type_col, thumb_col):
+                        thumb_uri = cls.pil_to_base64_data_uri(thumb, size=(60, 60))
+                        if thumb_uri:
+                            previews.append(f'<div style="display:flex; justify-content:center; align-items:center;"><img src="{thumb_uri}" alt="thumbnail" style="height:54px; width:54px; min-width:54px; border-radius:6px; object-fit:cover; box-shadow:0 1px 3px rgba(0,0,0,0.18); display:block; margin:auto;" /></div>')
+                        else:
+                            previews.append(cls.format_media_preview_html(str(fp), str(mod), str(ft)))
                     df["media_preview"] = previews
 
                     # Reorder media_preview near the front for immediate visibility

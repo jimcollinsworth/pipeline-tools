@@ -365,21 +365,33 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_format_media_preview_html(self):
         """[Database] Verify DBManager.format_media_preview_html generates valid HTML tags for images, audio, video, and docs."""
-        img_html = DBManager.format_media_preview_html("C:/data/photo.jpg", modality="images", file_type=".jpg")
-        self.assertIn("<img", img_html)
-        self.assertIn("/gradio_api/file=C:/data/photo.jpg", img_html)
+        from PIL import Image
+        temp_img = Path("temp_thumb_test.jpg")
+        img = Image.new("RGB", (32, 32), color="green")
+        img.save(temp_img)
 
-        audio_html = DBManager.format_media_preview_html("C:/data/song.mp3", modality="audio", file_type=".mp3")
-        self.assertIn("<audio controls", audio_html)
-        self.assertIn("/gradio_api/file=C:/data/song.mp3", audio_html)
+        try:
+            img_html = DBManager.format_media_preview_html(str(temp_img.resolve()), modality="images", file_type=".jpg")
+            self.assertIn("<img", img_html)
+            self.assertIn("data:image/jpeg;base64,", img_html)
 
-        video_html = DBManager.format_media_preview_html("C:/data/clip.mp4", modality="video", file_type=".mp4")
-        self.assertIn("<video controls", video_html)
-        self.assertIn("/gradio_api/file=C:/data/clip.mp4", video_html)
+            audio_html = DBManager.format_media_preview_html("C:/data/song.mp3", modality="audio", file_type=".mp3")
+            self.assertIn("<audio controls", audio_html)
+            self.assertIn("/gradio_api/file=C:/data/song.mp3", audio_html)
 
-        doc_html = DBManager.format_media_preview_html("C:/data/doc.pdf", modality="docs", file_type=".pdf")
-        self.assertIn("<a href=", doc_html)
-        self.assertIn("View PDF", doc_html)
+            video_html = DBManager.format_media_preview_html("C:/data/clip.mp4", modality="video", file_type=".mp4")
+            self.assertIn("<video controls", video_html)
+            self.assertIn("/gradio_api/file=C:/data/clip.mp4", video_html)
+
+            doc_html = DBManager.format_media_preview_html("C:/data/doc.pdf", modality="docs", file_type=".pdf")
+            self.assertIn("<a href=", doc_html)
+            self.assertIn("View PDF", doc_html)
+        finally:
+            if temp_img.exists():
+                try:
+                    temp_img.unlink()
+                except Exception:
+                    pass
 
     def test_get_table_data_lightweight_vs_full(self):
         """[Database] Verify get_table_data toggles between fast text mode and full HTML media preview mode."""

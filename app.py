@@ -1,6 +1,9 @@
+import os
 import sys
+import string
 import signal
 import atexit
+from pathlib import Path
 import gradio as gr
 from src.ui.settings_tab import render_settings_tab
 from src.ui.ingest_tab import render_ingest_tab
@@ -284,12 +287,18 @@ if __name__ == "__main__":
     print("\n⏳ Initializing Pipeline Tools workbench & database...", flush=True)
     demo = create_app()
     port = 7860
+
+    # Collect existing drives and user paths so Gradio can serve local media anywhere on the system
+    existing_drives = [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\")]
+    allowed_system_paths = list(set(existing_drives + [str(Path.home()), str(Path.cwd())]))
+
     print(f"🚀 Launching Pipeline Tools web server on http://127.0.0.1:{port} ...\n", flush=True)
     try:
         demo.launch(
             server_name="127.0.0.1",
             server_port=port,
             show_error=True,
+            allowed_paths=allowed_system_paths,
             theme=clean_theme,
             css=custom_css
         )

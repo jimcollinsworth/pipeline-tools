@@ -128,3 +128,4 @@ Open your browser at `http://localhost:7860`.
 ## 📄 Documentation
 
 - [planning.md](planning.md) — Comprehensive task tracking, issues, and research notes.
+- [journal.md](journal.md) — Developer directives, architectural decisions, and key mentoring history.

@@ -1,5 +1,9 @@
 import os
+import logging
 from typing import Optional, List, Tuple, Dict, Any
+
+# Suppress SDK-level informational warnings (e.g. AFC recommendations)
+logging.getLogger("google_genai").setLevel(logging.ERROR)
 
 try:
     from google import genai

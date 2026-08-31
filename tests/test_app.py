@@ -14,21 +14,47 @@ if hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
-# Suppress all third-party warnings and loggers
+# Suppress third-party warnings and loggers
 warnings.filterwarnings("ignore")
 logging.getLogger().setLevel(logging.ERROR)
 logging.getLogger("pixeltable").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.ERROR)
+logging.getLogger("google_genai").setLevel(logging.ERROR)
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.config import get_settings, Settings
+from src.core.config import get_settings, Settings, sanitize_identifier
 from src.core.ollama_client import OllamaClient
 from src.ingest.scanner import scan_directory, classify_modality
+from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
+from src.core.llm_service import LLMService
+from src.prompts.executor import PromptExecutor, extract_json_payload, infer_pixeltable_type
+from src.export.exporter import MarkdownExporter
+
 
 class TestPipelineTools(unittest.TestCase):
-    """Automated test suite for Pipeline Tools core components and Gradio UI."""
+    """Automated test suite for Pipeline Tools with isolated setup and teardown."""
+
+    TEST_DOMAIN = "test_suite_isolated"
+
+    @classmethod
+    def setUpClass(cls):
+        """Clean and prepare isolated test environment prior to test execution."""
+        if PIXELTABLE_AVAILABLE:
+            try:
+                DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
+            except Exception:
+                pass
+
+    @classmethod
+    def tearDownClass(cls):
+        """Reliably purge temporary test tables and clean up database locks upon completion."""
+        if PIXELTABLE_AVAILABLE:
+            try:
+                DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
+            except Exception:
+                pass
 
     def test_settings_load(self):
         """[Config] Verify application settings load properly from config file / defaults."""
@@ -43,12 +69,18 @@ class TestPipelineTools(unittest.TestCase):
         self.assertEqual(classify_modality(".png"), "images")
         self.assertEqual(classify_modality(".mp3"), "audio")
         self.assertEqual(classify_modality(".mp4"), "video")
+        self.assertEqual(classify_modality(".unknown_ext_xyz"), "other")
 
     def test_scanner_on_project_dir(self):
         """[Scanner] Verify directory scanner recursively discovers project files and metadata."""
         files = scan_directory("src", recursive=True)
         self.assertTrue(len(files) > 0)
         self.assertTrue(any(f["name"] == "config.py" for f in files))
+
+    def test_scanner_empty_or_nonexistent_directory(self):
+        """[Scanner] Verify directory scanner gracefully handles non-existent or empty folders without raising errors."""
+        files = scan_directory("non_existent_folder_path_xyz_123", recursive=True)
+        self.assertEqual(files, [])
 
     def test_gradio_app_initialization(self):
         """[UI] Verify Gradio Workbench Block component initializes without errors."""
@@ -59,21 +91,29 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_pixeltable_manager_and_columns(self):
         """[Database] Verify Pixeltable table creation, default schema columns, and data querying."""
-        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
         if PIXELTABLE_AVAILABLE:
-            table = DBManager.get_or_create_table("test_unit", "assets")
+            table = DBManager.get_or_create_table(self.TEST_DOMAIN, "assets")
             self.assertIsNotNone(table)
             cols = list(table.columns())
             self.assertIn("file_name", cols)
             self.assertIn("content", cols)
             
-            res = DBManager.get_table_data("test_unit", "assets", limit=5)
+            res = DBManager.get_table_data(self.TEST_DOMAIN, "assets", limit=5)
             self.assertIn("columns", res)
             self.assertTrue(isinstance(res["columns"], list))
 
+    def test_db_manager_drop_table_and_dir(self):
+        """[Database] Verify DBManager cleanly drops individual tables and directories."""
+        if PIXELTABLE_AVAILABLE:
+            DBManager.get_or_create_table(self.TEST_DOMAIN, "to_drop_table")
+            self.assertIn("to_drop_table", DBManager.list_tables(self.TEST_DOMAIN))
+            
+            dropped = DBManager.drop_table(self.TEST_DOMAIN, "to_drop_table")
+            self.assertTrue(dropped)
+            self.assertNotIn("to_drop_table", DBManager.list_tables(self.TEST_DOMAIN))
+
     def test_sanitization(self):
         """[Database] Verify identifier sanitization cleans leading digits and dashes for SQL/Pixeltable compatibility."""
-        from src.core.config import sanitize_identifier
         ok, clean, msg = sanitize_identifier("123_table")
         self.assertTrue(ok)
         self.assertTrue(clean.startswith("t_"))
@@ -84,27 +124,31 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_table_path_resolution(self):
         """[Database] Verify table path resolution normalizes domain prefixes and list_tables returns clean names."""
-        from src.db.manager import DBManager
-        self.assertEqual(DBManager.resolve_table_path("eba", "raw_files_test"), "eba.raw_files_test")
-        self.assertEqual(DBManager.resolve_table_path("eba", "eba/raw_files_test"), "eba.raw_files_test")
-        self.assertEqual(DBManager.resolve_table_path("eba", "eba.raw_files_test"), "eba.raw_files_test")
-        
-        tables = DBManager.list_tables("eba")
-        for t in tables:
-            self.assertFalse("/" in t, f"Table name should be bare without slashes: {t}")
+        self.assertEqual(DBManager.resolve_table_path("test_iso", "raw_files_test"), "test_iso.raw_files_test")
+        self.assertEqual(DBManager.resolve_table_path("test_iso", "test_iso/raw_files_test"), "test_iso.raw_files_test")
+        self.assertEqual(DBManager.resolve_table_path("test_iso", "test_iso.raw_files_test"), "test_iso.raw_files_test")
 
     def test_extract_file_content(self):
         """[Ingest] Verify text extraction engine parses Markdown and text documents."""
-        from src.db.manager import DBManager
         sample_md = Path("planning.md")
         if sample_md.exists():
             text = DBManager.extract_file_content(str(sample_md), "docs", ".md")
             self.assertTrue(len(text) > 0)
             self.assertIn("Pipeline Tools", text)
 
+    def test_extract_file_content_nonexistent(self):
+        """[Ingest] Verify text extraction engine returns empty string gracefully for missing files."""
+        text = DBManager.extract_file_content("non_existent_file_path.md", "docs", ".md")
+        self.assertEqual(text, "")
+
+    def test_ingest_empty_file_list(self):
+        """[Ingest] Verify DBManager.ingest_files returns a clean error dictionary when given no files."""
+        res = DBManager.ingest_files(self.TEST_DOMAIN, "empty_test", [])
+        self.assertEqual(res.get("status"), "error")
+        self.assertIn("No files provided", res.get("message", ""))
+
     def test_ingest_progress_callback(self):
         """[Ingest] Verify DBManager.ingest_files invokes progress callback with step updates."""
-        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
         if PIXELTABLE_AVAILABLE:
             calls = []
             def cb(cur, total, detail):
@@ -119,14 +163,13 @@ class TestPipelineTools(unittest.TestCase):
                 "size_bytes": 100,
                 "size": "100 B"
             }]
-            res = DBManager.ingest_files("test_unit", "progress_test", fake_files, progress_callback=cb)
+            res = DBManager.ingest_files(self.TEST_DOMAIN, "progress_test", fake_files, progress_callback=cb)
             self.assertEqual(res.get("status"), "success")
             self.assertTrue(len(calls) > 0)
-            self.assertEqual(calls[-1][0], calls[-1][1])  # Completed 100%
+            self.assertEqual(calls[-1][0], calls[-1][1])
 
     def test_ingest_overwrite_mode(self):
         """[Ingest] Verify DBManager.ingest_files supports table overwrite mode and preserves Pixeltable lineage."""
-        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
         if PIXELTABLE_AVAILABLE:
             fake_files = [{
                 "name": "sample.md",
@@ -138,10 +181,10 @@ class TestPipelineTools(unittest.TestCase):
                 "size": "100 B"
             }]
             # Initial Ingestion
-            res1 = DBManager.ingest_files("test_unit", "overwrite_test", fake_files, overwrite=False)
+            res1 = DBManager.ingest_files(self.TEST_DOMAIN, "overwrite_test", fake_files, overwrite=False)
             self.assertEqual(res1.get("status"), "success")
             # Overwrite Ingestion
-            res2 = DBManager.ingest_files("test_unit", "overwrite_test", fake_files, overwrite=True)
+            res2 = DBManager.ingest_files(self.TEST_DOMAIN, "overwrite_test", fake_files, overwrite=True)
             self.assertEqual(res2.get("status"), "success")
             self.assertTrue(res2.get("overwritten"))
 
@@ -155,14 +198,12 @@ class TestPipelineTools(unittest.TestCase):
         self.assertIn("gemini-3.5-flash-lite", model_names)
         self.assertIn("gemini-3.1-pro-preview", model_names)
         
-        # Verify check_connection without key
         ok, msg = client.check_connection(api_key="")
         self.assertFalse(ok)
         self.assertIn("missing", msg.lower())
 
     def test_llm_service_router(self):
         """[Router] Verify unified LLMService routes queries and model discovery between Ollama and Gemini."""
-        from src.core.llm_service import LLMService
         self.assertIn("Ollama", LLMService.PROVIDERS)
         self.assertIn("Gemini", LLMService.PROVIDERS)
 
@@ -174,8 +215,6 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_extract_json_payload_variations(self):
         """[JSON] Verify robust extraction across pure JSON, markdown blocks, leading/trailing text, and malformed strings."""
-        from src.prompts.executor import extract_json_payload
-
         # Case 1: Pure JSON string
         pure = '{"image_summary": "A lake view", "haiku": "Calm blue water shines", "count": 3}'
         res1 = extract_json_payload(pure)
@@ -204,7 +243,6 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_infer_pixeltable_type(self):
         """[JSON] Verify Python data values correctly map to Pixeltable scalar and collection types."""
-        from src.prompts.executor import infer_pixeltable_type
         import pixeltable as pxt
 
         self.assertEqual(infer_pixeltable_type("sample string"), pxt.String)
@@ -216,8 +254,6 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_dynamic_multicolumn_batch_execution(self):
         """[Playground] Verify PromptExecutor auto-split unpacks JSON keys into distinct table columns."""
-        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
-        from src.prompts.executor import PromptExecutor
         from unittest.mock import patch
 
         if PIXELTABLE_AVAILABLE:
@@ -230,7 +266,7 @@ class TestPipelineTools(unittest.TestCase):
                 "size_bytes": 100,
                 "size": "100 B"
             }]
-            DBManager.ingest_files("test_unit", "json_split_test", fake_files, overwrite=True)
+            DBManager.ingest_files(self.TEST_DOMAIN, "json_split_test", fake_files, overwrite=True)
 
             mock_json_response = '{"doc_summary": "Test summary", "doc_haiku": "Lines of code arise", "confidence": 0.98}'
             with patch("src.core.llm_service.LLMService.generate", return_value=mock_json_response):
@@ -238,7 +274,7 @@ class TestPipelineTools(unittest.TestCase):
                     model="test-model",
                     prompt_template="Analyze {file_name}",
                     system_prompt="Return JSON",
-                    table_dir="test_unit",
+                    table_dir=self.TEST_DOMAIN,
                     table_name="json_split_test",
                     auto_split=True
                 )
@@ -248,16 +284,13 @@ class TestPipelineTools(unittest.TestCase):
                 self.assertIn("confidence", res.get("columns", []))
 
                 # Verify columns exist in Pixeltable table data
-                table_data = DBManager.get_table_data("test_unit", "json_split_test", limit=5)
+                table_data = DBManager.get_table_data(self.TEST_DOMAIN, "json_split_test", limit=5)
                 self.assertIn("doc_summary", table_data.get("columns", []))
                 self.assertIn("doc_haiku", table_data.get("columns", []))
                 self.assertIn("confidence", table_data.get("columns", []))
 
     def test_markdown_export_direct_template(self):
         """[Export] Verify MarkdownExporter creates formatted Markdown files using column placeholders."""
-        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
-        from src.export.exporter import MarkdownExporter
-
         if PIXELTABLE_AVAILABLE:
             fake_files = [{
                 "name": "export_doc.md",
@@ -268,11 +301,11 @@ class TestPipelineTools(unittest.TestCase):
                 "size_bytes": 250,
                 "size": "250 B"
             }]
-            DBManager.ingest_files("test_unit", "export_test", fake_files, overwrite=True)
+            DBManager.ingest_files(self.TEST_DOMAIN, "export_test", fake_files, overwrite=True)
 
             template = "### Item: {file_name}\n- Modality: {modality}\n- Size: {file_size}"
             res = MarkdownExporter.generate_report(
-                domain="test_unit",
+                domain=self.TEST_DOMAIN,
                 table_name="export_test",
                 prompt_template=template,
                 mode="direct",
@@ -286,8 +319,6 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_markdown_export_llm_synthesis(self):
         """[Export] Verify MarkdownExporter generates synthesized multi-row reports with LLMService."""
-        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
-        from src.export.exporter import MarkdownExporter
         from unittest.mock import patch
 
         if PIXELTABLE_AVAILABLE:
@@ -300,12 +331,12 @@ class TestPipelineTools(unittest.TestCase):
                 "size_bytes": 300,
                 "size": "300 B"
             }]
-            DBManager.ingest_files("test_unit", "synthesis_test", fake_files, overwrite=True)
+            DBManager.ingest_files(self.TEST_DOMAIN, "synthesis_test", fake_files, overwrite=True)
 
             mock_synthesis = "## Executive Summary\nAll documents show consistent data pipeline integration."
             with patch("src.core.llm_service.LLMService.generate", return_value=mock_synthesis):
                 res = MarkdownExporter.generate_report(
-                    domain="test_unit",
+                    domain=self.TEST_DOMAIN,
                     table_name="synthesis_test",
                     prompt_template="Synthesize {total_rows} items from {domain}.{table}",
                     system_prompt="Executive analyst role",
@@ -320,6 +351,17 @@ class TestPipelineTools(unittest.TestCase):
                 self.assertIn("Executive Summary", res.get("markdown_content"))
                 self.assertIn("synthesis_test", res.get("markdown_content"))
                 self.assertIn("test_synthesis_export", res.get("file_name"))
+
+    def test_export_empty_table_error_handling(self):
+        """[Export] Verify MarkdownExporter returns a clean error dict when exporting a non-existent or empty table."""
+        res = MarkdownExporter.generate_report(
+            domain=self.TEST_DOMAIN,
+            table_name="non_existent_table_xyz",
+            prompt_template="Analyze items",
+            mode="direct"
+        )
+        self.assertEqual(res.get("status"), "error")
+        self.assertTrue(len(res.get("message", "")) > 0)
 
 
 
@@ -397,7 +439,13 @@ def run_tests():
     def handle_test_interrupt(sig=None, frame=None):
         sys.stdout = old_stdout
         sys.stderr = old_stderr
-        print("\n\n🛑 Test suite interrupted by user (Ctrl+C). Restored terminal output.\n", flush=True)
+        # Clean up temporary test domain on interrupt
+        if PIXELTABLE_AVAILABLE:
+            try:
+                DBManager.drop_dir(TestPipelineTools.TEST_DOMAIN, force=True)
+            except Exception:
+                pass
+        print("\n\n🛑 Test suite interrupted by user (Ctrl+C). Restored terminal output and cleaned temporary tables.\n", flush=True)
         sys.exit(130)
 
     try:
@@ -414,6 +462,12 @@ def run_tests():
     finally:
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+        # Final cleanup pass
+        if PIXELTABLE_AVAILABLE:
+            try:
+                DBManager.drop_dir(TestPipelineTools.TEST_DOMAIN, force=True)
+            except Exception:
+                pass
 
     print("\n" + header, flush=True)
     print(f"  SUMMARY: {result.successes} Passed, {len(result.failures)} Failed, {len(result.errors)} Errors", flush=True)

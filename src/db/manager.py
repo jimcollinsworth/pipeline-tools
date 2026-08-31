@@ -107,6 +107,30 @@ class DBManager:
         return table
 
     @staticmethod
+    def drop_table(dir_name: str, table_name: str) -> bool:
+        """Drop a Pixeltable table cleanly."""
+        if not PIXELTABLE_AVAILABLE:
+            return False
+        try:
+            full_path = DBManager.resolve_table_path(dir_name, table_name)
+            pxt.drop_table(full_path, if_not_exists="ignore")
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def drop_dir(dir_name: str, force: bool = True) -> bool:
+        """Drop a Pixeltable directory/domain and its tables."""
+        if not PIXELTABLE_AVAILABLE:
+            return False
+        try:
+            _, safe_dir, _ = sanitize_identifier(dir_name or "default")
+            pxt.drop_dir(safe_dir, force=force, if_not_exists="ignore")
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
     def extract_file_content(file_path: str, modality: str, file_type: str) -> str:
         """Extract text content for text, markdown, and PDF files."""
         try:

@@ -68,11 +68,19 @@ flowchart TD
   - Visible System Prompt input for clear transparency and instant tuning.
   - Helper pills/tags showing active table columns for easy inclusion in prompts.
   - Automatic file saving to `exports/{domain}_{table}_{timestamp}.md` with real-time UI preview and instant download component.
+- [ ] **Test Suite Hardening, Isolation & Teardown**
+  - Implement isolated test namespaces (`test_suite_tmp`) with reliable `setUpClass`/`tearDownClass` table cleanup.
+  - Ensure Windows embedded Postgres locks (`postmaster.pid`) and orphaned sockets are cleanly released on `Ctrl+C` interrupt and normal completion.
+  - Add comprehensive edge-case tests (empty directories, unreadable files, corrupt images, API rate limits).
+- [ ] **Decouple UI Event Handlers into Testable Controllers**
+  - Refactor inner closure handlers in `src/ui/` into pure controller functions (`src/controllers/` or module-level helpers).
+  - Enable 100% unit test coverage of UI workflows without requiring Gradio web server initialization.
 - [ ] **Condensed Lightweight Table Preview & Field Summarization**
-  - Enhance lightweight preview mode across DataTables and Prompt Playground to display a high-density, condensed view with aggressive field truncation (e.g. 50-80 characters for large text/content), media badge placeholders (`[PDF]`, `[IMG]`), and concise JSON/dict metadata summaries.
-- [ ] **Audit & Stabilize Table/Domain Dropdown Interactivity & Refresh Lifecycle**
-  - Check approach, code, and test coverage for table load/refresh and domain/table dropdown updating across Ingest, Playground, and DataTables tabs.
-  - Evaluate alternatives for reactive state synchronization in Gradio (e.g. explicit refresh triggers vs change listener cascades) to guarantee reliable updates.
+  - Enhance lightweight preview mode across View & Export and Data Enhancement to display a high-density, condensed view with aggressive field truncation (e.g. 50-80 characters for large text/content), media badge placeholders (`[PDF]`, `[IMG]`), and concise JSON/dict metadata summaries.
+- [ ] **Reassess Playwright for Automated Headless Browser Testing**
+  - Re-evaluate introducing `playwright` (`pytest-playwright`) for automated headless browser E2E testing against `http://127.0.0.1:7860`.
+  - Compare speed, CI automation, and maintenance overhead against Chrome DevTools MCP and pure Python controller tests.
+  - Key criteria: Execution speed (~1-2s headless script vs ~30-90s subagent), zero-dependency constraints, and rich JavaScript DOM/cascade testing.
 
 ### Phase 3: Pixeltable Lineage, Undo & Multimodal Extensions (Planned)
 - [ ] **Lineage & Snapshots UI**
@@ -88,6 +96,12 @@ flowchart TD
 | ID | Topic | Status | Description / Decision |
 |---|---|---|---|
 | RES-01 | Pixeltable Chunking vs Table Structure | Complete | Use unified table with text/media columns, chunk views for document-level splitting, and computed columns for LLM calls. CV and audio analysis function calling |
+| RES-02 | Windows PostgreSQL Locking & Concurrency | Complete | Muted noisy logs; registered SIGINT/atexit hooks to clean up sockets and prevent orphaned postmaster.pid lock contention. |
+| RES-03 | Model Discovery Timeout | Complete | Reduced Ollama timeout to 2s; added Gemini client for cloud model discovery and multi-provider routing. |
+| RES-04 | JSON Auto-Splitting in Table Insertion | Complete | Extract JSON payloads across markdown fences/raw brackets and dynamically create Pixeltable columns via infer_pixeltable_type. |
+| RES-05 | UI Layout & CSS Stability | Complete | Enforced max-width 95% and tabitem full-width rules to prevent Gradio tab shifting; updated launch config to Gradio 6.0 standards. |
+| RES-06 | Tool Calling & MCP Integration | Open | Single LLM call per row with tool calling support for vision and audio functions. Evaluate MCP integration for efficiency. |
+| RES-07 | Playwright vs. Chrome DevTools Testing | Open | Evaluated interactive Chrome DevTools MCP vs headless Playwright for web E2E testing. Deferred Playwright until automated browser regression suite is needed. |
 | RES-02 | Multimodal API Abstraction | In Progress | Support OpenAI, Anthropic, Google Gemini (via pixeltable.functions), and local Ollama via unified prompt wrapper. |
 | RES-03 | Large PDF Chunking Strategies | Open | Evaluate page-based vs semantic chunking with PyMuPDF / Pixeltable document splitters. |
 | RES-04 | Safe Sidecar Export Architecture | Open | Ensure sidecars support hash/mtime validation so re-exports avoid duplicating untouched assets. |

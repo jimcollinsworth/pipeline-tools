@@ -46,24 +46,26 @@ flowchart TD
   - Ingestion handler: One file → One row, with native text/markdown extraction and direct PDF page text extraction via Pixeltable's bundled `pypdfium2` engine into the `content` column.
 
 - [x] **Prompt Iteration Workbench (Gradio UI)**
-  - UI Tab: **Ingestion & Data Inspector** (directory selector, file filter, scan summary, and Pixeltable ingestion trigger).
-  - UI Tab: **Prompt Playground** (select Ollama model, enter system/user prompts with `{column}` placeholders, test on 1–N sample rows with side-by-side preview).
-  - Column commit workflow: Apply tested prompt across table rows with **Replace** or **Append** modes to new or existing columns.
-  - UI Tab: **DataTables** (view table contents, inspect columns, and export prompt-driven Markdown documents).
-  - UI Tab: **Settings & Models** (Ollama server health test and installed model browser).
+  - UI Tab: **Ingestion & Scanner** (directory selector, file filter, scan summary, and Pixeltable ingestion trigger).
+  - UI Tab: **Data Enhancement** (select Ollama / Gemini model, enter system/user prompts with `{column}` placeholders, test on 1–N sample rows with side-by-side preview).
+  - Column commit workflow: Apply tested prompt across table rows with **Replace** or **Append** modes (and auto-split multi-column JSON outputs).
+  - UI Tab: **View & Export** (view table contents, inspect columns, and export prompt-driven Markdown documents).
+  - UI Tab: **Settings & Models** (Ollama / Gemini server health test and installed model browser).
 
 
 ### Phase 2: Usability Improvements, Export Engine & Live Monitoring (In Progress)
 - [x] **UI Usability & Persistent Inputs**
-  - Added dynamic select dropdowns for Domain/Directory and Table names in Prompt Playground with automatic auto-refresh when domain changes.
-  - Added Live Table Data Preview & Row Count display in Prompt Playground (updates automatically on table/domain selection and after batch execution).
+  - Added dynamic select dropdowns for Domain/Directory and Table names in Data Enhancement tab with automatic auto-refresh when domain changes.
+  - Added Live Table Data Preview & Row Count display in Data Enhancement tab (updates automatically on table/domain selection and after batch execution).
   - Fixed table path resolution for preview loading (handles both bare table names `raw_files_test` and domain-prefixed names `eba/raw_files_test` without creating duplicate prefixes).
   - Automatic error formatting and name sanitization (protects against leading digits, dashes, and invalid characters in table/domain names).
   - Saved dialog box last entries (persists last-used domain, table name, model, prompt templates, system prompts, and source directory to `config.json` automatically).
-- [ ] **Prompt-Driven Markdown Document Export (DataTables Tab)**
-  - Integrated export drawer inside the **DataTables** tab with dual mode support:
-    1. **LLM Synthesis Report**: Multi-row aggregation via custom prompt template referencing table columns (`{file_name}`, `{content}`, `{llm_summary}`) processed by Ollama or Gemini.
+- [x] **Prompt-Driven Markdown Document Export (View & Export Tab)**
+  - Integrated export drawer inside the **View & Export** tab with dual mode support:
+    1. **LLM Synthesis Report**: Multi-row aggregation via custom prompt template referencing table columns (`{file_name}`, `{visual_summary}`, `{object_tags}`) processed by Ollama or Gemini.
     2. **Direct Template Document**: Formatted Markdown document generated directly from row columns without LLM inference.
+  - 4 Task-oriented presets: *Entity & Keyword Intelligence*, *Visual & Scene Breakdown*, *Thematic Summary & Patterns*, and *Direct Structured Catalog*.
+  - Visible System Prompt input for clear transparency and instant tuning.
   - Helper pills/tags showing active table columns for easy inclusion in prompts.
   - Automatic file saving to `exports/{domain}_{table}_{timestamp}.md` with real-time UI preview and instant download component.
 - [ ] **Condensed Lightweight Table Preview & Field Summarization**

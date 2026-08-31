@@ -2,7 +2,7 @@ import os
 import re
 import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 from src.core.config import get_settings
 from src.db.manager import DBManager
 from src.core.llm_service import LLMService
@@ -12,45 +12,67 @@ class MarkdownExporter:
     """Engine for generating and exporting structured Markdown reports from Pixeltable tables."""
 
     PRESETS = {
-        "Executive Synthesis Report": {
+        "Entity & Keyword Intelligence": {
             "mode": "llm",
             "system_prompt": (
-                "You are an executive research analyst. Synthesize the provided table records into a "
-                "comprehensive, high-level Executive Markdown Report. Structure the output with an Executive Summary, "
-                "Key Themes & Insights, Detailed Findings, and Strategic Next Steps. Use clean Markdown formatting."
+                "Extract, disambiguate, and aggregate all key entities, keywords, and topics from the dataset "
+                "into clean, structured Markdown categories without unnecessary filler."
             ),
             "prompt_template": (
                 "Analyze the following {total_rows} records from dataset '{domain}.{table}':\n\n"
                 "{table_context}\n\n"
-                "Provide a cohesive, multi-section Markdown report synthesizing the core takeaways across all items."
+                "Extract and synthesize:\n"
+                "1. **People & Roles**: Key individuals mentioned or depicted with context.\n"
+                "2. **Organizations & Brands**: Companies, institutions, or manufacturers.\n"
+                "3. **Locations & Settings**: Physical places, cities, indoor/outdoor environments.\n"
+                "4. **Events & Activities**: Key actions, gatherings, or occurrences.\n"
+                "5. **Categorical Tags**: 10-15 high-level indexing tags across the records."
             )
         },
-        "Structured Asset Catalog": {
+        "Visual & Multimodal Scene Analysis": {
+            "mode": "llm",
+            "system_prompt": (
+                "Analyze visual characteristics, compositional elements, color palettes, and dominant "
+                "aesthetic attributes across the provided image/media records."
+            ),
+            "prompt_template": (
+                "Examine the following {total_rows} media records from '{domain}.{table}':\n\n"
+                "{table_context}\n\n"
+                "Synthesize a comprehensive visual breakdown:\n"
+                "1. **Scene Composition & Subjects**: Key objects, subjects, and framing.\n"
+                "2. **Color Palette Breakdown**: Group dominant colors (Warm/Vibrant, Cool, Earthy, Monochromatic) with file examples.\n"
+                "3. **Lighting & Environment**: Daylight, nighttime, artificial, golden hour, or indoor lighting patterns.\n"
+                "4. **Media Characteristics**: Summary of file types, sizes, and visual quality."
+            )
+        },
+        "Thematic Summary & Pattern Report": {
+            "mode": "llm",
+            "system_prompt": (
+                "Synthesize the provided dataset into a concise, actionable thematic report highlighting "
+                "recurring patterns, key findings, and data takeaways without corporate boilerplate."
+            ),
+            "prompt_template": (
+                "Review the following {total_rows} items in '{domain}.{table}':\n\n"
+                "{table_context}\n\n"
+                "Provide a direct summary containing:\n"
+                "- **Dataset Overview**: 2-3 paragraph synthesis of the collection.\n"
+                "- **Key Themes & Patterns**: 3-5 major recurring themes across the records.\n"
+                "- **Notable Highlights & Anomalies**: Standout items or unique entries.\n"
+                "- **Actionable Takeaways**: Practical insights from the dataset."
+            )
+        },
+        "Direct Structured Markdown Catalog": {
             "mode": "direct",
             "system_prompt": "",
             "prompt_template": (
-                "### 📁 {file_name}\n"
-                "- **Modality:** `{modality}`\n"
-                "- **Path:** `{rel_path}`\n"
-                "- **Size:** {file_size}\n"
-                "- **Extracted Content / Summary:**\n"
-                "> {content}\n"
-            )
-        },
-        "Key Findings & Entities Summary": {
-            "mode": "llm",
-            "system_prompt": (
-                "You are a structured data specialist. Extract, aggregate, and cross-reference key entities, "
-                "topics, metrics, and actionable findings from the provided dataset into a clean Markdown briefing."
-            ),
-            "prompt_template": (
-                "Review the following records from table '{domain}.{table}':\n\n"
-                "{table_context}\n\n"
-                "Generate a structured Markdown report featuring:\n"
-                "1. High-Level Summary\n"
-                "2. Consolidated Entities & Topics (Categorized)\n"
-                "3. Cross-Document Findings & Patterns\n"
-                "4. Data Quality & Coverage Notes"
+                "### 📄 {file_name}\n"
+                "- **Modality:** `{modality}` | **Format:** `{file_type}` | **Size:** {file_size}\n"
+                "- **Relative Path:** `{rel_path}`\n"
+                "- **Content / Summary:**\n"
+                "> {visual_summary}\n"
+                "- **Tags / Entities:** `{object_tags}`\n"
+                "- **Dominant Colors:** `{dominant_colors}`\n"
+                "- **Scene Type:** `{scene_type}`"
             )
         }
     }
@@ -148,14 +170,12 @@ class MarkdownExporter:
 
         else:
             # LLM Synthesis Mode
-            # Construct a rich text representation of table rows
             context_blocks = []
             for i, r in enumerate(row_dicts, 1):
                 block_lines = [f"### [Record {i}]"]
                 for col in columns:
                     val = r.get(col)
                     if val is not None and str(val).strip():
-                        # Truncate ultra-long raw blobs for LLM context window safety
                         str_val = str(val).strip()
                         if len(str_val) > 4000:
                             str_val = str_val[:4000] + " ... [truncated]"

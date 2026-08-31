@@ -218,7 +218,7 @@ def create_app():
             """
             <div class="app-header">
                 <h1>PIPELINE TOOLS // Multimodal Workbench</h1>
-                <p>Declarative Ingestion (Pixeltable) • Prompt Engineering (Ollama / Gemini) • Lineage Inspector</p>
+                <p>Declarative Ingestion (Pixeltable) • Data Enhancement (Ollama / Gemini) • View & Export</p>
             </div>
             """
         )
@@ -227,12 +227,12 @@ def create_app():
             with gr.Tab("Ingestion & Scanner"):
                 render_ingest_tab()
                 
-            with gr.Tab("Prompt Playground"):
-                print("  [2/4] Initializing Prompt Playground tab (discovering models & tables)...", flush=True)
+            with gr.Tab("Data Enhancement"):
+                print("  [2/4] Initializing Data Enhancement tab (discovering models & tables)...", flush=True)
                 render_playground_tab()
                 
-            with gr.Tab("DataTables"):
-                print("  [3/4] Initializing DataTables & Export tab...", flush=True)
+            with gr.Tab("View & Export"):
+                print("  [3/4] Initializing View & Export tab...", flush=True)
                 render_tables_tab()
                 
             with gr.Tab("Settings & Models"):

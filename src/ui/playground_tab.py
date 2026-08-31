@@ -24,7 +24,7 @@ def render_playground_tab():
     initial_model = settings.last_model if settings.last_model in initial_models else (initial_models[0] if initial_models else "gemini-3.6-flash")
 
     with gr.Column():
-        gr.Markdown("### 🧪 Prompt Playground & Batch Model Execution")
+        gr.Markdown("### 🧪 Data Enhancement (Prompt Workbench & Batch Execution)")
         
         with gr.Row():
             with gr.Column(scale=1):

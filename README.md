@@ -92,16 +92,16 @@ Open your browser at `http://localhost:7860`.
    - Enter your Pixeltable target **Domain / Directory** (e.g. `default` or `project_alpha`) and **Table Name** (e.g. `raw_assets`).
    - Click **⚡ Ingest Scanned Files into Pixeltable** (ingests 1 file per row, extracting raw text and metadata).
 
-2. **🧪 Prompt Playground**:
-   - Choose your target domain, table, and local **Ollama model**.
-   - Write system prompt and user prompt template using variable placeholders like `{file_name}`, `{content}`, `{rel_path}`.
+2. **🧪 Data Enhancement**:
+   - Choose your target domain, table, and AI provider (**Ollama** or **Gemini**).
+   - Write system prompts and user prompt templates using variable placeholders like `{file_name}`, `{content}`, `{rel_path}`, `{modality}`.
    - Click **🚀 Run Test on Sample Rows** (tests on 1–N rows with side-by-side prompt and output inspection).
-   - Enter a target column name (e.g. `llm_summary`, `entities`) and select **replace** or **append** mode.
-   - Click **💾 Execute on Table & Save Column** to apply the prompt to table rows.
+   - Enter a target column name (e.g. `llm_summary`, `entities`) and select **replace** or **append** mode (with optional **⚡ Auto-Split** for multi-key JSON outputs).
+   - Click **💾 Execute on Table & Save Column** to apply the prompt across table rows.
 
-3. **📊 DataTables & Markdown Export**:
+3. **📊 View & Export**:
    - Inspect stored data, column values, and newly added LLM output columns.
-   - Configure custom synthesis prompts to export table columns to Markdown reports (LLM Synthesis or Direct Template).
+   - Configure prompt-driven Markdown exports (*Entity & Keyword Intelligence*, *Visual & Scene Breakdown*, *Thematic Summary*, *Direct Catalog*).
    - Save directly to `exports/` with live UI preview and instant download.
 
 4. **⚙️ Settings & Models**:

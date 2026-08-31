@@ -125,7 +125,7 @@ body, gradio-app, .gradio-container {
 }
 
 /* Regular, Clean Interactive Buttons */
-button.primary, button[variant="primary"] {
+button.primary, button[variant="primary"], button.stop, button[variant="stop"] {
     background: #2563eb !important;
     color: #ffffff !important;
     border: 1px solid #1d4ed8 !important;
@@ -133,13 +133,20 @@ button.primary, button[variant="primary"] {
     font-weight: 600 !important;
     padding: 8px 18px !important;
     box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
-    transition: all 0.15s ease !important;
+    cursor: pointer !important;
+    transition: background 0.12s ease, transform 0.08s ease, box-shadow 0.08s ease !important;
 }
-button.primary:hover {
+button.primary:hover, button[variant="primary"]:hover, button.stop:hover, button[variant="stop"]:hover {
     background: #1d4ed8 !important;
     border-color: #1e40af !important;
 }
-button.secondary, button[variant="secondary"], button:not(.primary):not(.stop):not([variant="primary"]):not([variant="stop"]) {
+button.primary:active, button[variant="primary"]:active, button.stop:active, button[variant="stop"]:active {
+    transform: translateY(1px) !important;
+    box-shadow: 0 0 1px rgba(0,0,0,0.1) !important;
+    background: #1e40af !important;
+}
+
+button.secondary, button[variant="secondary"], .gr-button:not(.primary):not(.stop):not([variant="primary"]):not([variant="stop"]):not(.icon-button) {
     background: #ffffff !important;
     color: #18181b !important;
     border: 1px solid #d4d0c8 !important;
@@ -147,24 +154,26 @@ button.secondary, button[variant="secondary"], button:not(.primary):not(.stop):n
     font-weight: 500 !important;
     padding: 6px 14px !important;
     box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
-    transition: all 0.15s ease !important;
+    cursor: pointer !important;
+    transition: background 0.12s ease, transform 0.08s ease, box-shadow 0.08s ease !important;
 }
-button.secondary:hover, button:not(.primary):not(.stop):not([variant="primary"]):not([variant="stop"]):hover {
+button.secondary:hover, button[variant="secondary"]:hover, .gr-button:not(.primary):not(.stop):not([variant="primary"]):not([variant="stop"]):not(.icon-button):hover {
     background: #f4f1ea !important;
     border-color: #b8b3a8 !important;
 }
-button.stop, button[variant="stop"] {
-    background: #dc2626 !important;
-    color: #ffffff !important;
-    border: 1px solid #b91c1c !important;
-    border-radius: 6px !important;
-    font-weight: 600 !important;
-    padding: 8px 18px !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
-    transition: all 0.15s ease !important;
+button.secondary:active, button[variant="secondary"]:active, .gr-button:not(.primary):not(.stop):not([variant="primary"]):not([variant="stop"]):not(.icon-button):active {
+    transform: translateY(1px) !important;
+    box-shadow: 0 0 1px rgba(0,0,0,0.08) !important;
+    background: #eae6dd !important;
 }
-button.stop:hover {
-    background: #b91c1c !important;
+
+/* Neutralize dataframe internal icon/utility buttons so they don't render as ghost buttons */
+.gr-dataframe button, button.icon-button, button:empty, button[aria-label="Fullscreen"], button[title="Fullscreen"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 2px 4px !important;
+    min-width: unset !important;
 }
 
 /* Single-layer Clean Inputs */
@@ -227,11 +236,19 @@ td {
     border-bottom: 1px solid #f0ece4 !important;
     color: #27272a !important;
 }
+
+/* Micro typography */
+code {
+    background: #f0ece4 !important;
+    color: #18181b !important;
+    padding: 1px 4px !important;
+    border-radius: 3px !important;
+    font-size: 0.82rem !important;
+}
 """
 
 def create_app():
-    print("  [1/4] Initializing Ingestion & Scanner tab (connecting to Pixeltable)...", flush=True)
-    with gr.Blocks(title="Pipeline Tools // Multimodal Workbench") as demo:
+    with gr.Blocks(title="Pipeline Tools", fill_width=True) as demo:
         gr.Markdown(
             """
             <div class="app-header">
@@ -242,20 +259,20 @@ def create_app():
         )
         
         with gr.Tabs():
-            with gr.Tab("Ingestion & Scanner"):
-                render_ingest_tab()
+            with gr.Tab("Ingestion & Scanner") as ingest_tab:
+                render_ingest_tab(tab=ingest_tab)
                 
-            with gr.Tab("Data Enhancement"):
+            with gr.Tab("Data Enhancement") as playground_tab:
                 print("  [2/4] Initializing Data Enhancement tab (discovering models & tables)...", flush=True)
-                render_playground_tab()
+                render_playground_tab(tab=playground_tab)
                 
-            with gr.Tab("View & Export"):
+            with gr.Tab("View & Export") as tables_tab:
                 print("  [3/4] Initializing View & Export tab...", flush=True)
-                render_tables_tab()
+                render_tables_tab(tab=tables_tab)
                 
-            with gr.Tab("Settings & Models"):
+            with gr.Tab("Settings & Models") as settings_tab:
                 print("  [4/4] Initializing Settings & Models tab...", flush=True)
-                render_settings_tab()
+                render_settings_tab(tab=settings_tab)
 
     print("  ✅ All workbench tabs and database connections initialized!", flush=True)
     return demo

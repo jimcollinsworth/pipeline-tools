@@ -41,7 +41,7 @@ def get_directory_choices(current_path=None):
 
     return sorted(list(choices))
 
-def render_ingest_tab():
+def render_ingest_tab(tab=None):
     settings = get_settings()
     default_path = settings.default_ingest_dir or str(Path.cwd())
 
@@ -264,3 +264,29 @@ def render_ingest_tab():
         inputs=[scanned_state, domain_dropdown, table_dropdown, overwrite_check],
         outputs=[ingest_status_box]
     )
+
+    if tab is not None:
+        def on_tab_select(current_domain, current_table):
+            latest_domains = DBManager.list_dirs()
+            if not latest_domains:
+                latest_domains = ["default"]
+            curr_settings = get_settings()
+            dom = curr_settings.last_domain if curr_settings.last_domain in latest_domains else (
+                current_domain if current_domain in latest_domains else latest_domains[0]
+            )
+            latest_tables = DBManager.list_tables(dom)
+            if not latest_tables:
+                latest_tables = ["raw_assets"]
+            tbl = curr_settings.last_table if curr_settings.last_table in latest_tables else (
+                current_table if current_table in latest_tables else latest_tables[0]
+            )
+            return (
+                gr.update(choices=latest_domains, value=dom),
+                gr.update(choices=latest_tables, value=tbl)
+            )
+
+        tab.select(
+            fn=on_tab_select,
+            inputs=[domain_dropdown, table_dropdown],
+            outputs=[domain_dropdown, table_dropdown]
+        )

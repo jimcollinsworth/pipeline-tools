@@ -4,7 +4,7 @@ from src.core.config import get_settings, save_settings, Settings
 from src.core.ollama_client import OllamaClient
 from src.core.gemini_client import GeminiClient
 
-def render_settings_tab():
+def render_settings_tab(tab=None):
     settings = get_settings()
 
     with gr.Column():

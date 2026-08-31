@@ -9,7 +9,7 @@ from src.core.llm_service import LLMService
 from src.export.exporter import MarkdownExporter
 
 
-def render_tables_tab():
+def render_tables_tab(tab=None):
     settings = get_settings()
 
     domains = DBManager.list_dirs()
@@ -418,3 +418,37 @@ def render_tables_tab():
         ],
         outputs=[export_status_box, export_preview_markdown, download_file_component]
     )
+
+    if tab is not None:
+        def on_tab_select(current_domain, current_table, limit, is_lightweight):
+            latest_domains = DBManager.list_dirs()
+            if not latest_domains:
+                latest_domains = ["default"]
+            
+            curr_settings = get_settings()
+            dom = curr_settings.last_domain if curr_settings.last_domain in latest_domains else (
+                current_domain if current_domain in latest_domains else latest_domains[0]
+            )
+            
+            latest_tables = DBManager.list_tables(dom)
+            if not latest_tables:
+                latest_tables = ["raw_assets"]
+            
+            tbl = curr_settings.last_table if curr_settings.last_table in latest_tables else (
+                current_table if current_table in latest_tables else latest_tables[0]
+            )
+            
+            stats_text, df_update, cols_text = on_load_table(dom, tbl, limit, is_lightweight)
+            return (
+                gr.update(choices=latest_domains, value=dom),
+                gr.update(choices=latest_tables, value=tbl),
+                stats_text,
+                df_update,
+                cols_text
+            )
+
+        tab.select(
+            fn=on_tab_select,
+            inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
+            outputs=[domain_dropdown, table_dropdown, table_stats_markdown, data_view_table, available_columns_info]
+        )

@@ -448,6 +448,21 @@ class TestPipelineTools(unittest.TestCase):
                     except Exception:
                         pass
 
+    def test_tab_dynamic_dropdown_refresh(self):
+        """[UI] Verify newly created tables are dynamically discovered and selected across tabs."""
+        if PIXELTABLE_AVAILABLE:
+            new_table_name = "fresh_dynamic_table"
+            DBManager.create_or_get_table(self.TEST_DOMAIN, new_table_name)
+
+            # 1. Verify DBManager lists the newly created table under the domain
+            tables = DBManager.list_tables(self.TEST_DOMAIN)
+            self.assertIn(new_table_name, tables)
+
+            # 2. Verify table preview loads the new table schema without errors
+            res = DBManager.get_table_data(self.TEST_DOMAIN, new_table_name, limit=5, lightweight=True)
+            self.assertIn("file_name", res.get("columns", []))
+            self.assertEqual(res.get("total_rows"), 0)
+
 
 
 class CleanTestResult(unittest.TestResult):

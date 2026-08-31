@@ -7,7 +7,7 @@ from src.core.llm_service import LLMService
 from src.db.manager import DBManager
 from src.prompts.executor import PromptExecutor
 
-def render_playground_tab():
+def render_playground_tab(tab=None):
     settings = get_settings()
 
     # Discover initial domains and tables
@@ -175,7 +175,7 @@ def render_playground_tab():
                         precision=0,
                         scale=1
                     )
-                    commit_batch_btn = gr.Button("💾 Execute on Table & Save Columns", variant="stop", scale=2)
+                    commit_batch_btn = gr.Button("💾 Execute on Table & Save Columns", variant="primary", scale=2)
 
                 with gr.Group(elem_classes=["status-panel"]):
                     batch_status_markdown = gr.Markdown("#### Batch Status: *Idle*")
@@ -533,3 +533,37 @@ def render_playground_tab():
         inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, output_mode_radio, target_column_input, write_mode_radio, limit_rows_input, preview_mode_toggle],
         outputs=[batch_status_markdown, table_info_markdown, current_table_preview, available_columns_info]
     )
+
+    if tab is not None:
+        def on_tab_select(current_domain, current_table, is_lightweight):
+            latest_domains = DBManager.list_dirs()
+            if not latest_domains:
+                latest_domains = ["default"]
+            
+            curr_settings = get_settings()
+            dom = curr_settings.last_domain if curr_settings.last_domain in latest_domains else (
+                current_domain if current_domain in latest_domains else latest_domains[0]
+            )
+            
+            latest_tables = DBManager.list_tables(dom)
+            if not latest_tables:
+                latest_tables = ["raw_assets"]
+            
+            tbl = curr_settings.last_table if curr_settings.last_table in latest_tables else (
+                current_table if current_table in latest_tables else latest_tables[0]
+            )
+            
+            info_text, df_update, cols_text = load_table_preview(dom, tbl, lightweight=is_lightweight)
+            return (
+                gr.update(choices=latest_domains, value=dom),
+                gr.update(choices=latest_tables, value=tbl),
+                info_text,
+                df_update,
+                cols_text
+            )
+
+        tab.select(
+            fn=on_tab_select,
+            inputs=[domain_dropdown, table_dropdown, preview_mode_toggle],
+            outputs=[domain_dropdown, table_dropdown, table_info_markdown, current_table_preview, available_columns_info]
+        )

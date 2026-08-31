@@ -91,3 +91,25 @@ This journal records verbatim developer instructions, architectural directives, 
    - `DBManager.get_table_data` retrieves the pre-computed `thumbnail` PIL Image from Pixeltable and encodes it into a lightweight base64 data URI in memory, rendering consistent $54 \times 54\text{px}$ square thumbnails (`object-fit: cover`) with zero disk re-reading.
 3. **Gradio `allowed_paths` Across System Drives**:
    - Added system-wide drive root paths (`C:\`, `D:\`, user home) to `demo.launch(allowed_paths=...)`, allowing Gradio's internal file server to serve full-resolution media to the **Media Inspector** drawer and audio/video players without cache movement exceptions.
+
+---
+
+## 📅 2026-08-31: Dynamic Tab Auto-Refresh, Button Press Effects & Mobile Backlog
+
+**Context:** Fixing dropdown sync across workbench tabs, unifying button styles with active press animations, eliminating dataframe ghost buttons, and planning mobile/cloud architecture.
+
+**Verbatim Instruction:**
+> `- fix - execute on table & save columns button, no need for red, make it match all others. all buttons should have a hover/press affect too, what ever is native and easy.`
+> `- fix - dropdowns table in target data & llm engine - enhancement - not refreshing when going to tab, my new table was missing until i selected a different one. make sure all these dynamic dropdowns do a refresh when switching to their tabs. add a test to check this issue (or fix existing one)`
+> `a couple extra ghost buttons, probably because no directory is scanned yet.`
+> `backlog add another major feature todo - mobile app support - how can we support mobile/tablet use? embedded post gresql is an issue i think. How to run gradio apps from cloud, whats our options, another backlog todo - responsive design - mobile user will be very different - view defaults, sizes`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Dynamic Tab Auto-Refresh (`tab.select`)**:
+   - Attached `.select()` listeners to all `gr.Tab` containers (Ingestion, Data Enhancement, View & Export) so switching tabs immediately calls `DBManager.list_dirs()` and `DBManager.list_tables()`, keeping newly ingested tables instantly selectable.
+2. **Consistent Button Interactions & Ghost Button Fix**:
+   - Switched `commit_batch_btn` to primary blue.
+   - Added tactile CSS `:active` press effects (`transform: translateY(1px)`).
+   - Constrained secondary button CSS to exclude internal dataframe action buttons (`button:empty`, `.icon-button`), eliminating empty ghost buttons.
+3. **Mobile & Cloud Architecture Strategy**:
+   - Documented `RES-09` and `RES-10` in `planning.md`. To navigate embedded PostgreSQL platform constraints, the recommended pattern is containerized cloud/server hosting (Docker, Hugging Face Spaces, or local LAN host) serving a responsive progressive web UI to mobile/tablet clients.

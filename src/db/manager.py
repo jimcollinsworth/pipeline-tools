@@ -113,6 +113,8 @@ class DBManager:
             pass
         return table
 
+    create_or_get_table = get_or_create_table
+
     @staticmethod
     def drop_table(dir_name: str, table_name: str) -> bool:
         """Drop a Pixeltable table cleanly."""

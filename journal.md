@@ -71,5 +71,23 @@ This journal records verbatim developer instructions, architectural directives, 
 1. **Single Source of Truth (3 Authorized Docs)**:
    - `README.md`: What the tool is, capabilities, toolchain, and how to use.
    - `planning.md`: Steps to build, system architecture, engineering design, tasks, and research items.
-   - `journal.md`: Verbatim developer directives, mentoring notes, and architectural decisions.
+   - `journal.md`: Verbatim developer directives, mentoring notes, and key architectural decisions.
 2. **No Arbitrary Docs**: Never generate extra markdown files (e.g. `walkthrough.md`, `specs.md`) without prior explicit authorization. Rule codified permanently in `AGENTS.md`.
+
+---
+
+## 📅 2026-08-31: Native Pixeltable `t.thumbnail` Computed Column & Media Serving
+
+**Context:** Resolving thumbnail rendering latency, Gradio cross-directory security errors (`Cannot move to gradio cache`), and native multimodal schema integration.
+
+**Verbatim Instruction:**
+> `what is the pixeltable native t.thumbnail? doesn't that replace the base64? so it puts thumbnails into the table?`
+> `yes, make it so, and update the tables that have viewing capabilities`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Pixeltable Declarative Storage**:
+   - Declared `t.thumbnail = t.image.resize((64, 64))` on table creation. Thumbnails are computed once on ingestion and persistently stored inside Pixeltable's local storage.
+2. **Instant In-Memory Base64 HTML Rendering**:
+   - `DBManager.get_table_data` retrieves the pre-computed `thumbnail` PIL Image from Pixeltable and encodes it into a lightweight base64 data URI in memory, rendering consistent $54 \times 54\text{px}$ square thumbnails (`object-fit: cover`) with zero disk re-reading.
+3. **Gradio `allowed_paths` Across System Drives**:
+   - Added system-wide drive root paths (`C:\`, `D:\`, user home) to `demo.launch(allowed_paths=...)`, allowing Gradio's internal file server to serve full-resolution media to the **Media Inspector** drawer and audio/video players without cache movement exceptions.

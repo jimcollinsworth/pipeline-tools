@@ -85,10 +85,16 @@ flowchart TD
   - Key criteria: Execution speed (~1-2s headless script vs ~30-90s subagent), zero-dependency constraints, and rich JavaScript DOM/cascade testing.
 
 ### Phase 3: Pixeltable Lineage, Undo & Multimodal Extensions (Planned)
-- [ ] **Lineage & Snapshots UI**
-  - Visualizing Pixeltable version history and tag snapshots.
-  - Rollback / undo capabilities for computed columns and schema edits.
-  - Audio/Video transcription via Whisper / Gemini Multimodal API with time-coded chunking.
+- [ ] **Pixeltable Lineage & Simple 'Undo Last Operation' Architecture (Major Feature)**
+  - **Concept & Mechanics**: Every mutating Pixeltable operation (`insert`, `add_column`, `update`, `delete`) increments the immutable table version counter (`v0 -> v1 -> v2...`).
+  - **Design Specification**:
+    - **1-Click '↩️ Undo Last Operation' Button**: Provides an instant, safe way to revert the most recent batch prompt run, dropped column, or row ingestion.
+    - **Revert Mechanics**: If the last operation added columns (e.g. LLM Auto-Split columns), Undo safely drops them; if rows were inserted/updated, Undo rolls the table back to snapshot `v - 1`.
+    - **Version History Drawer**: Visual list of past table revisions with timestamps, row counts, added columns, and 1-click rollback to any historical version.
+  - **Implementation Roadmap**:
+    - Implement `DBManager.undo_last_operation(domain, table)` and `DBManager.get_version_history(domain, table)`.
+    - Add UI controls in Data Enhancement and View & Export with status feedback.
+    - Hardened unit tests verifying column dropping, version restoration, and computed column preservation.
 - [ ] **Hugging Face & YOLO Vision Classification Engines**
   - Integrate Ultralytics YOLO classifiers (e.g., `keremberke/yolov8m-painting-classification`) and Hugging Face vision models alongside Ollama/Gemini.
   - Full 27-class art taxonomy classification:
@@ -119,3 +125,4 @@ flowchart TD
 | RES-08 | Hugging Face & YOLO Vision Model Architecture | Open | Planned integration of Hugging Face Hub / Ultralytics vision classifiers (e.g. WikiArt 27-movement classifier) with output auto-splitting into Pixeltable table columns. |
 | RES-09 | Mobile / Tablet Architecture & Cloud Serving | Open | Overcome embedded PostgreSQL mobile restriction by hosting Gradio + Pixeltable on cloud containers / remote server with persistent volume, serving responsive PWA to mobile devices. |
 | RES-10 | Responsive Mobile / Tablet Design | Open | Adapt Gradio layout with mobile CSS breakpoints, stacked columns, touch-friendly button targets (>=44px), and compact card table views. |
+| RES-11 | Pixeltable Lineage & Simple 'Undo' Architecture | Open | Define mutating operation versioning in Pixeltable, design 1-click 'Undo Last Operation' button (column drop / version rollback), and table revision timeline. |

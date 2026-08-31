@@ -113,3 +113,22 @@ This journal records verbatim developer instructions, architectural directives, 
    - Constrained secondary button CSS to exclude internal dataframe action buttons (`button:empty`, `.icon-button`), eliminating empty ghost buttons.
 3. **Mobile & Cloud Architecture Strategy**:
    - Documented `RES-09` and `RES-10` in `planning.md`. To navigate embedded PostgreSQL platform constraints, the recommended pattern is containerized cloud/server hosting (Docker, Hugging Face Spaces, or local LAN host) serving a responsive progressive web UI to mobile/tablet clients.
+
+---
+
+## 📅 2026-08-31: Pixeltable Lineage Versioning & Simple 'Undo' Architecture
+
+**Context:** Formulating a clean, practical roadmap for Pixeltable table lineage, time travel, and a user-friendly 'Undo Last Operation' capability.
+
+**Verbatim Instruction:**
+> `ok this is all too complicated for now, add a major feature todo to define, design and implement lineage. maybe a simpler 'undo' last operation command? does every pixeltable operation create a new lineage?`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Pixeltable Versioning Model**:
+   - Every mutating Pixeltable operation (`insert`, `add_column`, `update`, `drop_column`, `delete`) increments the internal immutable table version number (`v0 -> v1 -> v2...`).
+2. **Simple 'Undo' Strategy**:
+   - Prioritize a single-click **↩️ Undo Last Operation** button over a complex multi-branching UI.
+   - If the last operation was an LLM batch run that added columns, Undo drops those generated columns.
+   - If the last operation was row ingestion/updates, Undo restores the table to version `v - 1`.
+3. **Roadmap Tracking**:
+   - Defined Phase 3 task and `RES-11` in `planning.md`.

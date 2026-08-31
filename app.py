@@ -8,8 +8,8 @@ from src.ui.playground_tab import render_playground_tab
 from src.ui.tables_tab import render_tables_tab
 
 # Gradio 6.0: theme and css must be passed to launch(), not Blocks()
-clean_theme = gr.themes.Monochrome(
-    primary_hue=gr.themes.colors.neutral,
+clean_theme = gr.themes.Default(
+    primary_hue=gr.themes.colors.blue,
     secondary_hue=gr.themes.colors.neutral,
     neutral_hue=gr.themes.colors.neutral,
     text_size="sm",
@@ -23,10 +23,10 @@ clean_theme = gr.themes.Monochrome(
     block_background_fill_dark="#181818",
     block_border_width="0px",
     block_shadow="none",
-    button_primary_background_fill="#18181b",
-    button_primary_background_fill_hover="#27272a",
+    button_primary_background_fill="#2563eb",
+    button_primary_background_fill_hover="#1d4ed8",
     button_primary_text_color="#ffffff",
-    button_primary_border_color="#18181b",
+    button_primary_border_color="#1d4ed8",
     button_secondary_background_fill="#ffffff",
     button_secondary_background_fill_hover="#f4f1ea",
     button_secondary_text_color="#18181b",
@@ -99,8 +99,9 @@ body, gradio-app, .gradio-container {
     transition: all 0.15s ease !important;
 }
 .tab-nav button.selected, .tab-nav button[aria-selected="true"] {
-    background: #18181b !important;
-    color: #ffffff !important;
+    background: #e4e0d5 !important;
+    color: #18181b !important;
+    font-weight: 700 !important;
 }
 .tab-nav button:hover:not(.selected) {
     background: #eae6dd !important;
@@ -120,36 +121,47 @@ body, gradio-app, .gradio-container {
     margin-bottom: 12px !important;
 }
 
-/* Elegant Buttons */
+/* Regular, Clean Interactive Buttons */
 button.primary, button[variant="primary"] {
-    background: #18181b !important;
+    background: #2563eb !important;
     color: #ffffff !important;
-    border: 1px solid #18181b !important;
+    border: 1px solid #1d4ed8 !important;
     border-radius: 6px !important;
     font-weight: 600 !important;
     padding: 8px 18px !important;
     box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
-    transition: background 0.15s ease !important;
+    transition: all 0.15s ease !important;
 }
 button.primary:hover {
-    background: #27272a !important;
+    background: #1d4ed8 !important;
+    border-color: #1e40af !important;
 }
-button.secondary, button[variant="secondary"] {
+button.secondary, button[variant="secondary"], button:not(.primary):not(.stop):not([variant="primary"]):not([variant="stop"]) {
     background: #ffffff !important;
     color: #18181b !important;
     border: 1px solid #d4d0c8 !important;
     border-radius: 6px !important;
-    font-weight: 600 !important;
+    font-weight: 500 !important;
+    padding: 6px 14px !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
+    transition: all 0.15s ease !important;
 }
-button.secondary:hover {
+button.secondary:hover, button:not(.primary):not(.stop):not([variant="primary"]):not([variant="stop"]):hover {
     background: #f4f1ea !important;
+    border-color: #b8b3a8 !important;
 }
 button.stop, button[variant="stop"] {
-    background: #18181b !important;
+    background: #dc2626 !important;
     color: #ffffff !important;
-    border: 1px solid #18181b !important;
+    border: 1px solid #b91c1c !important;
     border-radius: 6px !important;
     font-weight: 600 !important;
+    padding: 8px 18px !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
+    transition: all 0.15s ease !important;
+}
+button.stop:hover {
+    background: #b91c1c !important;
 }
 
 /* Single-layer Clean Inputs */
@@ -160,35 +172,38 @@ input:not([type="checkbox"]):not([type="radio"]), textarea, select, .gr-dropdown
     color: #18181b !important;
 }
 input:focus, textarea:focus {
-    border-color: #18181b !important;
-    box-shadow: 0 0 0 1px #18181b !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 1px #2563eb !important;
 }
 
-/* Clean Native Checkboxes */
-input[type="checkbox"] {
-    accent-color: #18181b !important;
-    width: 16px !important;
-    height: 16px !important;
+/* Clean Native Checkboxes & Radios */
+input[type="checkbox"], input[type="radio"] {
+    accent-color: #2563eb !important;
     cursor: pointer !important;
-    border-radius: 4px !important;
 }
 
-/* Checkbox Group Filter Pills */
-.gr-checkboxgroup label {
+/* Checkbox & Radio Labels - Consistent, No Dark Black Fills */
+.gr-checkboxgroup label, .gr-radio label {
     border: 1px solid #d4d0c8 !important;
     border-radius: 6px !important;
     background: #ffffff !important;
+    color: #18181b !important;
     padding: 4px 10px !important;
     transition: all 0.15s ease !important;
     margin-right: 6px !important;
+    cursor: pointer !important;
 }
-.gr-checkboxgroup label:has(input:checked) {
-    background: #18181b !important;
-    color: #ffffff !important;
-    border-color: #18181b !important;
+.gr-checkboxgroup label:hover, .gr-radio label:hover {
+    background: #f4f1ea !important;
 }
-.gr-checkboxgroup label:has(input:checked) span {
-    color: #ffffff !important;
+.gr-checkboxgroup label:has(input:checked), .gr-radio label:has(input:checked) {
+    background: #ffffff !important;
+    color: #18181b !important;
+    border-color: #94a3b8 !important;
+}
+.gr-checkboxgroup label:has(input:checked) span, .gr-radio label:has(input:checked) span {
+    color: #18181b !important;
+    font-weight: 600 !important;
 }
 
 /* Clean High-Contrast Data Tables */

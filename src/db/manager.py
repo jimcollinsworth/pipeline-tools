@@ -460,7 +460,7 @@ class DBManager:
 
     @classmethod
     def format_media_preview_html(cls, file_path: str, modality: str = "", file_type: str = "") -> str:
-        """Format web-safe HTML preview element for image, audio, video, or doc file."""
+        """Format lightweight, web-safe HTML preview element using direct Gradio file streaming."""
         if not file_path:
             return ""
         safe_path = str(file_path).replace("\\", "/")
@@ -468,10 +468,8 @@ class DBManager:
         ext = (file_type or Path(file_path).suffix).lower()
 
         if mod == "images" or ext in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".svg"]:
-            b64_thumb = cls.generate_image_thumbnail_base64(file_path, size=(60, 60))
-            if b64_thumb:
-                return f'<div style="display:flex; justify-content:center; align-items:center;"><img src="{b64_thumb}" alt="thumbnail" style="height:54px; width:54px; min-width:54px; border-radius:6px; object-fit:cover; box-shadow:0 1px 3px rgba(0,0,0,0.18); display:block; margin:auto;" /></div>'
-            return f'<div style="display:flex; justify-content:center; align-items:center;"><img src="/gradio_api/file={safe_path}" alt="img" style="height:54px; width:54px; min-width:54px; border-radius:6px; object-fit:cover; box-shadow:0 1px 3px rgba(0,0,0,0.18); display:block; margin:auto;" /></div>'
+            # Stream image directly via Gradio API - zero Python memory consumption
+            return f'<div style="display:flex; justify-content:center; align-items:center;"><img src="/gradio_api/file={safe_path}" alt="thumbnail" style="height:54px; width:54px; min-width:54px; border-radius:6px; object-fit:cover; box-shadow:0 1px 3px rgba(0,0,0,0.18); display:block; margin:auto;" loading="lazy" /></div>'
         elif mod == "audio" or ext in [".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"]:
             return f'<audio controls preload="none" src="/gradio_api/file={safe_path}" style="height:28px; width:150px; vertical-align:middle;"></audio>'
         elif mod == "video" or ext in [".mp4", ".webm", ".mov", ".avi", ".mkv"]:
@@ -483,7 +481,7 @@ class DBManager:
     @classmethod
     def get_table_data(cls, dir_name: str, table_name: str, limit: int = 50,
                        lightweight: bool = True) -> Dict[str, Any]:
-        """Fetch rows from Pixeltable table for UI display with lightweight/full toggle."""
+        """Fetch rows from Pixeltable table for UI display with zero memory bloat."""
         if not PIXELTABLE_AVAILABLE:
             return {
                 "columns": ["Notice"],
@@ -499,15 +497,10 @@ class DBManager:
             # Inspect column names from table schema without fetching heavy data rows
             available_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
             
-            # CRITICAL: Exclude heavy raw binary media pointers ('image', 'doc', 'video', 'audio')
+            # CRITICAL: Exclude heavy raw binary media pointers ('image', 'doc', 'video', 'audio', 'thumbnail')
             # from the database query to prevent loading 100s of MBs/GBs of uncompressed raw media into RAM.
-            heavy_binary_cols = {"doc", "image", "audio", "video"}
-            
-            if lightweight:
-                query_cols = [c for c in available_cols if c not in heavy_binary_cols and c not in {"thumbnail", "media_preview"}]
-            else:
-                # Full mode includes thumbnail if available, but excludes heavy binary columns
-                query_cols = [c for c in available_cols if c not in heavy_binary_cols and c != "media_preview"]
+            heavy_binary_cols = {"doc", "image", "audio", "video", "thumbnail", "media_preview"}
+            query_cols = [c for c in available_cols if c not in heavy_binary_cols]
 
             if query_cols:
                 query = table.select(*[table[c] for c in query_cols]).limit(limit)
@@ -515,47 +508,34 @@ class DBManager:
                 query = table.limit(limit)
 
             df = query.collect().to_pandas()
-
             display_cols = list(df.columns)
-            if lightweight:
-                # Truncate long text columns to 250 chars for fast rendering
-                for col in df.columns:
-                    if df[col].dtype == "object":
-                        df[col] = df[col].apply(
-                            lambda x: (str(x)[:250] + "...") if isinstance(x, str) and len(x) > 250 else (str(x) if x is not None else "")
-                        )
-            else:
-                # In Full Mode: Add media_preview HTML column and omit raw internal binary column pointers
-                if "thumbnail" in df.columns:
-                    display_cols = [c for c in display_cols if c != "thumbnail"]
 
-                if "file_path" in df.columns:
-                    mod_col = df["modality"] if "modality" in df.columns else [""] * len(df)
-                    type_col = df["file_type"] if "file_type" in df.columns else [""] * len(df)
-                    thumb_col = df["thumbnail"] if "thumbnail" in df.columns else [None] * len(df)
+            if not lightweight and "file_path" in df.columns:
+                mod_col = df["modality"] if "modality" in df.columns else [""] * len(df)
+                type_col = df["file_type"] if "file_type" in df.columns else [""] * len(df)
 
-                    previews = []
-                    for fp, mod, ft, thumb in zip(df["file_path"], mod_col, type_col, thumb_col):
-                        thumb_uri = cls.pil_to_base64_data_uri(thumb, size=(60, 60))
-                        if thumb_uri:
-                            previews.append(f'<div style="display:flex; justify-content:center; align-items:center;"><img src="{thumb_uri}" alt="thumbnail" style="height:54px; width:54px; min-width:54px; border-radius:6px; object-fit:cover; box-shadow:0 1px 3px rgba(0,0,0,0.18); display:block; margin:auto;" /></div>')
-                        else:
-                            previews.append(cls.format_media_preview_html(str(fp), str(mod), str(ft)))
-                    df["media_preview"] = previews
+                previews = [
+                    cls.format_media_preview_html(str(fp), str(mod), str(ft))
+                    for fp, mod, ft in zip(df["file_path"], mod_col, type_col)
+                ]
+                df["media_preview"] = previews
 
-                    # Reorder media_preview near the front for immediate visibility
-                    reordered = []
-                    for c in ["id", "file_name", "media_preview"]:
-                        if c in df.columns and c not in reordered:
-                            reordered.append(c)
-                    for c in display_cols:
-                        if c not in reordered and c in df.columns:
-                            reordered.append(c)
-                    df = df[reordered]
+                # Reorder media_preview near the front for immediate visibility
+                reordered = []
+                for c in ["id", "file_name", "media_preview"]:
+                    if c in df.columns and c not in reordered:
+                        reordered.append(c)
+                for c in display_cols:
+                    if c not in reordered and c in df.columns:
+                        reordered.append(c)
+                df = df[reordered]
 
-                for col in df.columns:
-                    if col != "media_preview" and df[col].dtype == "object":
-                        df[col] = df[col].apply(lambda x: str(x) if x is not None else "")
+            # Truncate long text columns to 250 chars for fast rendering and minimal WebSocket payload
+            for col in df.columns:
+                if col != "media_preview" and df[col].dtype == "object":
+                    df[col] = df[col].apply(
+                        lambda x: (str(x)[:250] + "...") if isinstance(x, str) and len(x) > 250 else (str(x) if x is not None else "")
+                    )
 
             cols = list(df.columns)
             datatypes = ["html" if c == "media_preview" else "str" for c in cols]

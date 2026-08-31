@@ -36,18 +36,17 @@ def render_tables_tab(tab=None):
                 choices=domains,
                 value=initial_domain,
                 allow_custom_value=True,
-                scale=2
+                scale=3
             )
             table_dropdown = gr.Dropdown(
                 label="Table Name",
                 choices=tables,
                 value=initial_table,
                 allow_custom_value=True,
-                scale=2
+                scale=3
             )
-            limit_slider = gr.Slider(minimum=5, maximum=200, value=50, step=5, label="Max Rows to Fetch", scale=2)
+            limit_slider = gr.Slider(minimum=5, maximum=100, value=25, step=5, label="Max Rows to Fetch", scale=2)
             lightweight_toggle = gr.Checkbox(label="⚡ Lightweight Preview", value=True, scale=1)
-            load_table_btn = gr.Button("🔍 Load / Refresh Table", variant="primary", scale=1)
 
         with gr.Row():
             undo_table_btn = gr.Button("↩️ Undo Last Operation", variant="secondary", scale=2)
@@ -354,7 +353,7 @@ def render_tables_tab(tab=None):
         outputs=[table_stats_markdown, data_view_table, available_columns_info]
     )
 
-    load_table_btn.click(
+    limit_slider.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
         outputs=[table_stats_markdown, data_view_table, available_columns_info]

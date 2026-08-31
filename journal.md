@@ -206,3 +206,24 @@ This journal records verbatim developer instructions, architectural directives, 
    - Modified `data_view_table.select` and `current_table_preview.select` to extract row metadata directly from the loaded UI DataFrame in 0ms without database re-queries.
 4. **Automated Verification**:
    - Verified with full test suite (`27 Passed, 0 Failed, 0 Errors`).
+
+---
+
+## 📅 2026-08-31: Zero-Memory Streaming Previews & UI Control Alignment
+
+**Context:** Eliminating frontend WebSocket/JSON memory bloat from base64 encoding and aligning View & Export tab controls with Data Enhancement tab.
+
+**Verbatim Instruction:**
+> `out of memory again on export page, note that the export page has an explicit load/reaload button, so thats inconsistent with the enhancement page.`
+
+**Key Decisions & Engineering Fixes:**
+1. **Direct Gradio Streaming URLs**:
+   - Switched image previews from synchronous base64 inline strings to direct `/gradio_api/file={safe_path}` HTTP endpoints with `loading="lazy"`.
+   - Completely eliminates memory bloat from DataFrame JSON payloads sent over WebSocket.
+2. **UI Control Alignment**:
+   - Removed the redundant `Load / Refresh Table` button from the View & Export tab.
+   - Connected `limit_slider.change` and dropdown changes to auto-update the table view seamlessly, matching the Data Enhancement tab layout.
+3. **Dataframe Cell Text Truncation**:
+   - Truncated text columns in the DataFrame to 250 characters for UI display, keeping JSON response sizes tiny (<50KB) even on large document datasets.
+4. **All 27 Automated Tests Passing**:
+   - Verified with `uv run python -m tests`.

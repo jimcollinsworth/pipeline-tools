@@ -378,7 +378,7 @@ class TestPipelineTools(unittest.TestCase):
         try:
             img_html = DBManager.format_media_preview_html(str(temp_img.resolve()), modality="images", file_type=".jpg")
             self.assertIn("<img", img_html)
-            self.assertIn("data:image/jpeg;base64,", img_html)
+            self.assertIn("/gradio_api/file=", img_html)
 
             audio_html = DBManager.format_media_preview_html("C:/data/song.mp3", modality="audio", file_type=".mp3")
             self.assertIn("<audio controls", audio_html)

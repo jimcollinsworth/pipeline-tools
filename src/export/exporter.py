@@ -15,53 +15,53 @@ class MarkdownExporter:
         "Entity & Keyword Intelligence": {
             "mode": "llm",
             "system_prompt": (
-                "Extract, disambiguate, and aggregate all key entities, keywords, and topics from the dataset "
-                "into clean, structured Markdown categories without unnecessary filler."
+                "You are an information extraction system. Extract, aggregate, and structure all key entities, "
+                "people, organizations, locations, and categorical keywords from the dataset into organized Markdown tables and lists."
             ),
             "prompt_template": (
-                "Analyze the following {total_rows} records from dataset '{domain}.{table}':\n\n"
+                "Extract structured entity intelligence from the following {total_rows} records in '{domain}.{table}':\n\n"
                 "{table_context}\n\n"
-                "Extract and synthesize:\n"
-                "1. **People & Roles**: Key individuals mentioned or depicted with context.\n"
-                "2. **Organizations & Brands**: Companies, institutions, or manufacturers.\n"
-                "3. **Locations & Settings**: Physical places, cities, indoor/outdoor environments.\n"
-                "4. **Events & Activities**: Key actions, gatherings, or occurrences.\n"
-                "5. **Categorical Tags**: 10-15 high-level indexing tags across the records."
+                "Produce an Entity & Knowledge Breakdown:\n"
+                "| Category | Identified Entity / Item | Context / Associated Record |\n"
+                "|---|---|---|\n"
+                "(Populate table for People, Companies/Brands, Locations, and Artifacts)\n\n"
+                "### Indexing Tags\n"
+                "- List 10-15 key search and metadata tags across the collection."
             )
         },
         "Visual & Multimodal Scene Analysis": {
             "mode": "llm",
             "system_prompt": (
-                "Analyze visual characteristics, compositional elements, color palettes, and dominant "
-                "aesthetic attributes across the provided image/media records."
+                "You are a computer vision and media analyst. Analyze visual composition, color distributions, "
+                "lighting conditions, and scene classifications across the provided dataset."
             ),
             "prompt_template": (
-                "Examine the following {total_rows} media records from '{domain}.{table}':\n\n"
+                "Analyze the visual and environmental characteristics across these {total_rows} media records from '{domain}.{table}':\n\n"
                 "{table_context}\n\n"
-                "Synthesize a comprehensive visual breakdown:\n"
-                "1. **Scene Composition & Subjects**: Key objects, subjects, and framing.\n"
-                "2. **Color Palette Breakdown**: Group dominant colors (Warm/Vibrant, Cool, Earthy, Monochromatic) with file examples.\n"
-                "3. **Lighting & Environment**: Daylight, nighttime, artificial, golden hour, or indoor lighting patterns.\n"
-                "4. **Media Characteristics**: Summary of file types, sizes, and visual quality."
+                "Provide a Visual Breakdown:\n"
+                "1. **Subject Composition & Framing**: Main subjects, focal points, and object arrangements.\n"
+                "2. **Color Palette Distribution**: Group identified dominant colors (Warm, Cool, Earthy, Monochromatic) with file examples.\n"
+                "3. **Lighting & Atmosphere**: Daylight, nighttime, artificial, golden hour, or indoor lighting patterns.\n"
+                "4. **Scene Classification Summary**: Breakdown of indoor vs. outdoor, portrait vs. landscape vs. macro items."
             )
         },
-        "Thematic Summary & Pattern Report": {
+        "Thematic Summary & Executive Brief": {
             "mode": "llm",
             "system_prompt": (
-                "Synthesize the provided dataset into a concise, actionable thematic report highlighting "
-                "recurring patterns, key findings, and data takeaways without corporate boilerplate."
+                "You are an executive intelligence analyst. Synthesize the dataset into a high-level narrative "
+                "executive brief highlighting macro trends, recurring themes, notable anomalies, and strategic takeaways."
             ),
             "prompt_template": (
-                "Review the following {total_rows} items in '{domain}.{table}':\n\n"
+                "Synthesize a narrative executive brief based on the {total_rows} records in '{domain}.{table}':\n\n"
                 "{table_context}\n\n"
-                "Provide a direct summary containing:\n"
-                "- **Dataset Overview**: 2-3 paragraph synthesis of the collection.\n"
-                "- **Key Themes & Patterns**: 3-5 major recurring themes across the records.\n"
-                "- **Notable Highlights & Anomalies**: Standout items or unique entries.\n"
-                "- **Actionable Takeaways**: Practical insights from the dataset."
+                "Structure the document with:\n"
+                "- **Executive Summary**: 2-paragraph high-level narrative of the dataset contents and domain scope.\n"
+                "- **Key Trends & Recurring Patterns**: 3-4 major patterns or themes observed across the data.\n"
+                "- **Outliers & Standout Items**: Notable exceptions, unusual records, or unique findings.\n"
+                "- **Strategic Takeaways**: Key conclusions and recommendations based on the findings."
             )
         },
-        "Direct Structured Markdown Catalog": {
+        "Direct Structured Catalog": {
             "mode": "direct",
             "system_prompt": "",
             "prompt_template": (

@@ -23,6 +23,12 @@ def render_playground_tab():
     initial_models = LLMService.list_models_for_provider(initial_provider)
     initial_model = settings.last_model if settings.last_model in initial_models else (initial_models[0] if initial_models else "gemini-3.6-flash")
 
+    # Discover initial table columns for placeholder hints
+    initial_table_res = DBManager.get_table_data(initial_domain, initial_table, limit=1, lightweight=True)
+    initial_cols = initial_table_res.get("columns", [])
+    initial_pills = ", ".join([f"`{{{c}}}`" for c in initial_cols]) if initial_cols else "*None*"
+    initial_cols_text = f"💡 **Available Column Placeholders:** {initial_pills} | Standard: `{{file_name}}`, `{{content}}`, `{{rel_path}}`, `{{modality}}`, `{{file_size}}`"
+
     with gr.Column():
         gr.Markdown("### 🧪 Data Enhancement (Prompt Workbench & Batch Execution)")
         
@@ -89,7 +95,8 @@ def render_playground_tab():
                     value=settings.last_user_prompt,
                     lines=6
                 )
-                gr.Markdown("*Placeholders: `{file_name}`, `{content}`, `{rel_path}`, `{modality}`, `{file_size}`*")
+                
+                available_columns_info = gr.Markdown(initial_cols_text)
 
                 gr.Markdown("#### 3. Test on Sample Rows")
                 sample_count_slider = gr.Slider(minimum=1, maximum=10, value=2, step=1, label="Number of Test Rows")
@@ -145,7 +152,7 @@ def render_playground_tab():
 
                 with gr.Row():
                     limit_rows_input = gr.Number(
-                        label="Row Limit (0 for all rows in table)",
+                        label="Max Rows (0 = all)",
                         value=0,
                         precision=0,
                         scale=1
@@ -155,14 +162,22 @@ def render_playground_tab():
                 with gr.Group(elem_classes=["status-panel"]):
                     batch_status_markdown = gr.Markdown("#### Batch Status: *Idle*")
 
-    # Helper to load table preview
+    # Helper to load table preview and available columns
     def load_table_preview(domain, table_name, lightweight=True):
         if not domain or not table_name:
-            return "⚠️ Select a valid Domain and Table.", gr.update(headers=["Notice"], value=[["No table selected"]])
+            return (
+                "⚠️ Select a valid Domain and Table.",
+                gr.update(headers=["Notice"], value=[["No table selected"]]),
+                "💡 **Available Column Placeholders:** *No table selected.*"
+            )
         
         res = DBManager.get_table_data(domain, table_name, limit=10, lightweight=lightweight)
         if res.get("error"):
-            return f"⚠️ **Table `{domain}.{table_name}` not found or empty.**", gr.update(headers=["Status"], value=[[res.get("error")]])
+            return (
+                f"⚠️ **Table `{domain}.{table_name}` not found or empty.**",
+                gr.update(headers=["Status"], value=[[res.get("error")]]),
+                "💡 **Available Column Placeholders:** *Error loading table.*"
+            )
         
         cols = res.get("columns", [])
         data = res.get("data", [])
@@ -170,7 +185,10 @@ def render_playground_tab():
         mode_label = "⚡ Lightweight" if lightweight else "🔍 Full"
         
         info_text = f"✅ **Table `{res.get('domain', domain)}.{res.get('table', table_name)}`** ({mode_label}) — Total Rows: **{total}** (showing first {len(data)})"
-        return info_text, gr.update(headers=cols, datatype=["str"] * len(cols), value=data)
+        cols_pills = ", ".join([f"`{{{c}}}`" for c in cols]) if cols else "*None*"
+        cols_text = f"💡 **Available Column Placeholders:** {cols_pills} | Standard: `{{file_name}}`, `{{content}}`, `{{rel_path}}`, `{{modality}}`, `{{file_size}}`"
+        
+        return info_text, gr.update(headers=cols, datatype=["str"] * len(cols), value=data), cols_text
 
     def on_output_mode_change(selected_mode):
         is_single = (selected_mode == "📄 Single Target Column")
@@ -196,7 +214,7 @@ def render_playground_tab():
     def on_domain_change(selected_domain, is_lightweight):
         """Auto-populate tables when domain selection changes and refresh table preview."""
         if not selected_domain:
-            return gr.update(choices=[], value=""), "⚠️ Select a valid Domain.", gr.update(headers=[], value=[])
+            return gr.update(choices=[], value=""), "⚠️ Select a valid Domain.", gr.update(headers=[], value=[]), "💡 **Available Column Placeholders:** *None*"
         domain_str = selected_domain.strip()
         update_last_entry(last_domain=domain_str)
         
@@ -207,8 +225,8 @@ def render_playground_tab():
         curr_settings = get_settings()
         selected_tbl = curr_settings.last_table if curr_settings.last_table in discovered_tables else discovered_tables[0]
         
-        info_text, df_update = load_table_preview(domain_str, selected_tbl, lightweight=is_lightweight)
-        return gr.update(choices=discovered_tables, value=selected_tbl), info_text, df_update
+        info_text, df_update, cols_text = load_table_preview(domain_str, selected_tbl, lightweight=is_lightweight)
+        return gr.update(choices=discovered_tables, value=selected_tbl), info_text, df_update, cols_text
 
     def on_table_change(selected_table, current_domain, is_lightweight):
         """Persist last table selection and refresh table preview."""
@@ -216,7 +234,7 @@ def render_playground_tab():
             tbl_str = selected_table.strip()
             update_last_entry(last_table=tbl_str)
             return load_table_preview(current_domain or "default", tbl_str, lightweight=is_lightweight)
-        return "⚠️ Select a table name.", gr.update(headers=[], value=[])
+        return "⚠️ Select a table name.", gr.update(headers=[], value=[]), "💡 **Available Column Placeholders:** *None*"
 
     def on_test_sample(domain, table_name, provider, model, system_prompt, prompt_template, sample_count, output_mode,
                        progress=gr.Progress(track_tqdm=True)):
@@ -293,11 +311,11 @@ def render_playground_tab():
                         progress=gr.Progress(track_tqdm=True)):
         if not domain or not table_name:
             gr.Warning("Select a valid Domain and Table first.")
-            yield "### ⚠️ Missing Target\n> Select a valid Domain and Table before running batch execution.", gr.update(), gr.update()
+            yield "### ⚠️ Missing Target\n> Select a valid Domain and Table before running batch execution.", gr.update(), gr.update(), gr.update()
             return
         if not model:
             gr.Warning("Select a valid model first.")
-            yield f"### ⚠️ Missing Model\n> Select a valid {provider} model before running batch execution.", gr.update(), gr.update()
+            yield f"### ⚠️ Missing Model\n> Select a valid {provider} model before running batch execution.", gr.update(), gr.update(), gr.update()
             return
 
         limit_val = int(limit_num) if limit_num and int(limit_num) > 0 else None
@@ -317,63 +335,53 @@ def render_playground_tab():
 
         limit_desc = f" (Limit: {limit_val} rows)" if limit_val else " (All rows)"
         mode_desc = "Auto-Splitting JSON Keys" if is_auto_split else f"Single Column `{clean_col}`"
-        yield f"⏳ **[1/2] Initializing Batch Execution ({mode_desc})...** Running [{provider}] `{model}` on `{clean_dir}.{clean_tbl}`{limit_desc}...", gr.update(), gr.update()
+        yield f"⏳ **[1/2] Initializing Batch Execution ({mode_desc})...** Running [{provider}] `{model}` on `{clean_dir}.{clean_tbl}`{limit_desc}...", gr.update(), gr.update(), gr.update()
 
         def cb(cur, total, detail):
             pct = (cur / total) if total else 0.5
             progress(pct, desc=detail)
 
         try:
-            yield f"⏳ **[2/2] Generating [{provider}] LLM Outputs & Updating Pixeltable Table...**", gr.update(), gr.update()
             res = PromptExecutor.apply_prompt_to_table(
                 provider=provider,
-                model=model,
+                model=model.strip(),
                 prompt_template=prompt_template,
                 system_prompt=system_prompt,
                 table_dir=clean_dir,
                 table_name=clean_tbl,
                 target_column=clean_col,
-                auto_split=is_auto_split,
                 mode=mode,
                 limit=limit_val,
+                auto_split=is_auto_split,
                 progress_callback=cb
             )
+
             if res.get("status") == "success":
-                info_text, df_update = load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
-                if is_auto_split:
-                    cols_list = ", ".join(f"`{c}`" for c in res.get("columns", []))
-                    gr.Info(f"Batch completed: {res.get('count')} rows updated across dynamic columns: {cols_list}")
-                    yield (
-                        f"### ✅ Dynamic Multi-Column Extraction Complete!\n"
-                        f"> **Table:** `{clean_dir}.{clean_tbl}`\n"
-                        f"> **Provider & Model:** [{provider}] `{model}`\n"
-                        f"> **Columns Created/Updated:** {cols_list}\n"
-                        f"> **Rows Processed:** {res.get('count')}\n\n"
-                        f"*All unpacked columns are now queryable in Pixeltable. Check updated preview on the right.*",
-                        info_text,
-                        df_update
-                    )
-                else:
-                    gr.Info(f"Batch completed: {res.get('count')} rows updated in column '{res.get('column')}'")
-                    yield (
-                        f"### ✅ Batch Execution Complete!\n"
-                        f"> **Table:** `{clean_dir}.{clean_tbl}`\n"
-                        f"> **Provider & Model:** [{provider}] `{model}`\n"
-                        f"> **Target Column:** `{res.get('column')}` ({mode} mode)\n"
-                        f"> **Rows Processed:** {res.get('count')}\n\n"
-                        f"*Column updated in Pixeltable. Check updated preview on the right.*",
-                        info_text,
-                        df_update
-                    )
+                cols_created = res.get("columns", [clean_col])
+                cols_msg = f"Columns Created / Updated: `{', '.join(cols_created)}`"
+                status_msg = (
+                    f"### ✅ Batch Execution Completed Successfully!\n"
+                    f"- **Table:** `{clean_dir}.{clean_tbl}`\n"
+                    f"- **Rows Processed:** {res.get('rows_processed', 0)}\n"
+                    f"- **Engine:** [{provider}] `{model}`\n"
+                    f"- **{cols_msg}**\n"
+                    f"- **Operation:** `{mode.upper()}` mode\n"
+                )
+                gr.Info(f"Batch completed: {res.get('rows_processed', 0)} rows updated!")
+                # Refresh table view and available columns
+                info_text, df_update, cols_text = load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
+                yield status_msg, info_text, df_update, cols_text
             else:
-                err_msg = res.get("message", "Unknown error")
+                err_msg = res.get("message", "Unknown error during batch execution")
                 gr.Error(f"Batch execution failed: {err_msg}")
-                yield f"### ❌ Batch Run Failed\n> **Error:**\n```\n{err_msg}\n```", gr.update(), gr.update()
+                yield f"### ❌ Batch Execution Failed\n```\n{err_msg}\n```", gr.update(), gr.update(), gr.update()
+
         except Exception as e:
             err_msg = f"{type(e).__name__}: {str(e)}"
-            gr.Error(f"Batch execution error: {err_msg}")
-            yield f"### ❌ Execution Exception\n```\n{err_msg}\n```", gr.update(), gr.update()
+            gr.Error(f"Batch execution exception: {err_msg}")
+            yield f"### ❌ Batch Execution Error\n```\n{err_msg}\n```", gr.update(), gr.update(), gr.update()
 
+    # Wire event listeners
     provider_dropdown.change(
         fn=on_provider_change,
         inputs=[provider_dropdown],
@@ -383,19 +391,19 @@ def render_playground_tab():
     domain_dropdown.change(
         fn=on_domain_change,
         inputs=[domain_dropdown, preview_mode_toggle],
-        outputs=[table_dropdown, table_info_markdown, current_table_preview]
+        outputs=[table_dropdown, table_info_markdown, current_table_preview, available_columns_info]
     )
 
     table_dropdown.change(
         fn=on_table_change,
         inputs=[table_dropdown, domain_dropdown, preview_mode_toggle],
-        outputs=[table_info_markdown, current_table_preview]
+        outputs=[table_info_markdown, current_table_preview, available_columns_info]
     )
 
     preview_mode_toggle.change(
         fn=load_table_preview,
         inputs=[domain_dropdown, table_dropdown, preview_mode_toggle],
-        outputs=[table_info_markdown, current_table_preview]
+        outputs=[table_info_markdown, current_table_preview, available_columns_info]
     )
     
     test_sample_btn.click(
@@ -444,9 +452,5 @@ def render_playground_tab():
     commit_batch_btn.click(
         fn=on_commit_batch,
         inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, output_mode_radio, target_column_input, write_mode_radio, limit_rows_input, preview_mode_toggle],
-        outputs=[batch_status_markdown, table_info_markdown, current_table_preview]
+        outputs=[batch_status_markdown, table_info_markdown, current_table_preview, available_columns_info]
     )
-
-
-
-

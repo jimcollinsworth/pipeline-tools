@@ -59,26 +59,12 @@ def render_tables_tab():
         gr.Markdown("---")
         with gr.Group(elem_classes=["status-panel"]):
             gr.Markdown("### 📝 Prompt-Driven Markdown Document Export")
-            gr.Markdown(
-                "Synthesize table records into a unified Markdown report using an LLM (Ollama / Gemini), "
-                "or format rows into structured Markdown sections using column placeholders (e.g. `{file_name}`, `{visual_summary}`, `{object_tags}`)."
-            )
 
-            with gr.Accordion("💡 Export Prompt Guide & Example Presets (Click to Apply)", open=False):
-                gr.Markdown(
-                    """
-                    **How Markdown Export Works**:
-                    * **🤖 LLM Synthesis Mode**: Sends selected table records (`{table_context}`) and prompt to Ollama or Gemini to generate a synthesized, analytical report.
-                    * **📄 Direct Template Mode**: Formats each row into structured Markdown sections using column placeholders (`{file_name}`, `{content}`, `{object_tags}`) without LLM inference.
-                    * **Standard Placeholders**: `{domain}`, `{table}`, `{total_rows}`, `{table_context}`, and any individual table column name `{column_name}`.
-                    """
-                )
-                with gr.Row():
-                    preset_entity_btn = gr.Button("🏷️ Entity & Keyword Intelligence", size="sm")
-                    preset_visual_btn = gr.Button("🎨 Visual & Scene Breakdown", size="sm")
-                with gr.Row():
-                    preset_summary_btn = gr.Button("📋 Thematic Summary & Patterns", size="sm")
-                    preset_catalog_btn = gr.Button("📁 Direct Structured Catalog", size="sm")
+            with gr.Row():
+                preset_entity_btn = gr.Button("🏷️ Entity & Keyword Intelligence", size="sm")
+                preset_visual_btn = gr.Button("🎨 Visual & Scene Breakdown", size="sm")
+                preset_summary_btn = gr.Button("📋 Thematic Summary & Executive Brief", size="sm")
+                preset_catalog_btn = gr.Button("📁 Direct Structured Catalog", size="sm")
 
             with gr.Row():
                 preset_dropdown = gr.Dropdown(
@@ -330,7 +316,7 @@ def render_tables_tab():
     )
 
     preset_summary_btn.click(
-        fn=lambda: load_preset("Thematic Summary & Patterns"),
+        fn=lambda: load_preset("Thematic Summary & Executive Brief"),
         inputs=[],
         outputs=[preset_dropdown, export_mode_radio, system_prompt_input, export_prompt_input]
     )

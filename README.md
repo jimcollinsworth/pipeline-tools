@@ -121,6 +121,7 @@ Open your browser at `http://localhost:7860`.
   - Sidecar .meta.yaml, CSV, and Markdown report generators.
 - [ ] **Phase 3: Lineage & Multimodal Expansion**
   - Snapshot explorer and rollback UI.
+  - Hugging Face model hub & Ultralytics YOLO vision classification engines (e.g. WikiArt 27-movement painting classifier) with dynamic table auto-split columns.
   - Image OCR/Vision LLM and Audio/Video transcription (Whisper/Gemini).
 
 ---

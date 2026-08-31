@@ -68,15 +68,17 @@ flowchart TD
   - Visible System Prompt input for clear transparency and instant tuning.
   - Helper pills/tags showing active table columns for easy inclusion in prompts.
   - Automatic file saving to `exports/{domain}_{table}_{timestamp}.md` with real-time UI preview and instant download component.
-- [ ] **Test Suite Hardening, Isolation & Teardown**
-  - Implement isolated test namespaces (`test_suite_tmp`) with reliable `setUpClass`/`tearDownClass` table cleanup.
+- [x] **Test Suite Hardening, Isolation & Teardown**
+  - Implement isolated test namespaces (`test_suite_isolated`) with reliable `setUpClass`/`tearDownClass` table cleanup.
   - Ensure Windows embedded Postgres locks (`postmaster.pid`) and orphaned sockets are cleanly released on `Ctrl+C` interrupt and normal completion.
-  - Add comprehensive edge-case tests (empty directories, unreadable files, corrupt images, API rate limits).
+  - Add comprehensive edge-case tests (empty directories, unreadable files, corrupt images, missing tables).
+- [x] **Embedded Multimodal Media & Interactive Media Inspector**
+  - Toggle between fast text-only **⚡ Lightweight Mode** and **🔍 Full Media Mode** across View & Export and Data Enhancement tabs.
+  - In Full Mode, table cells render inline HTML thumbnails (`<img>`), audio players (`<audio>`), video players (`<video>`), and document badges (`[PDF]`).
+  - Selecting any row in the table opens the **🔬 Selected Record Media Inspector** drawer below the table with full-size image, audio, video, extracted text, and metadata.
 - [ ] **Decouple UI Event Handlers into Testable Controllers**
   - Refactor inner closure handlers in `src/ui/` into pure controller functions (`src/controllers/` or module-level helpers).
   - Enable 100% unit test coverage of UI workflows without requiring Gradio web server initialization.
-- [ ] **Condensed Lightweight Table Preview & Field Summarization**
-  - Enhance lightweight preview mode across View & Export and Data Enhancement to display a high-density, condensed view with aggressive field truncation (e.g. 50-80 characters for large text/content), media badge placeholders (`[PDF]`, `[IMG]`), and concise JSON/dict metadata summaries.
 - [ ] **Reassess Playwright for Automated Headless Browser Testing**
   - Re-evaluate introducing `playwright` (`pytest-playwright`) for automated headless browser E2E testing against `http://127.0.0.1:7860`.
   - Compare speed, CI automation, and maintenance overhead against Chrome DevTools MCP and pure Python controller tests.

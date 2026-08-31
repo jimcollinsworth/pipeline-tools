@@ -1,5 +1,7 @@
+import os
 import gradio as gr
 import pandas as pd
+from pathlib import Path
 from src.core.config import get_settings, update_last_entry
 from src.core.llm_service import LLMService
 from src.db.manager import DBManager
@@ -26,7 +28,7 @@ def render_playground_tab():
     # Discover initial table columns for placeholder hints
     initial_table_res = DBManager.get_table_data(initial_domain, initial_table, limit=1, lightweight=True)
     initial_cols = initial_table_res.get("columns", [])
-    initial_pills = ", ".join([f"`{{{c}}}`" for c in initial_cols]) if initial_cols else "*None*"
+    initial_pills = ", ".join([f"`{{{c}}}`" for c in initial_cols if c != "media_preview"]) if initial_cols else "*None*"
     initial_cols_text = f"💡 **Available Column Placeholders:** {initial_pills} | Standard: `{{file_name}}`, `{{content}}`, `{{rel_path}}`, `{{modality}}`, `{{file_size}}`"
 
     with gr.Column():
@@ -110,11 +112,27 @@ def render_playground_tab():
 
                 current_table_preview = gr.Dataframe(
                     headers=["file_name", "modality", "content", "file_size"],
+                    datatype=["str", "str", "str", "str"],
                     value=[],
                     interactive=False,
                     wrap=True,
                     max_height=260
                 )
+
+                # Media Inspector Drawer for selected row
+                with gr.Group(visible=False, elem_classes=["status-panel"]) as pg_media_inspector_group:
+                    with gr.Row():
+                        gr.Markdown("#### 🔬 Selected Record Media Inspector", scale=4)
+                        pg_close_inspector_btn = gr.Button("✖️ Close", size="sm", scale=1)
+
+                    with gr.Row():
+                        pg_inspector_image = gr.Image(label="🖼️ Image Preview", visible=False, scale=2, interactive=False)
+                        pg_inspector_audio = gr.Audio(label="🎵 Audio Playback", visible=False, scale=2, interactive=False)
+                        pg_inspector_video = gr.Video(label="🎬 Video Player", visible=False, scale=2, interactive=False)
+
+                        with gr.Column(scale=3):
+                            pg_inspector_details = gr.Markdown("*(Select a row in the table above to inspect full media & metadata)*")
+                            pg_inspector_content = gr.Textbox(label="📄 Extracted Content / Text", lines=6, visible=False, interactive=False)
 
                 gr.Markdown("---")
                 gr.Markdown("#### 🧪 Sample Test Results Preview")
@@ -180,15 +198,16 @@ def render_playground_tab():
             )
         
         cols = res.get("columns", [])
+        datatypes = res.get("datatypes", ["str"] * len(cols))
         data = res.get("data", [])
         total = res.get("total_rows", len(data))
-        mode_label = "⚡ Lightweight" if lightweight else "🔍 Full"
+        mode_label = "⚡ Lightweight" if lightweight else "🔍 Full Media"
         
         info_text = f"✅ **Table `{res.get('domain', domain)}.{res.get('table', table_name)}`** ({mode_label}) — Total Rows: **{total}** (showing first {len(data)})"
-        cols_pills = ", ".join([f"`{{{c}}}`" for c in cols]) if cols else "*None*"
+        cols_pills = ", ".join([f"`{{{c}}}`" for c in cols if c != "media_preview"]) if cols else "*None*"
         cols_text = f"💡 **Available Column Placeholders:** {cols_pills} | Standard: `{{file_name}}`, `{{content}}`, `{{rel_path}}`, `{{modality}}`, `{{file_size}}`"
         
-        return info_text, gr.update(headers=cols, datatype=["str"] * len(cols), value=data), cols_text
+        return info_text, gr.update(headers=cols, datatype=datatypes, value=data), cols_text
 
     def on_output_mode_change(selected_mode):
         is_single = (selected_mode == "📄 Single Target Column")
@@ -235,6 +254,55 @@ def render_playground_tab():
             update_last_entry(last_table=tbl_str)
             return load_table_preview(current_domain or "default", tbl_str, lightweight=is_lightweight)
         return "⚠️ Select a table name.", gr.update(headers=[], value=[]), "💡 **Available Column Placeholders:** *None*"
+
+    def on_select_preview_row(evt: gr.SelectData, domain, table_name):
+        """Populate Media Inspector in Data Enhancement tab when a table row is clicked."""
+        if not evt or evt.index is None:
+            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+
+        row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else 0
+        clean_dir = domain.strip() if domain else "default"
+        clean_tbl = table_name.strip() if table_name else "raw_assets"
+
+        res = DBManager.get_table_data(clean_dir, clean_tbl, limit=100, lightweight=False)
+        cols = res.get("columns", [])
+        data = res.get("data", [])
+
+        if row_idx >= len(data):
+            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+
+        row_dict = dict(zip(cols, data[row_idx]))
+        file_path = str(row_dict.get("file_path", ""))
+        file_name = str(row_dict.get("file_name", "Unknown File"))
+        modality = str(row_dict.get("modality", "")).lower()
+        file_type = str(row_dict.get("file_type", "")).lower()
+        content = str(row_dict.get("content", ""))
+        size = row_dict.get("file_size", "")
+
+        summary_lines = [
+            f"### 📄 **{file_name}**",
+            f"- **Modality:** `{modality}` | **Format:** `{file_type}` | **Size:** {size} bytes",
+            f"- **File Path:** `{file_path}`"
+        ]
+        for k, v in row_dict.items():
+            if k not in ["id", "file_name", "file_path", "rel_path", "modality", "file_type", "file_size", "content", "media_preview", "doc", "image", "audio", "video", "metadata", "created_at"] and v:
+                summary_lines.append(f"- **{k}:** {v}")
+
+        details_md = "\n".join(summary_lines)
+        file_exists = os.path.exists(file_path) if file_path else False
+        img_val = file_path if (modality == "images" or file_type in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"]) and file_exists else None
+        audio_val = file_path if (modality == "audio" or file_type in [".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"]) and file_exists else None
+        video_val = file_path if (modality == "video" or file_type in [".mp4", ".webm", ".mov", ".avi", ".mkv"]) and file_exists else None
+        has_content = bool(content and content.strip())
+
+        return (
+            gr.update(visible=True),
+            gr.update(value=img_val, visible=bool(img_val)),
+            gr.update(value=audio_val, visible=bool(audio_val)),
+            gr.update(value=video_val, visible=bool(video_val)),
+            details_md,
+            gr.update(value=content if has_content else "", visible=has_content)
+        )
 
     def on_test_sample(domain, table_name, provider, model, system_prompt, prompt_template, sample_count, output_mode,
                        progress=gr.Progress(track_tqdm=True)):
@@ -404,6 +472,17 @@ def render_playground_tab():
         fn=load_table_preview,
         inputs=[domain_dropdown, table_dropdown, preview_mode_toggle],
         outputs=[table_info_markdown, current_table_preview, available_columns_info]
+    )
+
+    current_table_preview.select(
+        fn=on_select_preview_row,
+        inputs=[domain_dropdown, table_dropdown],
+        outputs=[pg_media_inspector_group, pg_inspector_image, pg_inspector_audio, pg_inspector_video, pg_inspector_details, pg_inspector_content]
+    )
+
+    pg_close_inspector_btn.click(
+        fn=lambda: gr.update(visible=False),
+        outputs=[pg_media_inspector_group]
     )
     
     test_sample_btn.click(

@@ -1,6 +1,8 @@
+import os
 import gradio as gr
 import pandas as pd
 from typing import List
+from pathlib import Path
 from src.core.config import get_settings, update_last_entry
 from src.db.manager import DBManager
 from src.core.llm_service import LLMService
@@ -51,10 +53,26 @@ def render_tables_tab():
 
         data_view_table = gr.Dataframe(
             headers=["Column 1", "Column 2", "Column 3"],
+            datatype=["str", "str", "str"],
             value=[],
             interactive=False,
             wrap=True
         )
+
+        # Interactive Media Inspector Drawer (Opens when row is clicked)
+        with gr.Group(visible=False, elem_classes=["status-panel"]) as media_inspector_group:
+            with gr.Row():
+                gr.Markdown("#### 🔬 Selected Record Media Inspector", scale=4)
+                close_inspector_btn = gr.Button("✖️ Close Inspector", size="sm", scale=1)
+
+            with gr.Row():
+                inspector_image = gr.Image(label="🖼️ Image Preview", visible=False, scale=2, interactive=False)
+                inspector_audio = gr.Audio(label="🎵 Audio Playback", visible=False, scale=2, interactive=False)
+                inspector_video = gr.Video(label="🎬 Video Player", visible=False, scale=2, interactive=False)
+
+                with gr.Column(scale=3):
+                    inspector_details = gr.Markdown("*(Select a row in the table above to inspect full media & metadata)*")
+                    inspector_content = gr.Textbox(label="📄 Extracted Content / Text", lines=6, visible=False, interactive=False)
 
         gr.Markdown("---")
         with gr.Group(elem_classes=["status-panel"]):
@@ -161,15 +179,16 @@ def render_tables_tab():
             )
 
         cols = res.get("columns", [])
+        datatypes = res.get("datatypes", ["str"] * len(cols))
         data = res.get("data", [])
         total = res.get("total_rows", len(data))
-        mode_label = "⚡ Lightweight" if is_lightweight else "🔍 Full"
+        mode_label = "⚡ Lightweight" if is_lightweight else "🔍 Full Media"
 
         stats_text = f"✅ **Table `{res.get('domain', clean_dir)}.{res.get('table', clean_tbl)}`** ({mode_label}) — Displaying {len(data)} of {total} total rows.\nColumns: `{', '.join(cols)}`"
-        cols_pills = ", ".join([f"`{{{c}}}`" for c in cols]) if cols else "*None*"
+        cols_pills = ", ".join([f"`{{{c}}}`" for c in cols if c != "media_preview"]) if cols else "*None*"
         cols_text = f"💡 **Available Column Placeholders:** {cols_pills} | Standard: `{{domain}}`, `{{table}}`, `{{total_rows}}`, `{{table_context}}`"
-        
-        return stats_text, gr.update(headers=cols, datatype=["str"] * len(cols), value=data), cols_text
+
+        return stats_text, gr.update(headers=cols, datatype=datatypes, value=data), cols_text
 
     def on_domain_change(domain, limit, is_lightweight):
         if not domain:
@@ -179,7 +198,7 @@ def render_tables_tab():
         tables_list = DBManager.list_tables(clean_dir)
         if not tables_list:
             tables_list = ["raw_assets"]
-        
+
         curr_settings = get_settings()
         selected_tbl = curr_settings.last_table if curr_settings.last_table in tables_list else tables_list[0]
         stats_text, df_update, cols_text = on_load_table(clean_dir, selected_tbl, limit, is_lightweight)
@@ -201,6 +220,56 @@ def render_tables_tab():
     def on_export_mode_change(mode_selection):
         is_llm = "LLM" in mode_selection
         return gr.update(visible=is_llm), gr.update(visible=is_llm)
+
+    def on_select_table_row(evt: gr.SelectData, domain, table_name):
+        """Populate and display the Media Inspector drawer when a table row is clicked."""
+        if not evt or evt.index is None:
+            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+
+        row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else 0
+        clean_dir = domain.strip() if domain else "default"
+        clean_tbl = table_name.strip() if table_name else "raw_assets"
+
+        res = DBManager.get_table_data(clean_dir, clean_tbl, limit=100, lightweight=False)
+        cols = res.get("columns", [])
+        data = res.get("data", [])
+
+        if row_idx >= len(data):
+            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+
+        row_dict = dict(zip(cols, data[row_idx]))
+        file_path = str(row_dict.get("file_path", ""))
+        file_name = str(row_dict.get("file_name", "Unknown File"))
+        modality = str(row_dict.get("modality", "")).lower()
+        file_type = str(row_dict.get("file_type", "")).lower()
+        content = str(row_dict.get("content", ""))
+        size = row_dict.get("file_size", "")
+
+        summary_lines = [
+            f"### 📄 **{file_name}**",
+            f"- **Modality:** `{modality}` | **Format:** `{file_type}` | **Size:** {size} bytes",
+            f"- **File Path:** `{file_path}`"
+        ]
+        for k, v in row_dict.items():
+            if k not in ["id", "file_name", "file_path", "rel_path", "modality", "file_type", "file_size", "content", "media_preview", "doc", "image", "audio", "video", "metadata", "created_at"] and v:
+                summary_lines.append(f"- **{k}:** {v}")
+
+        details_md = "\n".join(summary_lines)
+
+        file_exists = os.path.exists(file_path) if file_path else False
+        img_val = file_path if (modality == "images" or file_type in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"]) and file_exists else None
+        audio_val = file_path if (modality == "audio" or file_type in [".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"]) and file_exists else None
+        video_val = file_path if (modality == "video" or file_type in [".mp4", ".webm", ".mov", ".avi", ".mkv"]) and file_exists else None
+        has_content = bool(content and content.strip())
+
+        return (
+            gr.update(visible=True),
+            gr.update(value=img_val, visible=bool(img_val)),
+            gr.update(value=audio_val, visible=bool(audio_val)),
+            gr.update(value=video_val, visible=bool(video_val)),
+            details_md,
+            gr.update(value=content if has_content else "", visible=has_content)
+        )
 
     def on_generate_export(
         domain, table_name, mode_selection, provider, model,
@@ -285,6 +354,17 @@ def render_tables_tab():
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
         outputs=[table_stats_markdown, data_view_table, available_columns_info]
+    )
+
+    data_view_table.select(
+        fn=on_select_table_row,
+        inputs=[domain_dropdown, table_dropdown],
+        outputs=[media_inspector_group, inspector_image, inspector_audio, inspector_video, inspector_details, inspector_content]
+    )
+
+    close_inspector_btn.click(
+        fn=lambda: gr.update(visible=False),
+        outputs=[media_inspector_group]
     )
 
     export_provider_dropdown.change(

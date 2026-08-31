@@ -267,6 +267,25 @@ class DBManager:
             }
 
     @classmethod
+    def format_media_preview_html(cls, file_path: str, modality: str = "", file_type: str = "") -> str:
+        """Format web-safe HTML preview element for image, audio, video, or doc file."""
+        if not file_path:
+            return ""
+        safe_path = str(file_path).replace("\\", "/")
+        mod = (modality or "").lower()
+        ext = (file_type or Path(file_path).suffix).lower()
+
+        if mod == "images" or ext in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".svg"]:
+            return f'<img src="/gradio_api/file={safe_path}" alt="media" style="max-height:64px; max-width:96px; border-radius:4px; object-fit:cover; vertical-align:middle; box-shadow:0 1px 3px rgba(0,0,0,0.12);" />'
+        elif mod == "audio" or ext in [".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"]:
+            return f'<audio controls src="/gradio_api/file={safe_path}" style="height:32px; width:160px; vertical-align:middle;"></audio>'
+        elif mod == "video" or ext in [".mp4", ".webm", ".mov", ".avi", ".mkv"]:
+            return f'<video controls src="/gradio_api/file={safe_path}" style="max-height:70px; max-width:120px; border-radius:4px; vertical-align:middle;"></video>'
+        elif ext == ".pdf" or mod == "docs":
+            return f'<a href="/gradio_api/file={safe_path}" target="_blank" style="text-decoration:none; padding:3px 8px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:4px; font-size:12px; font-weight:500;">📄 View PDF</a>'
+        return ""
+
+    @classmethod
     def get_table_data(cls, dir_name: str, table_name: str, limit: int = 50,
                        lightweight: bool = True) -> Dict[str, Any]:
         """Fetch rows from Pixeltable table for UI display with lightweight/full toggle."""
@@ -279,17 +298,17 @@ class DBManager:
         try:
             full_table_path = cls.resolve_table_path(dir_name, table_name)
             safe_dir, safe_tbl = full_table_path.split(".", 1)
-            
+
             table = pxt.get_table(full_table_path)
             df = table.limit(limit).collect().to_pandas()
-            
+
             display_cols = list(df.columns)
             if lightweight:
-                # Omit raw binary media handles from preview
-                heavy_cols = {"doc", "image", "audio", "video"}
+                # Omit raw binary media handles and HTML preview from lightweight view
+                heavy_cols = {"doc", "image", "audio", "video", "media_preview"}
                 display_cols = [c for c in display_cols if c not in heavy_cols]
                 df = df[display_cols]
-                
+
                 # Truncate long text columns to 250 chars for fast rendering
                 for col in df.columns:
                     if df[col].dtype == "object":
@@ -297,12 +316,39 @@ class DBManager:
                             lambda x: (str(x)[:250] + "...") if isinstance(x, str) and len(x) > 250 else (str(x) if x is not None else "")
                         )
             else:
+                # In Full Mode: Add media_preview HTML column and omit raw internal binary column pointers
+                heavy_cols = {"doc", "image", "audio", "video"}
+                display_cols = [c for c in display_cols if c not in heavy_cols]
+
+                if "file_path" in df.columns:
+                    mod_col = df["modality"] if "modality" in df.columns else [""] * len(df)
+                    type_col = df["file_type"] if "file_type" in df.columns else [""] * len(df)
+                    previews = [
+                        cls.format_media_preview_html(str(fp), str(mod), str(ft))
+                        for fp, mod, ft in zip(df["file_path"], mod_col, type_col)
+                    ]
+                    df["media_preview"] = previews
+
+                    # Reorder media_preview near the front for immediate visibility
+                    reordered = []
+                    for c in ["id", "file_name", "media_preview"]:
+                        if c in df.columns and c not in reordered:
+                            reordered.append(c)
+                    for c in display_cols:
+                        if c not in reordered and c in df.columns:
+                            reordered.append(c)
+                    df = df[reordered]
+
                 for col in df.columns:
-                    if df[col].dtype == "object":
+                    if col != "media_preview" and df[col].dtype == "object":
                         df[col] = df[col].apply(lambda x: str(x) if x is not None else "")
 
+            cols = list(df.columns)
+            datatypes = ["html" if c == "media_preview" else "str" for c in cols]
+
             return {
-                "columns": list(df.columns),
+                "columns": cols,
+                "datatypes": datatypes,
                 "data": df.fillna("").values.tolist(),
                 "total_rows": table.count(),
                 "domain": safe_dir,
@@ -311,6 +357,7 @@ class DBManager:
         except Exception as e:
             return {
                 "columns": [],
+                "datatypes": [],
                 "data": [],
                 "total_rows": 0,
                 "error": f"{type(e).__name__}: {str(e)}"

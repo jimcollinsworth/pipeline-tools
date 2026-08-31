@@ -363,6 +363,79 @@ class TestPipelineTools(unittest.TestCase):
         self.assertEqual(res.get("status"), "error")
         self.assertTrue(len(res.get("message", "")) > 0)
 
+    def test_format_media_preview_html(self):
+        """[Database] Verify DBManager.format_media_preview_html generates valid HTML tags for images, audio, video, and docs."""
+        img_html = DBManager.format_media_preview_html("C:/data/photo.jpg", modality="images", file_type=".jpg")
+        self.assertIn("<img", img_html)
+        self.assertIn("/gradio_api/file=C:/data/photo.jpg", img_html)
+
+        audio_html = DBManager.format_media_preview_html("C:/data/song.mp3", modality="audio", file_type=".mp3")
+        self.assertIn("<audio controls", audio_html)
+        self.assertIn("/gradio_api/file=C:/data/song.mp3", audio_html)
+
+        video_html = DBManager.format_media_preview_html("C:/data/clip.mp4", modality="video", file_type=".mp4")
+        self.assertIn("<video controls", video_html)
+        self.assertIn("/gradio_api/file=C:/data/clip.mp4", video_html)
+
+        doc_html = DBManager.format_media_preview_html("C:/data/doc.pdf", modality="docs", file_type=".pdf")
+        self.assertIn("<a href=", doc_html)
+        self.assertIn("View PDF", doc_html)
+
+    def test_get_table_data_lightweight_vs_full(self):
+        """[Database] Verify get_table_data toggles between fast text mode and full HTML media preview mode."""
+        if PIXELTABLE_AVAILABLE:
+            from PIL import Image
+            temp_img = Path("temp_test_img.jpg")
+            img = Image.new("RGB", (16, 16), color="blue")
+            img.save(temp_img)
+
+            try:
+                fake_files = [
+                    {
+                        "name": "temp_test_img.jpg",
+                        "abs_path": str(temp_img.resolve()),
+                        "rel_path": "temp_test_img.jpg",
+                        "modality": "images",
+                        "extension": ".jpg",
+                        "size_bytes": 1024,
+                        "size": "1 KB"
+                    },
+                    {
+                        "name": "sample_doc.md",
+                        "abs_path": str(Path("planning.md").resolve()),
+                        "rel_path": "planning.md",
+                        "modality": "docs",
+                        "extension": ".md",
+                        "size_bytes": 2048,
+                        "size": "2 KB"
+                    }
+                ]
+                DBManager.ingest_files(self.TEST_DOMAIN, "media_preview_test", fake_files, overwrite=True)
+
+                # 1. Lightweight mode: media_preview omitted, binary columns hidden
+                light_res = DBManager.get_table_data(self.TEST_DOMAIN, "media_preview_test", limit=5, lightweight=True)
+                self.assertNotIn("media_preview", light_res.get("columns", []))
+                self.assertNotIn("image", light_res.get("columns", []))
+                self.assertNotIn("doc", light_res.get("columns", []))
+
+                # 2. Full mode: media_preview present, datatypes contain 'html'
+                full_res = DBManager.get_table_data(self.TEST_DOMAIN, "media_preview_test", limit=5, lightweight=False)
+                self.assertIn("media_preview", full_res.get("columns", []))
+                self.assertIn("html", full_res.get("datatypes", []))
+                
+                # Verify media_preview contains <img> tag for image row
+                data_rows = full_res.get("data", [])
+                cols = full_res.get("columns", [])
+                preview_idx = cols.index("media_preview")
+                img_row = [r for r in data_rows if r[cols.index("file_name")] == "temp_test_img.jpg"][0]
+                self.assertIn("<img", img_row[preview_idx])
+            finally:
+                if temp_img.exists():
+                    try:
+                        temp_img.unlink()
+                    except Exception:
+                        pass
+
 
 
 class CleanTestResult(unittest.TestResult):

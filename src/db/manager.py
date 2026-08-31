@@ -428,15 +428,33 @@ class DBManager:
 
     @classmethod
     def generate_image_thumbnail_base64(cls, file_path: str, size: tuple = (64, 64)) -> str:
-        """Generate lightweight base64 thumbnail for instant, error-free inline table rendering."""
+        """Generate lightweight base64 thumbnail with low memory overhead."""
         if not file_path:
             return ""
         try:
             if not os.path.exists(file_path):
                 return ""
-            from PIL import Image
+            from PIL import Image, ImageOps
+            import base64
+            import io
             with Image.open(file_path) as img:
-                return cls.pil_to_base64_data_uri(img, size=size)
+                if hasattr(img, "draft"):
+                    try:
+                        img.draft("RGB", (size[0] * 2, size[1] * 2))
+                    except Exception:
+                        pass
+                img = ImageOps.exif_transpose(img)
+                img.thumbnail(size, Image.Resampling.BILINEAR)
+                buf = io.BytesIO()
+                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in getattr(img, "info", {})):
+                    img.save(buf, format="PNG")
+                    mime = "image/png"
+                else:
+                    img = img.convert("RGB")
+                    img.save(buf, format="JPEG", quality=70)
+                    mime = "image/jpeg"
+                b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+                return f"data:{mime};base64,{b64_str}"
         except Exception:
             return ""
 
@@ -477,15 +495,29 @@ class DBManager:
             safe_dir, safe_tbl = full_table_path.split(".", 1)
 
             table = pxt.get_table(full_table_path)
-            df = table.limit(limit).collect().to_pandas()
+            
+            # Inspect column names from table schema without fetching heavy data rows
+            available_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
+            
+            # CRITICAL: Exclude heavy raw binary media pointers ('image', 'doc', 'video', 'audio')
+            # from the database query to prevent loading 100s of MBs/GBs of uncompressed raw media into RAM.
+            heavy_binary_cols = {"doc", "image", "audio", "video"}
+            
+            if lightweight:
+                query_cols = [c for c in available_cols if c not in heavy_binary_cols and c not in {"thumbnail", "media_preview"}]
+            else:
+                # Full mode includes thumbnail if available, but excludes heavy binary columns
+                query_cols = [c for c in available_cols if c not in heavy_binary_cols and c != "media_preview"]
+
+            if query_cols:
+                query = table.select(*[table[c] for c in query_cols]).limit(limit)
+            else:
+                query = table.limit(limit)
+
+            df = query.collect().to_pandas()
 
             display_cols = list(df.columns)
             if lightweight:
-                # Omit raw binary media handles and HTML preview from lightweight view
-                heavy_cols = {"doc", "image", "audio", "video", "thumbnail", "media_preview"}
-                display_cols = [c for c in display_cols if c not in heavy_cols]
-                df = df[display_cols]
-
                 # Truncate long text columns to 250 chars for fast rendering
                 for col in df.columns:
                     if df[col].dtype == "object":
@@ -494,8 +526,8 @@ class DBManager:
                         )
             else:
                 # In Full Mode: Add media_preview HTML column and omit raw internal binary column pointers
-                heavy_cols = {"doc", "image", "audio", "video", "thumbnail"}
-                display_cols = [c for c in display_cols if c not in heavy_cols]
+                if "thumbnail" in df.columns:
+                    display_cols = [c for c in display_cols if c != "thumbnail"]
 
                 if "file_path" in df.columns:
                     mod_col = df["modality"] if "modality" in df.columns else [""] * len(df)

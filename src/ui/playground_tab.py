@@ -256,23 +256,35 @@ def render_playground_tab(tab=None):
             return load_table_preview(current_domain or "default", tbl_str, lightweight=is_lightweight)
         return "⚠️ Select a table name.", gr.update(headers=[], value=[]), "💡 **Available Column Placeholders:** *None*"
 
-    def on_select_preview_row(evt: gr.SelectData, domain, table_name):
-        """Populate Media Inspector in Data Enhancement tab when a table row is clicked."""
+    def on_select_preview_row(evt: gr.SelectData, current_df, domain, table_name):
+        """Populate Media Inspector in Data Enhancement tab when a table row is clicked without re-querying the database."""
         if not evt or evt.index is None:
             return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else 0
-        clean_dir = domain.strip() if domain else "default"
-        clean_tbl = table_name.strip() if table_name else "raw_assets"
 
-        res = DBManager.get_table_data(clean_dir, clean_tbl, limit=100, lightweight=False)
-        cols = res.get("columns", [])
-        data = res.get("data", [])
+        row_dict = {}
+        if hasattr(current_df, "iloc") and row_idx < len(current_df):
+            row_dict = current_df.iloc[row_idx].to_dict()
+        elif isinstance(current_df, list) and row_idx < len(current_df):
+            val = current_df[row_idx]
+            if isinstance(val, dict):
+                row_dict = val
+        elif isinstance(current_df, dict) and "data" in current_df:
+            headers = current_df.get("headers", [])
+            data_rows = current_df.get("data", [])
+            if row_idx < len(data_rows):
+                row_dict = dict(zip(headers, data_rows[row_idx]))
 
-        if row_idx >= len(data):
-            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        if not row_dict:
+            clean_dir = domain.strip() if domain else "default"
+            clean_tbl = table_name.strip() if table_name else "raw_assets"
+            res = DBManager.get_table_data(clean_dir, clean_tbl, limit=10, lightweight=False)
+            cols = res.get("columns", [])
+            data = res.get("data", [])
+            if row_idx < len(data):
+                row_dict = dict(zip(cols, data[row_idx]))
 
-        row_dict = dict(zip(cols, data[row_idx]))
         file_path = str(row_dict.get("file_path", ""))
         file_name = str(row_dict.get("file_name", "Unknown File"))
         modality = str(row_dict.get("modality", "")).lower()
@@ -477,7 +489,7 @@ def render_playground_tab(tab=None):
 
     current_table_preview.select(
         fn=on_select_preview_row,
-        inputs=[domain_dropdown, table_dropdown],
+        inputs=[current_table_preview, domain_dropdown, table_dropdown],
         outputs=[pg_media_inspector_group, pg_inspector_image, pg_inspector_audio, pg_inspector_video, pg_inspector_details, pg_inspector_content]
     )
 

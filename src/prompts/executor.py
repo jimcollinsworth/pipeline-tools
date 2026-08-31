@@ -113,8 +113,11 @@ class PromptExecutor:
         full_table_path = DBManager.resolve_table_path(table_dir, table_name)
         table = pxt.get_table(full_table_path)
         
-        # Collect sample rows as dicts
-        df = table.limit(sample_count).collect().to_pandas()
+        # Collect sample rows as dicts (excluding heavy binary columns from RAM)
+        available_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
+        query_cols = [c for c in available_cols if c not in {"image", "doc", "video", "audio"}]
+        query = table.select(*[table[c] for c in query_cols]) if query_cols else table
+        df = query.limit(sample_count).collect().to_pandas()
         records = df.to_dict(orient="records")
         total = len(records)
         
@@ -174,8 +177,10 @@ class PromptExecutor:
         full_table_path = DBManager.resolve_table_path(table_dir, table_name)
         table = pxt.get_table(full_table_path)
 
-        # Fetch rows
-        query = table
+        # Fetch rows (excluding heavy binary columns from RAM)
+        available_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
+        query_cols = [c for c in available_cols if c not in {"image", "doc", "video", "audio"}]
+        query = table.select(*[table[c] for c in query_cols]) if query_cols else table
         if limit:
             query = query.limit(limit)
         df = query.collect().to_pandas()

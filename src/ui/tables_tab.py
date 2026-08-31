@@ -221,23 +221,35 @@ def render_tables_tab(tab=None):
             return gr.update(), gr.update()
         return preset["system_prompt"], preset["prompt_template"]
 
-    def on_select_table_row(evt: gr.SelectData, domain, table_name):
-        """Populate and display the Media Inspector drawer when a table row is clicked."""
+    def on_select_table_row(evt: gr.SelectData, current_df, domain, table_name):
+        """Populate and display the Media Inspector drawer when a table row is clicked without re-querying the database."""
         if not evt or evt.index is None:
             return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else 0
-        clean_dir = domain.strip() if domain else "default"
-        clean_tbl = table_name.strip() if table_name else "raw_assets"
+        
+        row_dict = {}
+        if hasattr(current_df, "iloc") and row_idx < len(current_df):
+            row_dict = current_df.iloc[row_idx].to_dict()
+        elif isinstance(current_df, list) and row_idx < len(current_df):
+            val = current_df[row_idx]
+            if isinstance(val, dict):
+                row_dict = val
+        elif isinstance(current_df, dict) and "data" in current_df:
+            headers = current_df.get("headers", [])
+            data_rows = current_df.get("data", [])
+            if row_idx < len(data_rows):
+                row_dict = dict(zip(headers, data_rows[row_idx]))
 
-        res = DBManager.get_table_data(clean_dir, clean_tbl, limit=100, lightweight=False)
-        cols = res.get("columns", [])
-        data = res.get("data", [])
+        if not row_dict:
+            clean_dir = domain.strip() if domain else "default"
+            clean_tbl = table_name.strip() if table_name else "raw_assets"
+            res = DBManager.get_table_data(clean_dir, clean_tbl, limit=50, lightweight=False)
+            cols = res.get("columns", [])
+            data = res.get("data", [])
+            if row_idx < len(data):
+                row_dict = dict(zip(cols, data[row_idx]))
 
-        if row_idx >= len(data):
-            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-
-        row_dict = dict(zip(cols, data[row_idx]))
         file_path = str(row_dict.get("file_path", ""))
         file_name = str(row_dict.get("file_name", "Unknown File"))
         modality = str(row_dict.get("modality", "")).lower()
@@ -356,7 +368,7 @@ def render_tables_tab(tab=None):
 
     data_view_table.select(
         fn=on_select_table_row,
-        inputs=[domain_dropdown, table_dropdown],
+        inputs=[data_view_table, domain_dropdown, table_dropdown],
         outputs=[media_inspector_group, inspector_image, inspector_audio, inspector_video, inspector_details, inspector_content]
     )
 

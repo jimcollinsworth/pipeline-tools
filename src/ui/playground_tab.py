@@ -1,3 +1,26 @@
+"""
+Data Enhancement Tab (Prompt Workbench & Batch Execution Engine)
+================================================================
+This module renders the Data Enhancement workbench for testing and applying LLM prompts
+across Pixeltable datasets.
+
+Key Architectural Principles & Workflow:
+----------------------------------------
+1. Interactive Single-Row Preview (Fast Iteration):
+   - Allows users to select a sample row, customize prompt templates with dynamic `{column}`
+     placeholders, and test prompt generation instantly against Ollama or Gemini.
+2. Auto-Split JSON Column Generation:
+   - When enabled, the LLM is instructed to return structured JSON.
+   - Keys are parsed, scalar/nested types are inferred (`pxt.String`, `pxt.Int`, `pxt.Float`,
+     `pxt.Json`, `pxt.Bool`), and separate columns are dynamically created on the Pixeltable table.
+3. 1-Click Rollback / Undo:
+   - Each batch execution records the added columns into `DBManager._operation_history`.
+   - The user can cleanly undo the last batch run with 1 click, dropping the newly created columns.
+4. Decoupled WebSocket Event Listeners:
+   - `domain_dropdown.change` only updates `table_dropdown`.
+   - `table_dropdown.change` loads the table data once, preventing Svelte re-render loops.
+"""
+
 import os
 import gradio as gr
 import pandas as pd
@@ -8,6 +31,7 @@ from src.db.manager import DBManager
 from src.prompts.executor import PromptExecutor
 
 def render_playground_tab(tab=None):
+    """Render the Data Enhancement prompt workbench and batch execution tab."""
     settings = get_settings()
 
     # Discover initial domains and tables

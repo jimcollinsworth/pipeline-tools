@@ -1,3 +1,31 @@
+"""
+View & Export Tab (Pixeltable DataTable Viewer & AI Report Synthesis)
+=====================================================================
+This module renders the Data Viewing and AI Document Export workbench.
+
+Key UI & WebSocket Event Architecture Principles:
+-------------------------------------------------
+1. Decoupled Single-Responsibility Event Flow:
+   - CRITICAL LESSON / ANTIPATTERN TRIED:
+     If `domain_dropdown.change` or `tab.select` simultaneously updates downstream dropdown values
+     AND emits a full `gr.Dataframe` update, Gradio's reactive engine immediately triggers the
+     downstream `.change` handlers. This floods the WebSocket queue with 3-4 simultaneous DataFrame
+     re-render instructions for the same Svelte component, locking the browser UI thread in an
+     infinite loop (`processing | 8.2/0.5s`) until Chrome crashes with `Error code: Out of Memory`.
+   - THE FIX:
+     * `domain_dropdown.change` ONLY updates `table_dropdown` choices (`outputs=[table_dropdown]`).
+     * `table_dropdown.change` sequentially loads the table data once (`outputs=[stats, dataframe]`).
+     * `tab.select` ONLY synchronizes dropdown choices/values without blasting duplicate parallel queries.
+
+2. Zero-Query Interactive Row Selection:
+   - Clicking a table row passes the loaded `data_view_table` directly to `on_select_table_row`.
+   - Populates the Media Inspector drawer in 0ms from client memory with zero database queries.
+
+3. Zero-Memory Media Streaming:
+   - Image, audio, video, and PDF previews use direct `/gradio_api/file={safe_path}` streaming endpoints.
+   - Eliminates Python RAM bloat and allows the browser to cache and lazily load media on demand.
+"""
+
 import os
 import gradio as gr
 import pandas as pd
@@ -10,6 +38,7 @@ from src.export.exporter import MarkdownExporter
 
 
 def render_tables_tab(tab=None):
+    """Render the Pixeltable DataTables viewer, media inspector, and AI report exporter."""
     settings = get_settings()
 
     domains = DBManager.list_dirs()
@@ -340,19 +369,25 @@ def render_tables_tab(tab=None):
             gr.Error(f"Unexpected export exception: {str(e)}")
             yield f"### ❌ Export Error\n```\n{type(e).__name__}: {str(e)}\n```", "", None
 
-    # Wire event listeners
+    # -------------------------------------------------------------------------
+    # Wire Event Listeners (Decoupled Single-Responsibility Architecture)
+    # -------------------------------------------------------------------------
+    # Rule 1: Parent dropdown (domain_dropdown) only updates child dropdown choices.
+    # It does NOT directly update the DataFrame to prevent duplicate event cascades.
     domain_dropdown.change(
         fn=on_domain_change,
         inputs=[domain_dropdown],
         outputs=[table_dropdown]
     )
 
+    # Rule 2: Child dropdown (table_dropdown) sequentially loads the table data once.
     table_dropdown.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
         outputs=[table_stats_markdown, data_view_table, available_columns_info]
     )
 
+    # Rule 3: Parameter controls (limit slider & lightweight toggle) refresh the view on change.
     limit_slider.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
@@ -365,6 +400,8 @@ def render_tables_tab(tab=None):
         outputs=[table_stats_markdown, data_view_table, available_columns_info]
     )
 
+    # Rule 4: Zero-query row inspection. Passing data_view_table directly allows extracting
+    # the selected row in 0ms from client memory with zero database queries.
     data_view_table.select(
         fn=on_select_table_row,
         inputs=[data_view_table, domain_dropdown, table_dropdown],

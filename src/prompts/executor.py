@@ -1,3 +1,28 @@
+"""
+Prompt Execution Engine (LLM Batch Processing & Schema Generation)
+===================================================================
+This module executes prompt templates over Pixeltable dataset records, supporting both
+interactive single-row previews and full batch table enrichment.
+
+Key Features & Engineering Design:
+----------------------------------
+1. Unified Multi-Provider Routing:
+   - Routes generation requests dynamically to local Ollama or cloud Gemini models.
+   - Transparently passes media paths for multimodal vision/audio prompts.
+2. Robust JSON Extraction (`extract_json_payload`):
+   - Handles raw JSON, markdown-wrapped JSON code fences, and text with leading/trailing chatter.
+3. Auto-Split Column Type Inference (`infer_pixeltable_type`):
+   - Inspects parsed JSON values and dynamically maps them to native Pixeltable schema types:
+     * bool -> pxt.Bool
+     * int -> pxt.Int
+     * float -> pxt.Float
+     * list/dict -> pxt.Json
+     * string/other -> pxt.String
+4. Column Projection Invariant during Batch Runs:
+   - Queries avoid collecting heavy binary columns (`doc`, `image`, `video`, `audio`) into RAM,
+     ensuring batch processing runs smoothly across large (1,000+ row) datasets.
+"""
+
 import re
 import os
 import json

@@ -1,3 +1,24 @@
+"""
+Markdown & Document Export Engine (AI Report Synthesis & Preset Templates)
+==========================================================================
+This module powers document synthesis and Markdown report generation from Pixeltable tables.
+
+Key Architectural Principles & Design Decisions:
+------------------------------------------------
+1. Unified AI Synthesis (Eliminating Confusing UI Toggles):
+   - Design evolution: Replaced rigid "Direct Template" vs "LLM Synthesis" radio buttons with
+     a unified, intelligent AI synthesis engine.
+   - Users can provide standard prompt templates or choose from domain presets.
+2. Universal Context Interpolation:
+   - Supports `{table_context}`: Aggregates multi-row JSON records into a compact markdown
+     block for dataset-wide analysis.
+   - Supports `{domain}`, `{table}`, and `{total_rows}` dynamic metadata variables.
+   - Supports single-row `{column_name}` interpolation when running record-by-record reports.
+3. Clean File Persistence:
+   - Automatically sanitizes filenames, timestamps outputs, and saves them to the configured
+     `exports/` directory, returning clickable download paths.
+"""
+
 import os
 import re
 import datetime

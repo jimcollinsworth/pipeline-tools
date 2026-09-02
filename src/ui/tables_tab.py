@@ -236,13 +236,11 @@ def render_tables_tab(tab=None):
     def on_generate_export(
         domain, table_name, provider, model,
         max_rows, system_prompt, prompt_template, custom_filename,
-        progress=gr.Progress(track_tqdm=True)
+        progress=gr.Progress(track_tqdm=False)
     ):
         def cb(cur, total, msg):
             pct = cur / total if total else 0.5
             progress(pct, desc=msg)
-
-        yield f"⏳ **Synthesizing Markdown report for `{domain}.{table_name}` via [{provider}] '{model}'...**", "", None
 
         res = TablesController.handle_export_report(
             domain=domain,
@@ -258,10 +256,10 @@ def render_tables_tab(tab=None):
 
         if res["status"] == "success":
             gr.Info(f"AI report exported successfully: {res.get('file_name')}")
-            yield res["message"], res["content"], res["file_path"]
+            return res["message"], res["content"], res["file_path"]
         else:
             gr.Error("Export failed")
-            yield res["message"], "", None
+            return res["message"], "", None
 
     # -------------------------------------------------------------------------
     # Wire Event Listeners (Decoupled Single-Responsibility Architecture)

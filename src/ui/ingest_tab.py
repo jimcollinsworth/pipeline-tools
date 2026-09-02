@@ -139,7 +139,7 @@ def render_ingest_tab(tab=None):
         selected_tbl = curr_settings.last_table if curr_settings.last_table in tables_list else tables_list[0]
         return gr.update(choices=tables_list, value=selected_tbl)
 
-    def on_scan(path_str, modalities, recursive, progress=gr.Progress(track_tqdm=True)):
+    def on_scan(path_str, modalities, recursive, progress=gr.Progress(track_tqdm=False)):
         def cb(pct, desc):
             progress(pct, desc=desc)
 
@@ -164,17 +164,14 @@ def render_ingest_tab(tab=None):
             gr.update(choices=res["directory_choices"])
         )
 
-    def on_ingest(files_data, domain, table_name, overwrite, progress=gr.Progress(track_tqdm=True)):
+    def on_ingest(files_data, domain, table_name, overwrite, progress=gr.Progress(track_tqdm=False)):
         if not files_data:
             gr.Warning("No scanned files to ingest. Scan a directory first.")
-            yield "### ⚠️ No Files to Ingest\n> Please scan a directory containing documents/media first."
-            return
+            return "### ⚠️ No Files to Ingest\n> Please scan a directory containing documents/media first."
 
         def cb(cur, total, detail):
             pct = (cur / total) if total else 0.5
             progress(pct, desc=detail)
-
-        yield f"⏳ **Ingestion Started...** Target: `{domain}.{table_name}` for {len(files_data)} files..."
 
         res = IngestController.ingest_files_flow(
             domain=domain,
@@ -189,7 +186,7 @@ def render_ingest_tab(tab=None):
         else:
             gr.Error("Ingestion encountered an issue.")
 
-        yield res["message"]
+        return res["message"]
 
     dir_input.change(
         fn=on_dir_change,

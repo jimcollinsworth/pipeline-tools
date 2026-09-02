@@ -121,7 +121,21 @@ body, gradio-app, .gradio-container {
     min-height: 70px !important;
 }
 .progress-level {
-    margin-bottom: 12px !important;
+    margin-bottom: 8px !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+}
+.progress-level-inner {
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+.meta-text {
+    font-size: 0.8rem !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }
 
 /* Regular, Clean Interactive Buttons */

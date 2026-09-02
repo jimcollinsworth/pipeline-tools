@@ -257,7 +257,7 @@ def render_playground_tab(tab=None):
         )
 
     def on_test_sample(domain, table_name, provider, model, system_prompt, prompt_template, sample_count, output_mode,
-                       progress=gr.Progress(track_tqdm=True)):
+                       progress=gr.Progress(track_tqdm=False)):
         if not domain or not table_name:
             gr.Warning("Domain and Table selection required.")
             return gr.update(headers=["Error"], value=[["Domain and Table selection required."]])
@@ -328,15 +328,13 @@ def render_playground_tab(tab=None):
 
     def on_commit_batch(domain, table_name, provider, model, system_prompt, prompt_template,
                         output_mode, target_col, mode, limit_num, is_lightweight,
-                        progress=gr.Progress(track_tqdm=True)):
+                        progress=gr.Progress(track_tqdm=False)):
         if not domain or not table_name:
             gr.Warning("Select a valid Domain and Table first.")
-            yield "### ⚠️ Missing Target\n> Select a valid Domain and Table before running batch execution.", gr.update(), gr.update(), gr.update()
-            return
+            return "### ⚠️ Missing Target\n> Select a valid Domain and Table before running batch execution.", gr.update(), gr.update(), gr.update()
         if not model:
             gr.Warning("Select a valid model first.")
-            yield f"### ⚠️ Missing Model\n> Select a valid {provider} model before running batch execution.", gr.update(), gr.update(), gr.update()
-            return
+            return f"### ⚠️ Missing Model\n> Select a valid {provider} model before running batch execution.", gr.update(), gr.update(), gr.update()
 
         limit_val = int(limit_num) if limit_num and int(limit_num) > 0 else None
         clean_dir = domain.strip()
@@ -352,10 +350,6 @@ def render_playground_tab(tab=None):
             last_system_prompt=system_prompt,
             last_user_prompt=prompt_template
         )
-
-        limit_desc = f" (Limit: {limit_val} rows)" if limit_val else " (All rows)"
-        mode_desc = "Auto-Splitting JSON Keys" if is_auto_split else f"Single Column `{clean_col}`"
-        yield f"⏳ **[1/2] Initializing Batch Execution ({mode_desc})...** Running [{provider}] `{model}` on `{clean_dir}.{clean_tbl}`{limit_desc}...", gr.update(), gr.update(), gr.update()
 
         def cb(cur, total, detail):
             pct = (cur / total) if total else 0.5
@@ -388,18 +382,17 @@ def render_playground_tab(tab=None):
                     f"- **Operation:** `{mode.upper()}` mode\n"
                 )
                 gr.Info(f"Batch completed: {res.get('rows_processed', 0)} rows updated!")
-                # Refresh table view and available columns
                 info_text, df_update, cols_text = load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
-                yield status_msg, info_text, df_update, cols_text
+                return status_msg, info_text, df_update, cols_text
             else:
                 err_msg = res.get("message", "Unknown error during batch execution")
                 gr.Error(f"Batch execution failed: {err_msg}")
-                yield f"### ❌ Batch Execution Failed\n```\n{err_msg}\n```", gr.update(), gr.update(), gr.update()
+                return f"### ❌ Batch Execution Failed\n```\n{err_msg}\n```", gr.update(), gr.update(), gr.update()
 
         except Exception as e:
             err_msg = f"{type(e).__name__}: {str(e)}"
             gr.Error(f"Batch execution exception: {err_msg}")
-            yield f"### ❌ Batch Execution Error\n```\n{err_msg}\n```", gr.update(), gr.update(), gr.update()
+            return f"### ❌ Batch Execution Error\n```\n{err_msg}\n```", gr.update(), gr.update(), gr.update()
 
     # Wire event listeners
     provider_dropdown.change(

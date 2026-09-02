@@ -335,12 +335,24 @@ class MarkdownExporter:
             row_prompt = cls.format_row_template(row, prompt_template)
             row_prompt = row_prompt.replace("{domain}", clean_dir).replace("{table}", clean_tbl)
 
+            # If template has no placeholders, automatically append record context
+            has_placeholders = any(f"{{{k}}}" in prompt_template for k in row.keys())
+            if not has_placeholders:
+                row_context = "\n".join([f"- **{k}:** {v}" for k, v in row.items() if v and k != "media_preview"])
+                row_prompt = f"{row_prompt}\n\n### Record Data:\n{row_context}"
+
+            effective_sys = system_prompt.strip() if system_prompt and system_prompt.strip() else (
+                "You are an AI synthesis assistant. Output clean, concise GitHub-flavored Markdown. "
+                "Do not generate heavy raw HTML, inline CSS, or SVG code. "
+                "Embed images using standard Markdown syntax: `![Caption](path)`."
+            )
+
             try:
                 llm_output = LLMService.generate(
                     provider=provider,
                     model=target_model,
                     prompt=row_prompt,
-                    system=system_prompt
+                    system=effective_sys
                 )
             except Exception as e:
                 llm_output = f"> Warning: LLM generation failed for `{file_name}`: {str(e)}"

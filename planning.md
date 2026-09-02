@@ -164,6 +164,35 @@ flowchart TD
     - **Dashboard / Review**: Responsive touch-optimized reader, media inspector, and export viewer on tablet/phone screens.
     - **Multimodal Ingestion Source**: Use mobile device camera, microphone, and file picker to capture and stream real-world assets (field photos, voice memos, documents) directly into the desktop's Pixeltable repository in real time.
 
+### Phase 7: App Publication, Community Launch & Developer Blog Strategy (`RES-18`)
+- [ ] **1. Closed Beta Test User Program**
+  - **Cohort Selection**: Recruit 5–10 initial test users (developers, researchers, knowledge workers processing local document/media archives).
+  - **Onboarding Guide & Friction Log**: Provide a clean 1-command startup workflow (`uv run gradio app.py` or standalone runner), curated sample datasets (mixed PDFs, images, Markdown), and a structured friction log.
+  - **Telemetry & Feedback Triage**: Gather qualitative UX feedback on the workbench workflow (Ingestion -> Data Enhancement -> View & Export) and stress-test performance across diverse hardware/OS environments (macOS M-series, Windows, Linux).
+- [ ] **2. PyPI Packaging & Distribution (`pip install pipeline-tools`)**
+  - **Package Metadata & Build Config**: Configure `pyproject.toml` with standard PEP 517/621 build tools (Hatchling or Flit), proper project URLs, keywords, classifiers (`Framework :: Gradio`), and CLI entrypoints (`pipeline-tools = "app:main"`).
+  - **Dependency Isolation & Stability**: Adhere to `managing-python-dependencies` rules — ensure core dependencies are bounded, development tools are isolated into optional extras, and installation works seamlessly via `pip` and modern `uv tool install` / `uvx pipeline-tools`.
+  - **Clean Environment Verification**: Smoke test package installations in isolated virtual environments on Windows, Linux, and macOS to verify embedded PostgreSQL binaries and native C/Rust dependencies initialize without compilation errors.
+- [ ] **3. Developer Blog Technical Deep-Dive (Primary Anchor)**
+  - **Core Article**: In-depth architectural case study published on the developer blog: *"Building a Local-First Multimodal AI Workbench: Why I Paired Pixeltable with Gradio"*.
+  - **Narrative Arc & Structure**:
+    - *The Problem*: Fragmented multimodal ETL across messy folders, ad-hoc Python scripts, and heavyweight cloud vector DBs.
+    - *Declarative Data Engine*: Why Pixeltable replaces custom chunking/lineage code with unified declarative multimodal tables and persistent embedded PostgreSQL.
+    - *Gradio 6.0 UI Architecture*: Decoupling controllers (`src/controllers/`) to eliminate Svelte WebSocket re-render loops; zero-memory media streaming via `/gradio_api/file=`.
+    - *War Stories & Technical Lessons*: Windows embedded Postgres PID lock contention, dynamic auto-split schema inference from LLM JSON, and 1-click lineage rollbacks.
+    - *Local Privacy & Multi-Provider Routing*: Local zero-cost inference with Ollama alongside cloud scaling with Gemini.
+- [ ] **4. Hacker News Launch ("Show HN")**
+  - **Submission Title**: `Show HN: Pipeline Tools – Local-first multimodal AI workbench (Pixeltable + Gradio + Ollama)`
+  - **Show HN Post**: Origin story, concise architecture summary, link to GitHub repository, live interactive demo / screen capture, and explanation of the declarative multimodal ETL paradigm.
+  - **Technical Discussion**: Actively engage in comments addressing data privacy, embedded database mechanics, and how declarative table lineage compares to traditional LangChain / LlamaIndex pipelines.
+- [ ] **5. X / Twitter Announcement Thread**
+  - **Multimedia Demos**: Fast-paced 15–30s screen recording showing:
+    1. Ingesting a mixed folder of documents and images in 1 click.
+    2. Prompt iteration on sample rows with dynamic `{column}` placeholders.
+    3. Auto-splitting LLM structured JSON output into new database columns with 1-click Undo.
+    4. Generating synthesized Markdown dossiers and per-row sidecars (`_meta.md`) with embedded photos.
+  - **Community Tagging**: Tag `@Gradio`, `@Pixeltable`, and `@Ollama` teams; link back to the developer blog post, GitHub repository, and quickstart guide.
+
 ---
 
 ## 3. Issues & Research Items
@@ -187,3 +216,4 @@ flowchart TD
 | RES-15 | Visual Touch-Based Column Selection & Views | Open | Direct visual pill column toggling, LLM-assisted prompt chip insertion, and Pixeltable declarative filtered view projections. |
 | RES-16 | Cross-Platform Packaging & Distribution (Pip / Standalone / uvx) | Open | Evaluate PyPI/`uv tool`, PyInstaller desktop standalone, Docker containerization, and Tauri wrapper to bundle Python + embedded PostgreSQL cleanly across OSes. |
 | RES-17 | Remote Hosting, Mobile/Tablet Companion & Local-Connect Tunnel | Open | Overcome embedded PostgreSQL mobile limitation via Antigravity-style desktop local-connect (Tailscale / Cloudflare Tunnel / Gradio Share); tablet/phone acts as review dashboard and direct camera/media ingestion source. |
+| RES-18 | App Publication, Community Launch & Developer Blog Strategy | Open | Multi-channel launch plan: closed beta test user cohort, PyPI/`pip` packaging with `uvx` support, Show HN submission, X/Twitter demo thread, and comprehensive technical deep-dive blog post. |

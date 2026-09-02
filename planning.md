@@ -76,13 +76,14 @@ flowchart TD
   - Toggle between fast text-only **⚡ Lightweight Mode** and **🔍 Full Media Mode** across View & Export and Data Enhancement tabs.
   - In Full Mode, table cells render inline HTML thumbnails (`<img>`), audio players (`<audio>`), video players (`<video>`), and document badges (`[PDF]`).
   - Selecting any row in the table opens the **🔬 Selected Record Media Inspector** drawer below the table with full-size image, audio, video, extracted text, and metadata.
-- [ ] **Decouple UI Event Handlers into Testable Controllers**
+- [x] **Decouple UI Event Handlers into Testable Controllers**
   - Refactor inner closure handlers in `src/ui/` into pure controller functions (`src/controllers/` or module-level helpers).
   - Enable 100% unit test coverage of UI workflows without requiring Gradio web server initialization.
-- [ ] **Reassess Playwright for Automated Headless Browser Testing**
-  - Re-evaluate introducing `playwright` (`pytest-playwright`) for automated headless browser E2E testing against `http://127.0.0.1:7860`.
-  - Compare speed, CI automation, and maintenance overhead against Chrome DevTools MCP and pure Python controller tests.
-  - Key criteria: Execution speed (~1-2s headless script vs ~30-90s subagent), zero-dependency constraints, and rich JavaScript DOM/cascade testing.
+- [ ] **Automated UI Test Verification & Real-Time Browser Testing Architecture**
+  - Design an automated, non-disruptive UI testing and walkthrough verification framework (reassessing Playwright / DevTools MCP integration).
+  - Architect real-time visual inspection capabilities vs. headless reporting so test output does not disrupt interactive user workflows.
+  - Establish fast, deterministic UI sanity checks across all workbench tabs with automated screenshot capture and DOM assertion hooks.
+
 
 ### Phase 3: Pixeltable Lineage, Undo & Multimodal Extensions (Planned)
 - [x] **Pixeltable Lineage & 1-Click 'Undo Last Operation' Architecture**

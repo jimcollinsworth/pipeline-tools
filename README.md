@@ -1,6 +1,6 @@
-# Pipeline Tools: Multimodal Ingestion, Prompt Workbench & Export Engine
+# Pipeline Tools v1.1: Multimodal Ingestion, Prompt Workbench & Export Engine
 
-A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and **Gradio**. Ingest directories of documents, images, audio, and video; test and iterate on LLM extraction/summarization prompts on sample rows; execute scalable batch runs with automatic dependency caching; and export enriched metadata to sidecars (.meta.yaml), CSVs, and Markdown reports.
+A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and **Gradio**. Ingest directories of documents, images, audio, and video; test and iterate on LLM extraction/summarization prompts on sample rows; execute scalable batch runs with automatic dependency caching; and export enriched metadata to per-row sidecars (`_meta.md`), CSVs, and synthesized Markdown reports.
 
 ---
 
@@ -22,10 +22,14 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 - **1-Click Lineage Undo & Safe Database Management**:
   - **↩️ 1-Click Undo**: Instantly drops newly added LLM columns (including auto-split columns) and rolls back table schema without touching raw ingested assets.
   - **🗑️ Safe Deletion**: 2-step confirmation drawers for dropping individual tables or entire domains with on-screen summary cards and logging.
-- **Unified AI-Driven Markdown Report Generation (View & Export)**:
-  - Synthesize multi-row table data into cohesive Markdown documents using Ollama or Gemini with full `{table_context}` interpolation.
-  - 4 Task-oriented presets: *Entity & Keyword Intelligence*, *Visual & Scene Breakdown*, *Thematic Summary & Patterns*, and *Structured Media Catalog*.
+- **Dual Export Strategies & Live Streaming Previews (View & Export)**:
+  - **📄 Single Document Synthesis**: Aggregates multi-row dataset context into one structured Markdown briefing, intelligence dossier, or media catalog (`exports/{domain}_{table}_report_{timestamp}.md`).
+  - **🗂️ Per-Row Sidecars (`_meta.md`)**: Executes one LLM call per row to produce rich, standalone sidecar documents (`exports/{source_stem}_meta.md`) with clean YAML frontmatter, automatic row-specific image embedding (`![photo](file_path)`), and continuous real-time preview updates in the browser.
+  - **Task-Oriented Presets**: *📰 Newspaper Story & Embedded Photo*, *Entity & Keyword Intelligence*, *Visual & Scene Breakdown*, *Thematic Summary & Patterns*, and *Structured Media Catalog*.
   - Live in-browser Markdown preview and instant 1-click file download from `exports/`.
+- **Decoupled Controller Layer**:
+  - Strict separation of concerns between Gradio UI tab views (`src/ui/`) and pure business logic controllers (`src/controllers/`): `IngestController`, `PlaygroundController`, and `TablesController`.
+  - Enables direct, isolated unit testing of database operations, file scans, prompt execution, and exports without browser server overhead.
 - **Multi-Provider AI Engine**:
   - **Local Ollama**: Fast, zero-cost local LLMs (`llama3.2`, `mistral`, `qwen2.5-coder`, `deepseek-r1`).
   - **Google Gemini API**: Native cloud model discovery prioritizing the **Gemini 3.7** and **Gemini 3.0** model families with structured output.
@@ -102,7 +106,8 @@ Open your browser at `http://127.0.0.1:7860`.
    - Inspect stored data, column values, and newly added LLM output columns.
    - Toggle **⚡ Lightweight Preview** off to view embedded HTML image thumbnails, audio players, and video widgets.
    - Click any row to open the **🔬 Selected Record Media Inspector** drawer for full-resolution preview.
-   - Configure prompt-driven Markdown exports (*Entity Intelligence*, *Visual Breakdown*, *Thematic Summary*, *Structured Catalog*).
+   - Select export strategy: **📄 Single Document Synthesis** (aggregates all records) or **🗂️ Per-Row Sidecars (_meta.md)** (1 LLM call per row with auto-embedded media and live streaming preview).
+   - Choose from 5 presets (*Newspaper Story*, *Entity Intelligence*, *Visual Breakdown*, *Thematic Summary*, *Structured Catalog*) or compose custom prompts.
    - Save directly to `exports/` with live UI preview and instant download.
    - Safely delete tables or entire domains using the confirmation drawers.
 
@@ -122,13 +127,17 @@ Open your browser at `http://127.0.0.1:7860`.
   - In-table HTML media thumbnails, audio/video players, and interactive Media Inspector drawer.
   - 1-Click Lineage Undo and safe table/domain deletion workflows.
   - Unified AI Markdown report export engine with `{table_context}` interpolation.
-- [ ] **Phase 3: Lineage, Controller Decoupling & Multimodal Extensions**
-  - Decouple UI event handlers into testable pure controllers (`src/controllers/`).
-  - Hugging Face model hub & Ultralytics YOLO vision classification engines (e.g. WikiArt 27-movement painting classifier) with dynamic table auto-split columns.
+- [x] **Phase 3: Controller Decoupling & Dual Export Strategies (v1.1)**
+  - Decoupled Gradio UI event handlers into testable pure controllers (`src/controllers/`).
+  - Dual Export Strategies: Single Synthesis vs. Per-Row Sidecars (`{source_stem}_meta.md`) with continuous live preview streaming.
+  - Binary media validation safeguards preventing table insertion errors on missing files.
+  - Expanded automated test suite to 38 tests (`38 Passed, 0 Failed, 0 Errors`).
+- [ ] **Phase 4: Multimodal Vision & Entity Classification Engines**
+  - GLiNER zero-shot Named Entity Recognition (`urchade/gliner`) for fast, hallucination-free entity extraction.
+  - Hugging Face model hub & Ultralytics YOLO vision classification engines (e.g. WikiArt 27-movement classifier).
   - Mobile / tablet responsive UI design (`@media (max-width: 768px)`).
-  - Multi-branch version history and table revision timeline.
-- [ ] **Phase 4: Dynamic Ingestion Context, Skills Integration & Document Reader**
-  - Stateful dynamic context accumulation across multi-row ingestion for entity deduplication and learned dataset intelligence (`domain-table-ingestion-context.md`).
+- [ ] **Phase 5: Dynamic Ingestion Context, Skills Integration & Document Reader**
+  - Stateful dynamic context accumulation across multi-row ingestion (`domain-table-ingestion-context.md`).
   - Project skills integration with in-prompt `/` slash command discovery from `.agents/skills/`.
   - Single-record rich Markdown Document Reader with collapsible sections, theme selectors, and embedded Mermaid diagrams.
   - Touch-friendly visual column pill toggles and LLM-assisted prompt chip insertion.

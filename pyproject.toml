@@ -1,6 +1,6 @@
 [project]
 name = "pipeline-tools"
-version = "0.1.0"
+version = "1.1.0"
 description = "Multimodal Ingestion, Prompt Workbench & Export Engine"
 readme = "README.md"
 requires-python = ">=3.10"

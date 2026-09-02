@@ -1,4 +1,4 @@
-# Pipeline Tools Planning & Tracking
+# Pipeline Tools v1.1 Planning & Tracking
 
 Project: Multimodal Asset Processing, Prompt Workbench & Export Engine  
 Primary Technologies: **Pixeltable**, **Gradio**, **PyMuPDF / Document Parsers**, **LLM APIs (OpenAI, Anthropic, Gemini, Ollama)**
@@ -85,12 +85,25 @@ flowchart TD
   - Establish fast, deterministic UI sanity checks across all workbench tabs with automated screenshot capture and DOM assertion hooks.
 
 
-### Phase 3: Pixeltable Lineage, Undo & Multimodal Extensions (Planned)
+### Phase 3: Pixeltable Lineage, Controller Decoupling & Dual Export (v1.1 - Complete)
 - [x] **Pixeltable Lineage & 1-Click 'Undo Last Operation' Architecture**
   - Instant 1-click **↩️ Undo Last Operation** button on Data Enhancement and View & Export tabs.
   - Automatically reverts newly added LLM columns (dropping auto-split and single columns) and restores baseline schema.
   - Safe 2-step **🗑️ Delete Table** and **⚠️ Delete Domain & All Tables** buttons with confirmation drawers, on-screen status summaries, and detailed logging.
   - Comprehensive unit tests in `tests/test_app.py` verifying column dropping, table dropping, and domain teardown.
+- [x] **Decoupled Controller Layer (`src/controllers/`)**
+  - Extracted all UI event logic into three pure, testable controllers: `IngestController`, `PlaygroundController`, and `TablesController`.
+  - Added 9 dedicated controller test methods in `tests/test_controllers.py` testing validation, scan aggregation, model discovery, and exports without Gradio server overhead.
+- [x] **Dual Export Strategies & Per-Row Sidecars (`_meta.md`)**
+  - Implemented dual export pipelines in `MarkdownExporter` and `TablesController`:
+    - **Single Document Synthesis**: Aggregates multi-row dataset context into one structured Markdown briefing or catalog (`exports/{domain}_{table}_report_{timestamp}.md`).
+    - **Per-Row Sidecars**: Executes 1 LLM call per row to produce standalone sidecar documents (`exports/{source_stem}_meta.md`) with clean YAML frontmatter and automatic image embedding (`![photo](file_path)`).
+  - Added *Newspaper Story & Embedded Photo* preset with journalist framing.
+  - Continuous live row-by-row streaming preview in the UI using Python generators.
+  - Added binary media safeguards in `DBManager.ingest_files` to prevent table insertion errors on missing files.
+  - Verified with 38 unit tests (`38 Passed, 0 Failed, 0 Errors`).
+
+### Phase 4: Multimodal Vision & Entity Classification Engines (Planned)
 - [ ] **Hugging Face & YOLO Vision Classification Engines**
   - Integrate Ultralytics YOLO classifiers (e.g., `keremberke/yolov8m-painting-classification`) and Hugging Face vision models alongside Ollama/Gemini.
   - Full 27-class art taxonomy classification:
@@ -111,7 +124,7 @@ flowchart TD
   - Implement mobile-friendly viewport breakpoints (`@media (max-width: 768px)`).
   - Single-column stacked layouts, touch-friendly tap targets ($\ge 44\text{px}$), and adaptive table views (horizontal scroll cards / compact summary cards) for phone and tablet screens.
 
-### Phase 4: Dynamic Ingestion Context, Skills Integration, Document Reader & Newspaper UX (Planned)
+### Phase 5: Dynamic Ingestion Context, Skills Integration, Document Reader & Newspaper UX (Planned)
 - [ ] **Dynamic Ingestion Context & State Accumulation (`RES-12`)**
   - **Dynamic Cross-Row Memory**: Inject accumulated context into multi-row batch ingestion and prompt pipelines so the system 'learns' as it ingests each row.
   - **Deduplication & Entity Normalization**: Leverage previous row entity spellings, discovered taxonomies, and cross-document relationships to resolve entity ambiguities and maintain uniform naming.

@@ -262,11 +262,11 @@ code {
 """
 
 def create_app():
-    with gr.Blocks(title="Pipeline Tools", fill_width=True) as demo:
+    with gr.Blocks(title="Pipeline Tools v1.1", fill_width=True) as demo:
         gr.Markdown(
             """
             <div class="app-header">
-                <h1>PIPELINE TOOLS // Multimodal Workbench</h1>
+                <h1>PIPELINE TOOLS v1.1 // Multimodal Workbench</h1>
                 <p>Declarative Ingestion (Pixeltable) • Data Enhancement (Ollama / Gemini) • View & Export</p>
             </div>
             """

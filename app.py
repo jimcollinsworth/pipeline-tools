@@ -260,6 +260,7 @@ def create_app():
         
         with gr.Tabs():
             with gr.Tab("Ingestion & Scanner") as ingest_tab:
+                print("  [1/4] Initializing Ingestion & Scanner tab...", flush=True)
                 render_ingest_tab(tab=ingest_tab)
                 
             with gr.Tab("Data Enhancement") as playground_tab:

@@ -97,6 +97,12 @@ flowchart TD
     `['Abstract_Expressionism', 'Action_painting', 'Analytical_Cubism', 'Art_Nouveau_Modern', 'Baroque', 'Color_Field_Painting', 'Contemporary_Realism', 'Cubism', 'Early_Renaissance', 'Expressionism', 'Fauvism', 'High_Renaissance', 'Impressionism', 'Mannerism_Late_Renaissance', 'Minimalism', 'Naive_Art_Primitivism', 'New_Realism', 'Northern_Renaissance', 'Pointillism', 'Pop_Art', 'Post_Impressionism', 'Realism', 'Rococo', 'Romanticism', 'Symbolism', 'Synthetic_Cubism', 'Ukiyo_e']`
   - Output structured JSON predictions (`painting_style`, `confidence`, `style_probabilities`) with automatic column creation via the Auto-Split engine.
   - Selectable as an AI / Vision engine in Data Enhancement with dry-run sample testing and batch table execution.
+- [ ] **GLiNER Zero-Shot Named Entity Recognition (`urchade/gliner`)**
+  - Integrate [GLiNER](https://github.com/urchade/GLiNER) (Generalist and Lightweight Model for Named Entity Recognition) as a specialized, ultra-fast data enhancement engine.
+  - Enables arbitrary zero-shot entity extraction (e.g. `person`, `organization`, `location`, `date`, `artwork`, `camera_model`, `product`) without prompt engineering or LLM hallucinations.
+  - Native integration with Pixeltable via custom User Defined Functions (`@pxt.udf`) or direct Hugging Face transformer pipeline.
+  - Automatically unpacks extracted entity categories and text spans into dedicated structured columns via the dynamic auto-split engine.
+  - High-throughput batch CPU/GPU inference (~100x faster and cheaper than full LLM generation for entity tagging).
 - [ ] **Mobile & Tablet App Support & Cloud Serving**
   - Architecture options for remote mobile/tablet client access to Pipeline Tools.
   - Mitigate embedded PostgreSQL mobile limitation by deploying the Gradio + Pixeltable server to cloud/container hosts with persistent volumes (or remote managed Postgres) while serving a progressive web UI to mobile clients.

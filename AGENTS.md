@@ -48,7 +48,7 @@ This document defines core conventions, toolchain rules, architecture patterns, 
 - **No Unauthorized Framework Switches or Upgrades**:
   - Updating, upgrading, or switching framework components is **never allowed** during normal coding.
   - Only consider upgrades or alternatives when explicitly requested to perform deep design, architecture work, or explore alternatives.
-
+  **NEVER** use introspection of private interfaces to determine apis/functions, look up current skills and online api reference for the currently used versions
 ---
 
 ## 🎨 4. UI / UX Standards (Gradio)

@@ -88,11 +88,26 @@ class TestPipelineTools(unittest.TestCase):
         self.assertEqual(files, [])
 
     def test_gradio_app_initialization(self):
-        """[UI] Verify Gradio Workbench Block component initializes without errors."""
+        """[UI] Verify Gradio Workbench Block component initializes and all event callbacks have resolved globals."""
+        import dis
+        import builtins
         from app import create_app
         demo = create_app()
         self.assertIsNotNone(demo)
         self.assertTrue(hasattr(demo, "launch"))
+
+        # Verify all registered event callbacks have valid, imported global references
+        for fn_obj in demo.fns.values():
+            fn = getattr(fn_obj, "fn", None)
+            if fn and hasattr(fn, "__code__"):
+                globals_dict = getattr(fn, "__globals__", {})
+                for instr in dis.get_instructions(fn):
+                    if instr.opname == "LOAD_GLOBAL":
+                        name = instr.argval
+                        self.assertTrue(
+                            name in globals_dict or hasattr(builtins, name),
+                            f"Undefined global symbol '{name}' in registered callback '{fn.__name__}'"
+                        )
 
     def test_pixeltable_manager_and_columns(self):
         """[Database] Verify Pixeltable table creation, default schema columns, and data querying."""

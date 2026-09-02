@@ -4,42 +4,7 @@ from pathlib import Path
 from src.core.config import get_settings, update_last_entry, sanitize_identifier
 from src.ingest.scanner import scan_directory
 from src.db.manager import DBManager
-
-def get_directory_choices(current_path=None):
-    """Generate intelligent path suggestions for type-ahead dropdown."""
-    choices = set()
-    cwd = Path.cwd()
-    home = Path.home()
-    
-    choices.add(str(cwd))
-    choices.add(str(home))
-    
-    curr = get_settings().default_ingest_dir
-    if curr and Path(curr).exists():
-        choices.add(str(Path(curr)))
-
-    # Discover immediate subdirectories of CWD & Home
-    for base in [cwd, home]:
-        try:
-            for child in base.iterdir():
-                if child.is_dir() and not child.name.startswith("."):
-                    choices.add(str(child))
-        except Exception:
-            pass
-
-    # If current_path exists, include it and its subdirectories
-    if current_path:
-        try:
-            p = Path(current_path.strip())
-            if p.exists() and p.is_dir():
-                choices.add(str(p))
-                for child in p.iterdir():
-                    if child.is_dir() and not child.name.startswith("."):
-                        choices.add(str(child))
-        except Exception:
-            pass
-
-    return sorted(list(choices))
+from src.controllers.ingest_controller import IngestController
 
 def render_ingest_tab(tab=None):
     settings = get_settings()
@@ -51,7 +16,7 @@ def render_ingest_tab(tab=None):
         with gr.Row():
             dir_input = gr.Dropdown(
                 label="Source Directory Path (Type or select from tree)",
-                choices=get_directory_choices(default_path),
+                choices=IngestController.get_directory_suggestions(default_path),
                 value=default_path,
                 allow_custom_value=True,
                 filterable=True,

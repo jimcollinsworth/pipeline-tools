@@ -96,7 +96,7 @@ class IngestController:
         updated_choices = IngestController.get_directory_suggestions(str(p))
 
         if modalities is None:
-            modalities = ["docs", "images", "audio", "video"]
+            modalities = ["docs", "images", "audio", "video", "other"]
 
         files = scan_directory(str(p), recursive=recursive, modalities=modalities)
         if not files:

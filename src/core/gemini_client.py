@@ -29,7 +29,7 @@ class GeminiClient:
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
 
     def get_client(self, api_key: Optional[str] = None) -> Any:
-        key = api_key or self.api_key
+        key = self.api_key if api_key is None else api_key
         if not key:
             raise ValueError("Gemini API key is required. Please set your API key in the Settings tab or GEMINI_API_KEY environment variable.")
         if not GEMINI_AVAILABLE:
@@ -38,7 +38,7 @@ class GeminiClient:
 
     def check_connection(self, api_key: Optional[str] = None) -> Tuple[bool, str]:
         """Test API key validity with a lightweight call."""
-        key = api_key or self.api_key
+        key = self.api_key if api_key is None else api_key
         if not key or not key.strip():
             return False, "⚠️ Gemini API key is missing. Please enter your API key."
         
@@ -64,7 +64,7 @@ class GeminiClient:
 
     def list_models(self, api_key: Optional[str] = None) -> List[Dict[str, Any]]:
         """Dynamically query available Gemini models from Google API with rich metadata."""
-        key = api_key or self.api_key
+        key = self.api_key if api_key is None else api_key
         if key and key.strip() and GEMINI_AVAILABLE:
             try:
                 client = genai.Client(api_key=key.strip())

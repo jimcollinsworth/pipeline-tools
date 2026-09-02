@@ -106,7 +106,7 @@ flowchart TD
 ### Phase 4: Multimodal Vision & Entity Classification Engines (Planned)
 - [ ] **Hugging Face & YOLO Vision Classification Engines**
   - Integrate Ultralytics YOLO classifiers (e.g., `keremberke/yolov8m-painting-classification`) and Hugging Face vision models alongside Ollama/Gemini.
-  - Full 27-class art taxonomy classification:
+  - Full 27-class art taxonomy classification as a prompt or classification example:
     `['Abstract_Expressionism', 'Action_painting', 'Analytical_Cubism', 'Art_Nouveau_Modern', 'Baroque', 'Color_Field_Painting', 'Contemporary_Realism', 'Cubism', 'Early_Renaissance', 'Expressionism', 'Fauvism', 'High_Renaissance', 'Impressionism', 'Mannerism_Late_Renaissance', 'Minimalism', 'Naive_Art_Primitivism', 'New_Realism', 'Northern_Renaissance', 'Pointillism', 'Pop_Art', 'Post_Impressionism', 'Realism', 'Rococo', 'Romanticism', 'Symbolism', 'Synthetic_Cubism', 'Ukiyo_e']`
   - Output structured JSON predictions (`painting_style`, `confidence`, `style_probabilities`) with automatic column creation via the Auto-Split engine.
   - Selectable as an AI / Vision engine in Data Enhancement with dry-run sample testing and batch table execution.
@@ -146,6 +146,24 @@ flowchart TD
   - **LLM-Assisted Column Referencing**: Automatically detect and highlight active table columns within prompt templates, providing 1-click chip insertion (`{column_name}`).
   - **Pixeltable Projection & Temporary Views**: Utilize Pixeltable's declarative view engine (`pxt.create_view`) and zero-memory column projection filters to render custom visible column subsets on demand without table duplication.
 
+### Phase 6: Packaging, Cross-Platform Distribution & Mobile/Tablet Companion (Planned)
+- [ ] **Cross-Platform Packaging & Distribution Engine (`RES-16`)**
+  - **PyPI / Wheel / CLI Distribution**: Package as an installable Python package via `pip install pipeline-tools` or `uv tool install pipeline-tools` / `uvx pipeline-tools` with a clean CLI entrypoint (`pipeline-tools`).
+  - **Standalone Desktop Bundling**: Evaluate PyInstaller, Briefcase, and PyOxidizer to package single-click executable installers (.exe, .dmg, AppImage) bundling Python runtime, Gradio web server, and platform-specific PostgreSQL binaries.
+  - **Container Distribution**: Lightweight multi-arch Docker image (`docker run -p 7860:7860 -v ...`) for headless servers, NAS, and container runtimes.
+  - **Desktop App Shell (Tauri / Electron)**: Native desktop window wrapping the local Gradio web app with system tray controls, auto-updates, and native file system dialogs.
+  - **Embedded PostgreSQL Packaging Challenge**: Address platform-specific binary extraction, file socket locations, and antivirus flags when shipping Pixeltable's embedded `pg_ctl`/`postgres` binaries to non-developer machines.
+- [ ] **Remote Hosting, Mobile/Tablet Companion & Local-Connect Architecture (`RES-17`)**
+  - **Embedded PostgreSQL Mobile Limitation**: Mobile OSes (iOS / Android) cannot run embedded PostgreSQL natively. Must decouple execution from client display.
+  - **Cloud & VPS Hosting Options**: Evaluate containerized deployment on Hugging Face Spaces (Docker + persistent volume), Fly.io, Railway, or VPS instances backed by managed PostgreSQL.
+  - **Workstation Local-Connect Pattern ("Antigravity" Style)**:
+    - Keep primary compute, local Ollama models, and embedded Pixeltable database running on the user's desktop/workstation.
+    - Expose a secure, zero-config peer-to-peer encrypted tunnel (Tailscale Funnel, Cloudflare Zero Trust Tunnel, or Gradio `share=True`).
+    - Connect mobile devices and tablets directly to the desktop instance over LAN or WAN.
+  - **Mobile as Companion Dashboard & Multimodal Data Source**:
+    - **Dashboard / Review**: Responsive touch-optimized reader, media inspector, and export viewer on tablet/phone screens.
+    - **Multimodal Ingestion Source**: Use mobile device camera, microphone, and file picker to capture and stream real-world assets (field photos, voice memos, documents) directly into the desktop's Pixeltable repository in real time.
+
 ---
 
 ## 3. Issues & Research Items
@@ -167,3 +185,5 @@ flowchart TD
 | RES-13 | Project Skills Integration & Prompt `/` Commands | Open | Dynamic discovery of `.agents/skills/` definitions triggered by `/` prompt slash commands with automatic instruction injection and Pixeltable UDF mapping. |
 | RES-14 | Document UX & Newspaper / Magazine Layouts | Open | Single-record rich Markdown reader with collapsible sections, theme selectors, embedded media/Mermaid, and editorial newspaper-style multi-record feeds. |
 | RES-15 | Visual Touch-Based Column Selection & Views | Open | Direct visual pill column toggling, LLM-assisted prompt chip insertion, and Pixeltable declarative filtered view projections. |
+| RES-16 | Cross-Platform Packaging & Distribution (Pip / Standalone / uvx) | Open | Evaluate PyPI/`uv tool`, PyInstaller desktop standalone, Docker containerization, and Tauri wrapper to bundle Python + embedded PostgreSQL cleanly across OSes. |
+| RES-17 | Remote Hosting, Mobile/Tablet Companion & Local-Connect Tunnel | Open | Overcome embedded PostgreSQL mobile limitation via Antigravity-style desktop local-connect (Tailscale / Cloudflare Tunnel / Gradio Share); tablet/phone acts as review dashboard and direct camera/media ingestion source. |

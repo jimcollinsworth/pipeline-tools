@@ -261,13 +261,33 @@ code {
 }
 """
 
+custom_head = """
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const disableAutofill = () => {
+        document.querySelectorAll("input").forEach(input => {
+            if (input.type === "password") {
+                input.setAttribute("autocomplete", "new-password");
+                input.setAttribute("data-1p-ignore", "true");
+            } else {
+                input.setAttribute("autocomplete", "off");
+            }
+        });
+    };
+    disableAutofill();
+    const observer = new MutationObserver(disableAutofill);
+    observer.observe(document.body, { childList: true, subtree: true });
+});
+</script>
+"""
+
 def create_app():
-    with gr.Blocks(title="Pipeline Tools v1.1", fill_width=True) as demo:
+    with gr.Blocks(title="Pipeline Tools v1.1", fill_width=True, head=custom_head) as demo:
         gr.Markdown(
             """
             <div class="app-header">
                 <h1>PIPELINE TOOLS v1.1 // Multimodal Workbench</h1>
-                <p>Declarative Ingestion (Pixeltable) • Data Enhancement (Ollama / Gemini) • View & Export</p>
+                <p>Declarative Ingestion (Pixeltable) &bull; Data Enhancement (Ollama / Gemini) &bull; View & Export</p>
             </div>
             """
         )

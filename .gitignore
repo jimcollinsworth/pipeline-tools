@@ -222,3 +222,4 @@ config.json
 .env
 .pixeltable_data/
 exports/
+.commit_msg

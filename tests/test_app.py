@@ -357,6 +357,53 @@ class TestPipelineTools(unittest.TestCase):
                 self.assertIn("synthesis_test", res.get("markdown_content"))
                 self.assertIn("test_synthesis_export", res.get("file_name"))
 
+    def test_markdown_export_sidecars(self):
+        """[Export] Verify MarkdownExporter generates per-row sidecars (_meta.md) with media embedding."""
+        from unittest.mock import patch
+
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [
+                {
+                    "name": "photo_sunset.jpg",
+                    "abs_path": str(Path("planning.md").resolve()),
+                    "rel_path": "planning.md",
+                    "modality": "images",
+                    "extension": ".jpg",
+                    "size_bytes": 1024,
+                    "size": "1 KB"
+                },
+                {
+                    "name": "photo_ocean.jpg",
+                    "abs_path": str(Path("planning.md").resolve()),
+                    "rel_path": "planning.md",
+                    "modality": "images",
+                    "extension": ".jpg",
+                    "size_bytes": 2048,
+                    "size": "2 KB"
+                }
+            ]
+            DBManager.ingest_files(self.TEST_DOMAIN, "sidecar_test", fake_files, overwrite=True)
+
+            mock_story = "# Coastal Twilight\nThe golden sun illuminates the tranquil waves with vivid color."
+            with patch("src.export.exporter.LLMService.generate", return_value=mock_story):
+                res = MarkdownExporter.generate_report(
+                    domain=self.TEST_DOMAIN,
+                    table_name="sidecar_test",
+                    prompt_template="Write a story about {file_name}",
+                    system_prompt="Photojournalist",
+                    provider="Ollama",
+                    model="test-model",
+                    mode="sidecar",
+                    max_rows=10
+                )
+                self.assertEqual(res.get("status"), "success")
+                self.assertEqual(res.get("row_count"), 2)
+                saved = res.get("saved_files", [])
+                self.assertEqual(len(saved), 2)
+                self.assertTrue(any("photo_sunset_meta.md" in f for f in saved))
+                self.assertTrue(any("photo_ocean_meta.md" in f for f in saved))
+                self.assertIn("![photo_ocean.jpg]", res.get("markdown_content"))
+
     def test_export_empty_table_error_handling(self):
         """[Export] Verify MarkdownExporter returns a clean error dict when exporting a non-existent or empty table."""
         res = MarkdownExporter.generate_report(

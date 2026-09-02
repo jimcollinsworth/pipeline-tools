@@ -116,12 +116,12 @@ flowchart TD
   - **In-Prompt Slash Command Discovery**: Type `/` in prompt input textareas to trigger intelligent auto-completion of skills discovered from `.agents/skills/`.
   - **Dynamic Prompt Decoration**: Automatically parse and inject `SKILL.md` rules, tool definitions, and domain instructions directly into active prompt templates.
   - **Pixeltable Tool Registry**: Map project skills to declarative Pixeltable User Defined Functions (`@pxt.udf`) and tool calling pipelines for seamless row-level evaluation.
-- [ ] **Document UX & Newspaper / Magazine Layout Engine (`RES-14`)**
+- [x] **Document UX & Newspaper / Magazine Layout Engine (`RES-14`)**
   - **Single-Record Document Reader**: Dedicated rich Markdown reader view displaying one record at a time with clean visual styling, custom border colors, header-level collapsible/expandable accordions, styled rollup lists, embedded Mermaid diagrams, interactive charts, and full-resolution media.
   - **Interactive Navigation**: Instant Previous / Next record navigation buttons with hotkeys for rapid qualitative inspection.
   - **Newspaper / Blog Feed View**: Multi-column editorial magazine/newspaper layout organizing dataset rows into interactive story cards, hero image headlines, thematic badges, and executive callouts.
   - **Theme & Layout Selector**: User-selectable visual themes (e.g., *Modern Editorial*, *Technical Dossier*, *Clean Minimal*, *Dark Terminal*) controlling CSS typography, colors, and layout structure.
-  - **Technical Options & Sidecar Export**: Support dual export pipelines—monolithic multi-record Markdown reports and individual per-record Markdown documents with YAML/JSON frontmatter sidecars.
+  - **Dual Export Strategies & Per-Row Sidecars (`_meta.md`)**: Implemented dual export pipelines in `MarkdownExporter` and `TablesController` supporting both unified multi-record synthesis reports and individual per-record Markdown sidecars (`{source_stem}_meta.md`) with automatic media embedding (`![title](filepath)`), clean YAML frontmatter, and real-time streaming preview updates.
 - [ ] **Direct, Visual & Touch-Based Column/Field Selection (`RES-15`)**
   - **Touch-Friendly Visual Selectors**: Replace tedious multi-select field dropdowns with direct visual pill toggles, drag-to-reorder columns, and 1-tap column hide/show icons.
   - **LLM-Assisted Column Referencing**: Automatically detect and highlight active table columns within prompt templates, providing 1-click chip insertion (`{column_name}`).

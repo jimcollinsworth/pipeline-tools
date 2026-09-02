@@ -141,3 +141,49 @@ class TestControllers(unittest.TestCase):
             del_dom_res = TablesController.handle_delete_domain(self.TEST_DOMAIN)
             self.assertEqual(del_dom_res["status"], "success")
             self.assertNotIn(self.TEST_DOMAIN, del_dom_res["domain_choices"])
+
+    def test_tables_controller_export_single_and_sidecar(self):
+        """[Controller] Verify TablesController handles single and per-row sidecar export workflows."""
+        from unittest.mock import patch
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [{
+                "name": "photo_export_ctrl.jpg",
+                "abs_path": str(Path("planning.md").resolve()),
+                "rel_path": "planning.md",
+                "modality": "images",
+                "extension": ".jpg",
+                "size_bytes": 1024,
+                "size": "1 KB"
+            }]
+            DBManager.ingest_files(self.TEST_DOMAIN, "export_ctrl_tbl", fake_files, overwrite=True)
+
+            mock_story = "# Frontpage Story\nA detailed newspaper feature on the captured scene."
+            with patch("src.export.exporter.LLMService.generate", return_value=mock_story):
+                # 1. Single report mode
+                single_res = TablesController.handle_export_report(
+                    domain=self.TEST_DOMAIN,
+                    table_name="export_ctrl_tbl",
+                    provider="Ollama",
+                    model="test-model",
+                    max_rows=5,
+                    system_prompt="Journalist",
+                    prompt_template="Write story on {file_name}",
+                    mode="single"
+                )
+                self.assertEqual(single_res["status"], "success")
+                self.assertIn("Single Unified Synthesis", single_res["message"])
+
+                # 2. Sidecar mode
+                sidecar_res = TablesController.handle_export_report(
+                    domain=self.TEST_DOMAIN,
+                    table_name="export_ctrl_tbl",
+                    provider="Ollama",
+                    model="test-model",
+                    max_rows=5,
+                    system_prompt="Journalist",
+                    prompt_template="Write story on {file_name}",
+                    mode="sidecar"
+                )
+                self.assertEqual(sidecar_res["status"], "success")
+                self.assertIn("Per-Row Sidecars", sidecar_res["message"])
+                self.assertTrue(len(sidecar_res.get("saved_files", [])) > 0)

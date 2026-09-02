@@ -129,11 +129,28 @@ def render_tables_tab(tab=None):
                     """
                 )
                 with gr.Row():
+                    preset_newspaper_btn = gr.Button("📰 Newspaper Story & Photo", size="sm", variant="secondary")
                     preset_entity_btn = gr.Button("🏷️ Entity & Keyword Intelligence", size="sm")
                     preset_visual_btn = gr.Button("🎨 Visual & Scene Breakdown", size="sm")
                 with gr.Row():
                     preset_summary_btn = gr.Button("📋 Thematic Summary & Executive Brief", size="sm")
                     preset_catalog_btn = gr.Button("📁 Structured Media Catalog Dossier", size="sm")
+
+            with gr.Row():
+                export_strategy_radio = gr.Radio(
+                    choices=["📄 Single Document Synthesis", "🗂️ Per-Row Sidecars (_meta.md)"],
+                    value="📄 Single Document Synthesis",
+                    label="Export Strategy & Scope",
+                    scale=3
+                )
+                export_rows_slider = gr.Slider(
+                    minimum=1,
+                    maximum=200,
+                    value=25,
+                    step=1,
+                    label="Max Records to Process",
+                    scale=2
+                )
 
             with gr.Row():
                 export_provider_dropdown = gr.Dropdown(
@@ -148,14 +165,6 @@ def render_tables_tab(tab=None):
                     value=settings.last_model or initial_models[0],
                     allow_custom_value=True,
                     scale=3
-                )
-                export_rows_slider = gr.Slider(
-                    minimum=1,
-                    maximum=200,
-                    value=25,
-                    step=1,
-                    label="Max Records to Include",
-                    scale=2
                 )
 
             available_columns_info = gr.Markdown(
@@ -178,11 +187,11 @@ def render_tables_tab(tab=None):
 
             with gr.Row():
                 custom_filename_input = gr.Textbox(
-                    label="Custom Output Filename (Optional)",
+                    label="Custom Output Filename (Optional - Single Document Mode Only)",
                     placeholder="e.g. entities_summary_2026",
                     scale=3
                 )
-                generate_export_btn = gr.Button("⚡ Generate & Export AI Markdown Report", variant="primary", scale=2)
+                generate_export_btn = gr.Button("⚡ Generate & Export AI Markdown", variant="primary", scale=2)
 
             export_status_box = gr.Markdown("#### Export Status: *Ready to export.*")
 
@@ -214,8 +223,9 @@ def render_tables_tab(tab=None):
     def load_preset(preset_key):
         preset = MarkdownExporter.PRESETS.get(preset_key)
         if not preset:
-            return gr.update(), gr.update()
-        return preset["system_prompt"], preset["prompt_template"]
+            return gr.update(), gr.update(), gr.update()
+        strat = "🗂️ Per-Row Sidecars (_meta.md)" if preset.get("mode") == "sidecar" else "📄 Single Document Synthesis"
+        return preset["system_prompt"], preset["prompt_template"], strat
 
     def on_select_table_row(evt: gr.SelectData, current_df, domain, table_name):
         """Populate and display the Media Inspector drawer when a table row is clicked without re-querying the database."""
@@ -235,31 +245,89 @@ def render_tables_tab(tab=None):
 
     def on_generate_export(
         domain, table_name, provider, model,
-        max_rows, system_prompt, prompt_template, custom_filename,
+        max_rows, system_prompt, prompt_template, export_strategy, custom_filename,
         progress=gr.Progress(track_tqdm=False)
     ):
-        def cb(cur, total, msg):
-            pct = cur / total if total else 0.5
-            progress(pct, desc=msg)
+        if not domain or not table_name:
+            gr.Warning("Please select a domain and table first.")
+            yield "### ⚠️ Missing Target Table\nPlease select a Domain and Table above.", "", None
+            return
 
-        res = TablesController.handle_export_report(
-            domain=domain,
-            table_name=table_name,
-            provider=provider,
-            model=model,
-            max_rows=max_rows,
-            system_prompt=system_prompt,
-            prompt_template=prompt_template,
-            custom_filename=custom_filename,
-            progress_callback=cb
-        )
+        if not prompt_template or not prompt_template.strip():
+            gr.Warning("Please enter a prompt template.")
+            yield "### ⚠️ Missing Prompt Template\nPlease enter a synthesis prompt template.", "", None
+            return
 
-        if res["status"] == "success":
-            gr.Info(f"AI report exported successfully: {res.get('file_name')}")
-            return res["message"], res["content"], res["file_path"]
+        is_sidecar = ("sidecar" in export_strategy.lower() or "per-row" in export_strategy.lower())
+
+        if is_sidecar:
+            last_file = None
+            last_md = ""
+            total_saved = 0
+            for update in MarkdownExporter.generate_sidecar_exports(
+                domain=domain,
+                table_name=table_name,
+                prompt_template=prompt_template,
+                system_prompt=system_prompt,
+                provider=provider,
+                model=model,
+                max_rows=int(max_rows),
+                progress_callback=lambda cur, tot, msg: progress(cur, desc=msg)
+            ):
+                if update.get("status") == "error":
+                    gr.Error(update.get("message", "Export error"))
+                    yield f"### ❌ Export Error\n{update.get('message')}", "", None
+                    return
+
+                cur_idx = update.get("current_index", 0)
+                tot_rows = update.get("total_rows", 1)
+                cur_file = update.get("current_file", "")
+                last_file = update.get("file_path")
+                last_md = update.get("markdown_content", "")
+                total_saved = len(update.get("saved_files", []))
+
+                status_msg = (
+                    f"### ⏳ Generating Sidecars... [{cur_idx}/{tot_rows}]\n"
+                    f"- **Current Record:** `{cur_file}`\n"
+                    f"- **Saved Sidecar:** `{update.get('sidecar_name')}`\n"
+                    f"- **Total Sidecars Written:** `{total_saved}` in `exports/`"
+                )
+                yield status_msg, last_md, last_file
+
+            final_msg = (
+                f"### ✅ All Per-Row Sidecars Generated Successfully!\n"
+                f"- **Strategy:** Per-Row Sidecars (`_meta.md`)\n"
+                f"- **Total Sidecar Files Created:** `{total_saved}` in `exports/`\n"
+                f"- **AI Engine / Model:** `{provider}` ({model})\n"
+                f"- **Latest Saved File:** `{last_file}`"
+            )
+            gr.Info(f"Successfully exported {total_saved} sidecar files!")
+            yield final_msg, last_md, last_file
+
         else:
-            gr.Error("Export failed")
-            return res["message"], "", None
+            def cb(cur, total, msg):
+                pct = cur / total if total else 0.5
+                progress(pct, desc=msg)
+
+            res = TablesController.handle_export_report(
+                domain=domain,
+                table_name=table_name,
+                provider=provider,
+                model=model,
+                max_rows=max_rows,
+                system_prompt=system_prompt,
+                prompt_template=prompt_template,
+                mode="single",
+                custom_filename=custom_filename,
+                progress_callback=cb
+            )
+
+            if res["status"] == "success":
+                gr.Info(f"AI report exported successfully: {res.get('file_name')}")
+                yield res["message"], res["content"], res["file_path"]
+            else:
+                gr.Error("Export failed")
+                yield res["message"], "", None
 
     # -------------------------------------------------------------------------
     # Wire Event Listeners (Decoupled Single-Responsibility Architecture)
@@ -311,28 +379,34 @@ def render_tables_tab(tab=None):
         outputs=[export_model_dropdown]
     )
 
+    preset_newspaper_btn.click(
+        fn=lambda: load_preset("Newspaper Story & Embedded Photo"),
+        inputs=[],
+        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
+    )
+
     preset_entity_btn.click(
         fn=lambda: load_preset("Entity & Keyword Intelligence"),
         inputs=[],
-        outputs=[system_prompt_input, export_prompt_input]
+        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
     )
 
     preset_visual_btn.click(
         fn=lambda: load_preset("Visual & Multimodal Scene Analysis"),
         inputs=[],
-        outputs=[system_prompt_input, export_prompt_input]
+        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
     )
 
     preset_summary_btn.click(
         fn=lambda: load_preset("Thematic Summary & Executive Brief"),
         inputs=[],
-        outputs=[system_prompt_input, export_prompt_input]
+        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
     )
 
     preset_catalog_btn.click(
         fn=lambda: load_preset("Structured Media Catalog Dossier"),
         inputs=[],
-        outputs=[system_prompt_input, export_prompt_input]
+        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
     )
 
     generate_export_btn.click(
@@ -345,6 +419,7 @@ def render_tables_tab(tab=None):
             export_rows_slider,
             system_prompt_input,
             export_prompt_input,
+            export_strategy_radio,
             custom_filename_input
         ],
         outputs=[export_status_box, export_preview_markdown, download_file_component]

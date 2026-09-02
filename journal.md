@@ -257,3 +257,32 @@ This journal records verbatim developer instructions, architectural directives, 
 3. **Phase 4 Roadmap & Architecture Specifications (`planning.md`)**:
    - Documented `RES-12` (Dynamic Ingestion Context & State Accumulation), `RES-13` (Skills Integration via `/` slash commands), `RES-14` (Single-Record Document Reader & Newspaper Editorial UX), and `RES-15` (Direct Touch-Based Column Selection & Declarative Views).
 
+---
+
+## 📅 2026-09-02: Dual Export Strategies (Single Synthesis vs. Per-Row Sidecars) & Systematic Debugging
+
+**Context:** User observed that the export function only processed one row when running the newspaper prompt, and requested two distinct export modes: single-file multi-row synthesis and per-row markdown sidecar files (`{filename}_meta.md`) with continuous live preview updates.
+
+**Verbatim Instruction:**
+> `i tried an export, not quite working how i expected. the output quality is great, love the newspaper example, but the row  image in the top preview was not the row image in the bottom generated newpaper, only one row got into the output file markdown, now repeated rows. maybe only the last or first was processed?`
+> `i think we need 2 modes, either process all rows and all fields as one llm call, with one llm expected output file, and the second mode make one llm call per row to both read process the rows and output a markdown sidecar file, use the file_name field in the row as the sidecar with _meta.md added. we can overwrite markdown files, its all in the export directory.  a preview doc can be displayed in both cases - the single output, or each row preview as it's output, continuously updating.  add this feature, additional testing /brainstorming /chrome-devtools /using-superpowers`
+> `/test-driven-development /systematic-debugging /chrome-devtools /troubleshooting  revisit recent changes, requests, logs analyze what is going wrong with tests. we can revise tests/code if needed`
+
+**Root Cause Investigation & Systematic Debugging:**
+1. **Context Construction & Missing Row Iteration**:
+   - The original export engine dumped all $N$ rows into a monolithic text block (`{table_context}`). When prompted for a newspaper story with an image, the LLM naturally selected only one item to feature, rather than writing articles for all records.
+2. **Binary Media Loading Failure on Missing Paths**:
+   - In `DBManager.ingest_files`, `"image": abs_path` was assigned without verifying `Path(abs_path).is_file()`. In unit tests with mock file records, Pixeltable's `pxt.Image` failed to deserialize the non-existent file, causing `get_table_data` to return 0 rows and export tests to return an error.
+3. **Mock Target Scope in Unittest**:
+   - Tests patched `src.core.llm_service.LLMService.generate` rather than `src.export.exporter.LLMService.generate`, causing live network calls to be attempted during test execution.
+
+**Key Decisions & Engineering Fixes:**
+1. **Dual Export Strategies**:
+   - **📄 Single Document Synthesis**: 1 LLM call analyzing all rows $\rightarrow$ 1 consolidated report (`exports/{domain}_{table}_report_{timestamp}.md`).
+   - **🗂️ Per-Row Sidecars (`_meta.md`)**: 1 LLM call per record $\rightarrow$ individual sidecar files (`exports/{source_stem}_meta.md`), with automatic media embedding (`![filename](filepath)`), clean YAML frontmatter, and live row-by-row preview streaming.
+2. **Robust Binary Media Verification in `DBManager.ingest_files`**:
+   - Added `and Path(abs_path).is_file()` guards for `doc`, `image`, `audio`, and `video` columns, preventing Pixeltable insert errors when files are missing.
+3. **Automated Test Suite Passing**:
+   - Total test suite expanded to **38 tests**: **38 Passed, 0 Failed, 0 Errors**.
+
+

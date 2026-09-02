@@ -233,10 +233,11 @@ class TablesController:
         max_rows: int,
         system_prompt: str,
         prompt_template: str,
+        mode: str = "single",
         custom_filename: str = "",
         progress_callback: Optional[Callable[[int, int, str], None]] = None
     ) -> Dict[str, Any]:
-        """Execute AI report synthesis and write to exports/ directory."""
+        """Execute AI report synthesis or per-row sidecars and write to exports/ directory."""
         if not domain or not table_name:
             return {
                 "status": "error",
@@ -249,6 +250,7 @@ class TablesController:
                 "message": "### ⚠️ Missing Prompt Template\nPlease enter a synthesis prompt template."
             }
 
+        is_sidecar = ("sidecar" in mode.lower() or "per-row" in mode.lower())
         res = MarkdownExporter.generate_report(
             domain=domain,
             table_name=table_name,
@@ -256,7 +258,7 @@ class TablesController:
             system_prompt=system_prompt,
             provider=provider,
             model=model,
-            mode="llm",
+            mode="sidecar" if is_sidecar else "single",
             max_rows=int(max_rows),
             custom_filename=custom_filename,
             progress_callback=progress_callback
@@ -268,10 +270,12 @@ class TablesController:
             content = res.get("markdown_content", "")
             total_rows = res.get("row_count", 0)
 
+            mode_label = "Per-Row Sidecars (`_meta.md`)" if is_sidecar else "Single Unified Synthesis"
             status_msg = (
-                f"### ✅ AI Report Exported Successfully!\n"
-                f"- **File Saved:** `{file_path}`\n"
-                f"- **Records Analyzed:** {total_rows}\n"
+                f"### ✅ Export Completed Successfully!\n"
+                f"- **Strategy:** {mode_label}\n"
+                f"- **Records Processed:** {total_rows}\n"
+                f"- **Primary File / Output:** `{file_path}`\n"
                 f"- **AI Engine / Model:** `{provider}` ({model})\n"
             )
             return {
@@ -280,7 +284,8 @@ class TablesController:
                 "file_path": file_path,
                 "file_name": file_name,
                 "content": content,
-                "total_rows": total_rows
+                "total_rows": total_rows,
+                "saved_files": res.get("saved_files", [file_path])
             }
         else:
             err_msg = res.get("message", "Unknown error during export")

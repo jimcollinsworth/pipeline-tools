@@ -1,40 +1,59 @@
 """
-Markdown & Document Export Engine (AI Report Synthesis & Preset Templates)
-==========================================================================
+Markdown & Document Export Engine (AI Report Synthesis & Sidecar Generation)
+============================================================================
 This module powers document synthesis and Markdown report generation from Pixeltable tables.
 
-Key Architectural Principles & Design Decisions:
-------------------------------------------------
-1. Unified AI Synthesis (Eliminating Confusing UI Toggles):
-   - Design evolution: Replaced rigid "Direct Template" vs "LLM Synthesis" radio buttons with
-     a unified, intelligent AI synthesis engine.
-   - Users can provide standard prompt templates or choose from domain presets.
-2. Universal Context Interpolation:
-   - Supports `{table_context}`: Aggregates multi-row JSON records into a compact markdown
-     block for dataset-wide analysis.
-   - Supports `{domain}`, `{table}`, and `{total_rows}` dynamic metadata variables.
-   - Supports single-row `{column_name}` interpolation when running record-by-record reports.
-3. Clean File Persistence:
-   - Automatically sanitizes filenames, timestamps outputs, and saves them to the configured
-     `exports/` directory, returning clickable download paths.
+Supported Export Strategies:
+----------------------------
+1. Single Document Synthesis Mode:
+   - Aggregates multi-row dataset context into one structured briefing or catalog.
+   - Outputs a unified file: `exports/{domain}_{table}_report_{timestamp}.md`.
+2. Per-Row Sidecar Mode (_meta.md):
+   - Executes 1 LLM call per record to produce rich, standalone sidecar documents.
+   - Automatically embeds row-specific media (`![photo](file_path)`).
+   - Outputs individual sidecar files: `exports/{source_stem}_meta.md` (overwriting as needed).
+   - Streams live markdown previews row-by-row into the UI.
 """
 
 import os
 import re
 import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Generator, Tuple
 from src.core.config import get_settings
 from src.db.manager import DBManager
 from src.core.llm_service import LLMService
 
 
 class MarkdownExporter:
-    """Engine for generating and exporting structured Markdown reports from Pixeltable tables."""
+    """Engine for generating and exporting structured Markdown reports and per-row sidecars."""
 
     PRESETS = {
+        "Newspaper Story & Embedded Photo": {
+            "mode": "sidecar",
+            "system_prompt": (
+                "You are an award-winning investigative photojournalist and editorial writer. "
+                "Write an engaging, evocative, and richly descriptive newspaper/magazine article for the given media item. "
+                "Always embed the item's photo or media at the top using valid Markdown: `![Photo Caption]({file_path})`. "
+                "Format with a striking headline (# Headline), byline, lead paragraph, pull-quote, deep narrative body, and metadata sidebar."
+            ),
+            "prompt_template": (
+                "Write a captivating newspaper article about this record:\n"
+                "- File Name: {file_name}\n"
+                "- Media Path: {file_path}\n"
+                "- Description / Visual Context: {visual_summary}\n"
+                "- Detected Objects / Tags: {object_tags}\n"
+                "- Palette / Mood: {dominant_colors}, {mood_palette}\n"
+                "- Extracted Content: {content}\n\n"
+                "Requirements:\n"
+                "1. Embed the image at the top using: `![{file_name}]({file_path})`\n"
+                "2. Create an evocative # Headline and Byline.\n"
+                "3. Write a vivid 3-paragraph human-interest story weaving together the visual elements and context.\n"
+                "4. Include a Markdown table or metadata block summarizing the record properties."
+            )
+        },
         "Entity & Keyword Intelligence": {
-            "mode": "llm",
+            "mode": "single",
             "system_prompt": (
                 "Extract, disambiguate, and structure named entities (persons, organizations, locations, artifacts) "
                 "and domain taxonomy keywords from the dataset into organized Markdown tables and categorized lists. "
@@ -52,7 +71,7 @@ class MarkdownExporter:
             )
         },
         "Visual & Multimodal Scene Analysis": {
-            "mode": "llm",
+            "mode": "single",
             "system_prompt": (
                 "Analyze visual composition, spatial framing, dominant color palettes (RGB/HSL taxonomy), "
                 "lighting conditions (ambient, artificial, directional), and scene geometry across the provided media records. "
@@ -69,6 +88,7 @@ class MarkdownExporter:
             )
         },
         "Thematic Summary & Executive Brief": {
+            "mode": "single",
             "system_prompt": (
                 "Synthesize dataset records into a structured analytical briefing. "
                 "Group findings by cross-cutting themes, identify statistical patterns and unique outlier records, "
@@ -85,6 +105,7 @@ class MarkdownExporter:
             )
         },
         "Structured Media Catalog Dossier": {
+            "mode": "single",
             "system_prompt": (
                 "Format the dataset into an exhaustive, highly-structured Markdown catalog dossier. "
                 "Present each record with clean metadata badges, extracted summaries, object tags, and technical properties. "
@@ -117,7 +138,7 @@ class MarkdownExporter:
         return rendered
 
     @classmethod
-    def generate_report(
+    def generate_single_report(
         cls,
         domain: str,
         table_name: str,
@@ -125,38 +146,19 @@ class MarkdownExporter:
         system_prompt: Optional[str] = None,
         provider: str = "Ollama",
         model: Optional[str] = None,
-        mode: str = "llm",
+        mode: str = "single",
         max_rows: int = 50,
         output_dir: Optional[str] = None,
         custom_filename: Optional[str] = None,
         progress_callback: Optional[Any] = None
     ) -> Dict[str, Any]:
-        """
-        Generate a Markdown document from table records.
-
-        Args:
-            domain: Pixeltable domain name.
-            table_name: Pixeltable table name.
-            prompt_template: Custom user prompt or per-row template.
-            system_prompt: System prompt for LLM synthesis.
-            provider: 'Ollama' or 'Gemini'.
-            model: Target model identifier.
-            mode: 'llm' (synthesis) or 'direct' (template).
-            max_rows: Maximum records to include.
-            output_dir: Destination folder (defaults to settings.export_dir).
-            custom_filename: Optional base filename.
-            progress_callback: Optional progress reporter fn(current, total, message).
-
-        Returns:
-            Dict containing status, file_path, markdown_content, row_count, etc.
-        """
+        """Generate a single unified synthesis report for all rows."""
         clean_dir = (domain or "default").strip()
         clean_tbl = (table_name or "raw_assets").strip()
 
         if progress_callback:
             progress_callback(0.1, 1.0, f"Fetching data from `{clean_dir}.{clean_tbl}`...")
 
-        # Fetch table data (lightweight=False to get full text and computed columns)
         table_res = DBManager.get_table_data(clean_dir, clean_tbl, limit=int(max_rows), lightweight=False)
         if table_res.get("error"):
             return {
@@ -179,12 +181,10 @@ class MarkdownExporter:
         ]
 
         if progress_callback:
-            progress_callback(0.3, 1.0, f"Processing {total_rows} records ({mode.upper()} mode)...")
-
-        rendered_markdown = ""
+            progress_callback(0.3, 1.0, f"Processing {total_rows} records...")
 
         if mode.lower() == "direct":
-            # Direct Template Formatting
+            # Direct Template Formatting without LLM
             sections = []
             header = f"# {clean_tbl.replace('_', ' ').title()} — Data Export\n\n"
             header += f"> **Domain:** `{clean_dir}` | **Table:** `{clean_tbl}` | **Total Records:** {total_rows} | **Generated:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n---\n\n"
@@ -197,12 +197,11 @@ class MarkdownExporter:
                 sections.append(f"## Record #{i}\n\n{row_str}\n\n---\n")
 
             rendered_markdown = "\n".join(sections)
-
         else:
             # LLM Synthesis Mode
             context_blocks = []
             for i, r in enumerate(row_dicts, 1):
-                block_lines = [f"### [Record {i}]"]
+                block_lines = [f"### [Record {i}: {r.get('file_name', 'Unknown')}]"]
                 for col in columns:
                     val = r.get(col)
                     if val is not None and str(val).strip():
@@ -214,7 +213,6 @@ class MarkdownExporter:
 
             table_context = "\n\n".join(context_blocks)
 
-            # Build full synthesis prompt
             user_prompt = prompt_template.replace("{domain}", clean_dir)
             user_prompt = user_prompt.replace("{table}", clean_tbl)
             user_prompt = user_prompt.replace("{total_rows}", str(total_rows))
@@ -226,7 +224,7 @@ class MarkdownExporter:
             if progress_callback:
                 progress_callback(0.5, 1.0, f"Synthesizing report via {provider} ({model or 'default'})...")
 
-            target_model = model or ("gemini-3.6-flash" if provider.lower() == "gemini" else "llama3.2")
+            target_model = model or ("gemini-3.7-flash" if provider.lower() == "gemini" else "llama3.2")
             try:
                 llm_output = LLMService.generate(
                     provider=provider,
@@ -247,7 +245,6 @@ class MarkdownExporter:
                     "message": f"LLM synthesis failed: {str(e)}"
                 }
 
-        # Determine output file path
         settings = get_settings()
         target_dir = Path(output_dir or settings.export_dir or "exports")
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -259,25 +256,198 @@ class MarkdownExporter:
         else:
             file_name = f"{clean_dir}_{clean_tbl}_report_{timestamp}.md"
 
-        output_path = target_dir / file_name
-
-        if progress_callback:
-            progress_callback(0.9, 1.0, f"Saving report to {output_path.name}...")
-
-        with open(output_path, "w", encoding="utf-8") as f:
+        output_file_path = target_dir / file_name
+        with open(output_file_path, "w", encoding="utf-8") as f:
             f.write(rendered_markdown)
-
-        if progress_callback:
-            progress_callback(1.0, 1.0, "Export completed successfully!")
 
         return {
             "status": "success",
-            "file_path": str(output_path.resolve()),
+            "file_path": str(output_file_path.resolve()),
             "file_name": file_name,
             "markdown_content": rendered_markdown,
             "row_count": total_rows,
-            "columns": columns,
-            "mode": mode,
-            "provider": provider if mode == "llm" else "Direct Template",
-            "model": model if mode == "llm" else "-"
+            "mode": mode
         }
+
+    @classmethod
+    def generate_sidecar_exports(
+        cls,
+        domain: str,
+        table_name: str,
+        prompt_template: str,
+        system_prompt: Optional[str] = None,
+        provider: str = "Ollama",
+        model: Optional[str] = None,
+        max_rows: int = 50,
+        output_dir: Optional[str] = None,
+        progress_callback: Optional[Any] = None
+    ) -> Generator[Dict[str, Any], None, None]:
+        """
+        Generate per-row sidecar files ({file_name}_meta.md) with live row-by-row streaming.
+        Yields progress dict for each row processed.
+        """
+        clean_dir = (domain or "default").strip()
+        clean_tbl = (table_name or "raw_assets").strip()
+
+        table_res = DBManager.get_table_data(clean_dir, clean_tbl, limit=int(max_rows), lightweight=False)
+        if table_res.get("error"):
+            yield {
+                "status": "error",
+                "message": f"Failed to fetch table data: {table_res.get('error')}"
+            }
+            return
+
+        columns: List[str] = table_res.get("columns", [])
+        data_rows: List[List[Any]] = table_res.get("data", [])
+
+        if not data_rows:
+            yield {
+                "status": "error",
+                "message": f"Table `{clean_dir}.{clean_tbl}` contains no records to export."
+            }
+            return
+
+        total_rows = len(data_rows)
+        row_dicts: List[Dict[str, Any]] = [
+            dict(zip(columns, row)) for row in data_rows
+        ]
+
+        settings = get_settings()
+        target_dir = Path(output_dir or settings.export_dir or "exports")
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        target_model = model or ("gemini-3.7-flash" if provider.lower() == "gemini" else "llama3.2")
+        saved_files: List[str] = []
+        last_preview_md = ""
+
+        for idx, row in enumerate(row_dicts, 1):
+            file_name = str(row.get("file_name", f"record_{idx}"))
+            file_path = str(row.get("file_path", ""))
+            modality = str(row.get("modality", "")).lower()
+
+            if progress_callback:
+                try:
+                    progress_callback(idx / total_rows, 1.0, f"Processing row {idx}/{total_rows}: {file_name}...")
+                except Exception:
+                    pass
+
+            # Render row-specific prompt
+            row_prompt = cls.format_row_template(row, prompt_template)
+            row_prompt = row_prompt.replace("{domain}", clean_dir).replace("{table}", clean_tbl)
+
+            try:
+                llm_output = LLMService.generate(
+                    provider=provider,
+                    model=target_model,
+                    prompt=row_prompt,
+                    system=system_prompt
+                )
+            except Exception as e:
+                llm_output = f"> Warning: LLM generation failed for `{file_name}`: {str(e)}"
+
+            # Format sidecar content
+            # Ensure the specific image/media is embedded if it's an image
+            image_embed = ""
+            if modality == "images" or file_name.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".gif")):
+                # Check if output already contains an image markdown link
+                if not re.search(r'!\[.*?\]\(.*?\)', llm_output):
+                    image_embed = f"![{file_name}]({file_path})\n\n"
+
+            # Clean frontmatter
+            frontmatter = (
+                f"---\n"
+                f"source_file: \"{file_name}\"\n"
+                f"source_path: \"{file_path}\"\n"
+                f"domain: \"{clean_dir}\"\n"
+                f"table: \"{clean_tbl}\"\n"
+                f"row_index: {idx}\n"
+                f"engine: \"{provider} ({target_model})\"\n"
+                f"exported_at: \"{datetime.datetime.now().isoformat()}\"\n"
+                f"---\n\n"
+            )
+
+            sidecar_md = f"{frontmatter}{image_embed}{llm_output.strip()}\n"
+
+            # Derive sidecar filename: e.g. photo1.jpg -> photo1_meta.md
+            stem = Path(file_name).stem if "." in file_name else file_name
+            safe_stem = re.sub(r'[^a-zA-Z0-9_\-]', '_', stem)
+            sidecar_name = f"{safe_stem}_meta.md"
+            sidecar_path = target_dir / sidecar_name
+
+            with open(sidecar_path, "w", encoding="utf-8") as f:
+                f.write(sidecar_md)
+
+            saved_files.append(str(sidecar_path.resolve()))
+            last_preview_md = sidecar_md
+
+            yield {
+                "status": "progress" if idx < total_rows else "success",
+                "current_index": idx,
+                "total_rows": total_rows,
+                "current_file": file_name,
+                "sidecar_name": sidecar_name,
+                "file_path": str(sidecar_path.resolve()),
+                "saved_files": saved_files,
+                "markdown_content": last_preview_md,
+                "mode": "sidecar"
+            }
+
+    @classmethod
+    def generate_report(
+        cls,
+        domain: str,
+        table_name: str,
+        prompt_template: str,
+        system_prompt: Optional[str] = None,
+        provider: str = "Ollama",
+        model: Optional[str] = None,
+        mode: str = "single",
+        max_rows: int = 50,
+        output_dir: Optional[str] = None,
+        custom_filename: Optional[str] = None,
+        progress_callback: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """Dispatch report generation for single report or per-row sidecars."""
+        is_sidecar = ("sidecar" in mode.lower() or "per-row" in mode.lower())
+
+        if is_sidecar:
+            last_res = {}
+            for update in cls.generate_sidecar_exports(
+                domain=domain,
+                table_name=table_name,
+                prompt_template=prompt_template,
+                system_prompt=system_prompt,
+                provider=provider,
+                model=model,
+                max_rows=max_rows,
+                output_dir=output_dir,
+                progress_callback=progress_callback
+            ):
+                last_res = update
+
+            if last_res.get("status") in ["success", "progress"]:
+                saved = last_res.get("saved_files", [])
+                return {
+                    "status": "success",
+                    "file_path": saved[0] if saved else "",
+                    "saved_files": saved,
+                    "file_name": f"{len(saved)} Sidecars (_meta.md)",
+                    "markdown_content": last_res.get("markdown_content", ""),
+                    "row_count": len(saved),
+                    "mode": "sidecar"
+                }
+            return last_res
+        else:
+            return cls.generate_single_report(
+                domain=domain,
+                table_name=table_name,
+                prompt_template=prompt_template,
+                system_prompt=system_prompt,
+                provider=provider,
+                model=model,
+                mode=mode,
+                max_rows=max_rows,
+                output_dir=output_dir,
+                custom_filename=custom_filename,
+                progress_callback=progress_callback
+            )

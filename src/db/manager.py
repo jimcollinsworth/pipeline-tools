@@ -307,8 +307,12 @@ class DBManager:
             
             ext = p.suffix.lower()
             if ext in [".md", ".markdown", ".txt", ".json", ".yaml", ".yml", ".csv", ".py", ".html", ".xml", ".log"]:
+                max_bytes = 1_000_000  # 1 MB text limit
                 with open(p, "r", encoding="utf-8", errors="ignore") as f:
-                    return f.read()
+                    chunk = f.read(max_bytes)
+                    if f.read(1):
+                        return chunk + f"\n\n[... Truncated: File exceeded 1 MB text extraction limit ...]"
+                    return chunk
             elif ext == ".pdf":
                 try:
                     import pypdfium2 as pdfium
@@ -565,7 +569,21 @@ class DBManager:
             query_cols = [c for c in available_cols if c not in heavy_binary_cols]
 
             if query_cols:
-                query = table.select(*[table[c] for c in query_cols]).limit(limit)
+                # If 'content' is in query_cols, project it with .slice(0, 500) so PostgreSQL
+                # handles substring truncation inside the database engine, avoiding massive memory bloat
+                select_kwargs = {}
+                for c in query_cols:
+                    if c == "content" and hasattr(table[c], "slice"):
+                        try:
+                            select_kwargs[c] = table[c].slice(0, 500)
+                        except Exception:
+                            select_kwargs[c] = table[c]
+                    else:
+                        select_kwargs[c] = table[c]
+                try:
+                    query = table.select(**select_kwargs).limit(limit)
+                except Exception:
+                    query = table.select(*[table[c] for c in query_cols]).limit(limit)
             else:
                 query = table.limit(limit)
 
@@ -592,12 +610,16 @@ class DBManager:
                         reordered.append(c)
                 df = df[reordered]
 
-            # Truncate long text columns to 250 chars for fast rendering and minimal WebSocket payload
+            # Truncate long text and object columns to 250 chars for fast rendering and minimal WebSocket payload
+            def _truncate_cell(val, max_len=250):
+                if val is None:
+                    return ""
+                s = str(val)
+                return (s[:max_len] + "...") if len(s) > max_len else s
+
             for col in df.columns:
                 if col != "media_preview" and df[col].dtype == "object":
-                    df[col] = df[col].apply(
-                        lambda x: (str(x)[:250] + "...") if isinstance(x, str) and len(x) > 250 else (str(x) if x is not None else "")
-                    )
+                    df[col] = df[col].apply(_truncate_cell)
 
             cols = list(df.columns)
             datatypes = ["html" if c == "media_preview" else "str" for c in cols]

@@ -285,4 +285,32 @@ This journal records verbatim developer instructions, architectural directives, 
 3. **Automated Test Suite Passing**:
    - Total test suite expanded to **38 tests**: **38 Passed, 0 Failed, 0 Errors**.
 
+---
+
+## 📅 2026-09-02: Zero-Memory Table Loading on Giant Text Files (`data_dir2` OOM Resolution)
+
+**Context:** User experienced OOM crash when selecting `thinkpad.data_dir2` in the View & Export tab, while other tables loaded fine.
+
+**Verbatim Instruction:**
+> `running out of memory now in export, i select the thinkpad domain data_dir2, doesn't load the preview. other tables work fine. data_dir2 isn't that big`
+> `what have you found so far about memory use? we can greately reduce large text cells in the table view, and rely more on the doc views for full text. feel free to truncate every text cell and we'll use a row preview. lets simplify th espec if needed`
+
+**Root Cause Analysis:**
+1. **Isolated Monster Row**:
+   - `thinkpad.data_dir2` contains 1,159 rows. At **Row 13**, a raw CSV export (`jim sleep export.csv`) had its entire 108 MB text (**107,742,125 characters**) stored in the `content` column.
+   - In Data Enhancement, the default preview is only 10 rows (`limit=10`), so Row 13 was never loaded into memory.
+   - In View & Export, the default limit was 25 rows (`limit=25`). Fetching Row 13 pulled the full 108 MB string across Postgres into Python, consuming **+425.5 MB of RAM** for just that single cell and causing Gradio to hang/OOM.
+
+**Key Decisions & Engineering Fixes:**
+1. **Database-Level String Slicing (`pxt` Projection)**:
+   - In `DBManager.get_table_data`, projected `table.content.slice(0, 500)` directly in the database query.
+   - PostgreSQL executes `SUBSTRING(content, 1, 500)` in-engine, sending only 500 characters over the wire instead of 108 million characters. Memory consumption dropped from 425+ MB to **<0.1 MB**.
+2. **Universal Cell Truncation**:
+   - Added `_truncate_cell(val, 250)` across all table columns and object types (including JSON dicts in `metadata`), keeping Gradio's entire WebSocket payload under 50 KB.
+3. **Ingestion Safeguard on Giant Files**:
+   - Updated `DBManager.extract_file_content` to cap reading giant text/CSV/log files at 1 MB, preventing massive data dumps from bloating future table rows.
+4. **Automated Verification**:
+   - Full test suite verified: **38 Passed, 0 Failed, 0 Errors**.
+
+
 

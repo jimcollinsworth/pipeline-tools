@@ -35,6 +35,7 @@ from src.core.config import get_settings, update_last_entry
 from src.db.manager import DBManager
 from src.core.llm_service import LLMService
 from src.export.exporter import MarkdownExporter
+from src.controllers.tables_controller import TablesController
 
 
 def render_tables_tab(tab=None):
@@ -196,51 +197,18 @@ def render_tables_tab(tab=None):
 
     # Event handlers
     def on_load_table(domain, table_name, limit, is_lightweight=True):
-        if not domain or not table_name:
-            return "⚠️ Please provide both Domain and Table name.", gr.update(headers=[], value=[]), "💡 **Available Column Placeholders:** *None*"
-
-        clean_dir = domain.strip() if domain else "default"
-        clean_tbl = table_name.strip() if table_name else "raw_assets"
-        update_last_entry(last_domain=clean_dir, last_table=clean_tbl)
-
-        res = DBManager.get_table_data(clean_dir, clean_tbl, limit=int(limit), lightweight=is_lightweight)
-        if res.get("error"):
-            return (
-                f"❌ **Error loading table `{clean_dir}.{clean_tbl}`:**\n```\n{res.get('error')}\n```",
-                gr.update(headers=["Error"], value=[[res.get('error')]]),
-                "💡 **Available Column Placeholders:** *Error loading table.*"
-            )
-
-        cols = res.get("columns", [])
-        datatypes = res.get("datatypes", ["str"] * len(cols))
-        data = res.get("data", [])
-        total = res.get("total_rows", len(data))
-        mode_label = "⚡ Lightweight" if is_lightweight else "🔍 Full Media"
-
-        stats_text = f"✅ **Table `{res.get('domain', clean_dir)}.{res.get('table', clean_tbl)}`** ({mode_label}) — Displaying {len(data)} of {total} total rows.\nColumns: `{', '.join(cols)}`"
-        cols_pills = ", ".join([f"`{{{c}}}`" for c in cols if c != "media_preview"]) if cols else "*None*"
-        cols_text = f"💡 **Available Column Placeholders:** {cols_pills} | Standard: `{{domain}}`, `{{table}}`, `{{total_rows}}`, `{{table_context}}`"
-
-        return stats_text, gr.update(headers=cols, datatype=datatypes, value=data), cols_text
+        res = TablesController.handle_load_table(domain, table_name, limit=limit, is_lightweight=is_lightweight)
+        return res["stats_text"], gr.update(headers=res["columns"], datatype=res["datatypes"], value=res["data"]), res["placeholders_text"]
 
     def on_domain_change(domain):
         """Update table dropdown choices when domain selection changes."""
-        if not domain:
-            return gr.update(choices=[], value="")
-        clean_dir = domain.strip()
-        update_last_entry(last_domain=clean_dir)
-        tables_list = DBManager.list_tables(clean_dir)
-        if not tables_list:
-            tables_list = ["raw_assets"]
-
-        curr_settings = get_settings()
-        selected_tbl = curr_settings.last_table if curr_settings.last_table in tables_list else tables_list[0]
-        return gr.update(choices=tables_list, value=selected_tbl)
+        res = TablesController.handle_domain_change(domain)
+        return gr.update(choices=res["choices"], value=res["value"])
 
     def on_export_provider_change(provider):
         models = LLMService.list_models_for_provider(provider)
         if not models:
-            models = ["gemini-3.6-flash"] if provider == "Gemini" else ["llama3.2"]
+            models = ["gemini-3.7-flash"] if provider == "Gemini" else ["llama3.2"]
         return gr.update(choices=models, value=models[0])
 
     def load_preset(preset_key):
@@ -255,60 +223,14 @@ def render_tables_tab(tab=None):
             return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else 0
-        
-        row_dict = {}
-        if hasattr(current_df, "iloc") and row_idx < len(current_df):
-            row_dict = current_df.iloc[row_idx].to_dict()
-        elif isinstance(current_df, list) and row_idx < len(current_df):
-            val = current_df[row_idx]
-            if isinstance(val, dict):
-                row_dict = val
-        elif isinstance(current_df, dict) and "data" in current_df:
-            headers = current_df.get("headers", [])
-            data_rows = current_df.get("data", [])
-            if row_idx < len(data_rows):
-                row_dict = dict(zip(headers, data_rows[row_idx]))
-
-        if not row_dict:
-            clean_dir = domain.strip() if domain else "default"
-            clean_tbl = table_name.strip() if table_name else "raw_assets"
-            res = DBManager.get_table_data(clean_dir, clean_tbl, limit=50, lightweight=False)
-            cols = res.get("columns", [])
-            data = res.get("data", [])
-            if row_idx < len(data):
-                row_dict = dict(zip(cols, data[row_idx]))
-
-        file_path = str(row_dict.get("file_path", ""))
-        file_name = str(row_dict.get("file_name", "Unknown File"))
-        modality = str(row_dict.get("modality", "")).lower()
-        file_type = str(row_dict.get("file_type", "")).lower()
-        content = str(row_dict.get("content", ""))
-        size = row_dict.get("file_size", "")
-
-        summary_lines = [
-            f"### 📄 **{file_name}**",
-            f"- **Modality:** `{modality}` | **Format:** `{file_type}` | **Size:** {size} bytes",
-            f"- **File Path:** `{file_path}`"
-        ]
-        for k, v in row_dict.items():
-            if k not in ["id", "file_name", "file_path", "rel_path", "modality", "file_type", "file_size", "content", "media_preview", "doc", "image", "audio", "video", "metadata", "created_at"] and v:
-                summary_lines.append(f"- **{k}:** {v}")
-
-        details_md = "\n".join(summary_lines)
-
-        file_exists = os.path.exists(file_path) if file_path else False
-        img_val = file_path if (modality == "images" or file_type in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"]) and file_exists else None
-        audio_val = file_path if (modality == "audio" or file_type in [".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"]) and file_exists else None
-        video_val = file_path if (modality == "video" or file_type in [".mp4", ".webm", ".mov", ".avi", ".mkv"]) and file_exists else None
-        has_content = bool(content and content.strip())
-
+        insp = TablesController.handle_row_inspection(row_idx, current_df, domain, table_name)
         return (
             gr.update(visible=True),
-            gr.update(value=img_val, visible=bool(img_val)),
-            gr.update(value=audio_val, visible=bool(audio_val)),
-            gr.update(value=video_val, visible=bool(video_val)),
-            details_md,
-            gr.update(value=content if has_content else "", visible=has_content)
+            gr.update(value=insp["image_path"], visible=insp["has_image"]),
+            gr.update(value=insp["audio_path"], visible=insp["has_audio"]),
+            gr.update(value=insp["video_path"], visible=insp["has_video"]),
+            insp["details_markdown"],
+            gr.update(value=insp["content_text"], visible=insp["has_content"])
         )
 
     def on_generate_export(
@@ -316,58 +238,30 @@ def render_tables_tab(tab=None):
         max_rows, system_prompt, prompt_template, custom_filename,
         progress=gr.Progress(track_tqdm=True)
     ):
-        if not domain or not table_name:
-            gr.Warning("Please select a domain and table first.")
-            yield "### ⚠️ Missing Target Table\nPlease select a Domain and Table above.", "", None
-            return
-
-        if not prompt_template or not prompt_template.strip():
-            gr.Warning("Please enter a prompt template.")
-            yield "### ⚠️ Missing Prompt Template\nPlease enter a synthesis prompt template.", "", None
-            return
-
-        yield f"⏳ **Synthesizing Markdown report for `{domain}.{table_name}` via [{provider}] '{model}'...**", "", None
-
         def cb(cur, total, msg):
             pct = cur / total if total else 0.5
             progress(pct, desc=msg)
 
-        try:
-            res = MarkdownExporter.generate_report(
-                domain=domain,
-                table_name=table_name,
-                prompt_template=prompt_template,
-                system_prompt=system_prompt,
-                provider=provider,
-                model=model,
-                mode="llm",
-                max_rows=int(max_rows),
-                custom_filename=custom_filename,
-                progress_callback=cb
-            )
+        yield f"⏳ **Synthesizing Markdown report for `{domain}.{table_name}` via [{provider}] '{model}'...**", "", None
 
-            if res.get("status") == "success":
-                file_path = res.get("file_path")
-                file_name = res.get("file_name")
-                content = res.get("markdown_content", "")
-                total_rows = res.get("row_count", 0)
+        res = TablesController.handle_export_report(
+            domain=domain,
+            table_name=table_name,
+            provider=provider,
+            model=model,
+            max_rows=max_rows,
+            system_prompt=system_prompt,
+            prompt_template=prompt_template,
+            custom_filename=custom_filename,
+            progress_callback=cb
+        )
 
-                gr.Info(f"AI report exported successfully: {file_name}")
-                status_msg = (
-                    f"### ✅ AI Report Exported Successfully!\n"
-                    f"- **File Saved:** `{file_path}`\n"
-                    f"- **Records Analyzed:** {total_rows}\n"
-                    f"- **AI Engine / Model:** `{provider}` ({model})\n"
-                )
-                yield status_msg, content, file_path
-            else:
-                err_msg = res.get("message", "Unknown error during export")
-                gr.Error(f"Export failed: {err_msg}")
-                yield f"### ❌ Export Failed\n```\n{err_msg}\n```", "", None
-
-        except Exception as e:
-            gr.Error(f"Unexpected export exception: {str(e)}")
-            yield f"### ❌ Export Error\n```\n{type(e).__name__}: {str(e)}\n```", "", None
+        if res["status"] == "success":
+            gr.Info(f"AI report exported successfully: {res.get('file_name')}")
+            yield res["message"], res["content"], res["file_path"]
+        else:
+            gr.Error("Export failed")
+            yield res["message"], "", None
 
     # -------------------------------------------------------------------------
     # Wire Event Listeners (Decoupled Single-Responsibility Architecture)

@@ -6,33 +6,29 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 
 ## 🛠 Features
 
-- **Multimodal Directory Ingestion**: Recursively scans and ingests PDF, Markdown, text, images, audio, and video files into a unified Pixeltable store with automatic metadata tracking. Easy selection/type ahead boxes for directory, domain, table, field and other selections.
-- **Sample-First Prompt Playground for data enhancement**: 
-  - Test entity extraction, summarization, or structured tagging on 1–5 sample rows before running full-scale batch jobs.
-  - Support Python function calling for audio/video/image analysis (e.g., beats per minute, spectrograms, object recognition) to feed into table columns without additional LLM calls.
-- **Incremental & Cached Execution**: 
-  - Uses Pixeltable computed columns to ensure LLM operations are cached, incremental, and version-controlled.
-  - Minimize LLM calls per row, support multiple field/column input/templating into the LLM, and accept structured typed output inserted/appended into table columns.
-- **Rich Interactive DataTable**: Inspect multimodal content, embedded media, chunks, and LLM extraction results directly in Gradio.
-- **Chunking and Combining**:
-  - Chunk videos by time/frame, editing breaks (storing frame signatures for before and after the edit), and recognized objects.
-  - Manage chunked data relationships with parent/child hierarchies.
-- **Rich Search and Filtering**:
-  - Select records based on multiple fields using semantic and/or exact text search.
-  - Export query results across modalities (video, audio, images, text, markdown) to single or multiple documents.
-- **Embedded Multimodal Media & Inspector**: 
-  - Toggle between fast **⚡ Lightweight Mode** and **🔍 Full Media Mode** with inline HTML thumbnails (`<img>`), audio controls (`<audio>`), video players (`<video>`), and PDF badges.
+- **Multimodal Directory Ingestion & Scanner**:
+  - Recursively scans local project folders, classifying files into modalities (*Docs*, *Images*, *Audio*, *Video*, *Code*).
+  - One-file-to-one-row ingestion with native text extraction (Markdown, TXT) and PDF page extraction via Pixeltable's bundled `pypdfium2` engine into the `content` column.
+  - Intelligent filterable type-ahead dropdowns for directories, domains, and tables with automatic discovery.
+- **Sample-First Prompt Playground (Data Enhancement)**:
+  - Dry-run and iterate on system/user prompts with `{column}` placeholders across 1–N sample rows before running full-scale batch jobs.
+  - **⚡ JSON Auto-Split Engine**: Extract structured JSON payloads from model output and dynamically create native Pixeltable schema columns (`pxt.String`, `pxt.Int`, `pxt.Float`, `pxt.Json`, `pxt.Bool`) in one pass.
+- **Incremental & Cached Execution**:
+  - Leverages Pixeltable declarative computed columns to ensure LLM operations are cached, incremental, and version-controlled.
+  - Minimizes redundant LLM calls per row, and accepts structured typed output inserted/appended into table columns.
+- **Embedded Multimodal Media & Interactive Inspector**:
+  - Fast **⚡ Lightweight Mode** (skips binary deserialization, reducing Python RAM by >95%) and **🔍 Full Media Mode** with inline HTML thumbnails (`<img>`), audio players (`<audio>`), video players (`<video>`), and PDF badges.
   - Interactive **🔬 Selected Record Media Inspector** drawer opens on row selection for deep inspection of full-resolution images, audio playback, video playback, and extracted text.
-- **Flexible Export Engine (Integrated in View & Export)**:
-  - **LLM-Synthesized Markdown Reports**: Aggregate entire tables or selected rows into cohesive Markdown reports using customizable prompts and selectable columns.
-  - **Direct Formatted Document Export**: Generate structured Markdown documents directly from table data without additional LLM calls.
-  - Automatic saving to `exports/` with live preview and one-click download.
-- **Lineage & Undo**: Full tracking of dataset versions, snapshot tags, and rollback support via Pixeltable.
-- **AI Model Support**:
-  - Track model and token usage alongside ingestion and enhancement tasks.
-  - Built-in support for Ollama and Gemini, including model metadata for selection decisions and connection testing.
-- **Skills Support**:
-  - Load reusable skills for tasks like entity analysis, domain-specific tasks (e.g., municipal meetings), and model routing.
+- **1-Click Lineage Undo & Safe Database Management**:
+  - **↩️ 1-Click Undo**: Instantly drops newly added LLM columns (including auto-split columns) and rolls back table schema without touching raw ingested assets.
+  - **🗑️ Safe Deletion**: 2-step confirmation drawers for dropping individual tables or entire domains with on-screen summary cards and logging.
+- **Unified AI-Driven Markdown Report Generation (View & Export)**:
+  - Synthesize multi-row table data into cohesive Markdown documents using Ollama or Gemini with full `{table_context}` interpolation.
+  - 4 Task-oriented presets: *Entity & Keyword Intelligence*, *Visual & Scene Breakdown*, *Thematic Summary & Patterns*, and *Structured Media Catalog*.
+  - Live in-browser Markdown preview and instant 1-click file download from `exports/`.
+- **Multi-Provider AI Engine**:
+  - **Local Ollama**: Fast, zero-cost local LLMs (`llama3.2`, `mistral`, `qwen2.5-coder`, `deepseek-r1`).
+  - **Google Gemini API**: Native cloud model discovery prioritizing the **Gemini 3.7** and **Gemini 3.0** model families with structured output.
 
 ---
 
@@ -40,7 +36,7 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 
 ### Prerequisites
 - Python 3.10+ (Python 3.11+ recommended)
-- `uv` or standard Python `venv` / `pip`
+- `uv` (recommended) or standard Python `venv` / `pip`
 
 ### Installation & Setup
 
@@ -48,7 +44,7 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
    ```bash
    cd pipeline-tools
 
-   # Create and activate virtual environment with uv:
+   # Create virtual environment with uv:
    uv venv
    .\.venv\Scripts\Activate.ps1
    ```
@@ -71,7 +67,7 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 ## 💻 Usage & Workflows
 
 ### Testing & Verification
-Run the automated test suite to see detailed test names and status:
+Run the automated test suite with formatted execution metrics:
 ```bash
 uv run python -m tests
 ```
@@ -84,14 +80,14 @@ uv run gradio app.py
 # Or standard execution:
 uv run python app.py
 ```
-Open your browser at `http://localhost:7860`.
+Open your browser at `http://127.0.0.1:7860`.
 
 ### 2. Available Tabs & Workflow
 
 1. **📂 Ingestion & Scanner**:
    - Provide any local folder path and click **Scan Directory**.
    - Review files, sizes, and modality breakdown.
-   - Enter your Pixeltable target **Domain / Directory** (e.g. `default` or `project_alpha`) and **Table Name** (e.g. `raw_assets`).
+   - Select your target **Domain / Directory** (e.g. `default` or `project_alpha`) and **Table Name** (e.g. `raw_assets`).
    - Click **⚡ Ingest Scanned Files into Pixeltable** (ingests 1 file per row, extracting raw text and metadata).
 
 2. **🧪 Data Enhancement**:
@@ -100,33 +96,42 @@ Open your browser at `http://localhost:7860`.
    - Click **🚀 Run Test on Sample Rows** (tests on 1–N rows with side-by-side prompt and output inspection).
    - Enter a target column name (e.g. `llm_summary`, `entities`) and select **replace** or **append** mode (with optional **⚡ Auto-Split** for multi-key JSON outputs).
    - Click **💾 Execute on Table & Save Column** to apply the prompt across table rows.
+   - Use **↩️ Undo Last Operation** to revert newly added columns if needed.
 
 3. **📊 View & Export**:
    - Inspect stored data, column values, and newly added LLM output columns.
    - Toggle **⚡ Lightweight Preview** off to view embedded HTML image thumbnails, audio players, and video widgets.
    - Click any row to open the **🔬 Selected Record Media Inspector** drawer for full-resolution preview.
-   - Configure prompt-driven Markdown exports (*Entity & Keyword Intelligence*, *Visual & Scene Breakdown*, *Thematic Summary*, *Direct Catalog*).
+   - Configure prompt-driven Markdown exports (*Entity Intelligence*, *Visual Breakdown*, *Thematic Summary*, *Structured Catalog*).
    - Save directly to `exports/` with live UI preview and instant download.
+   - Safely delete tables or entire domains using the confirmation drawers.
 
 4. **⚙️ Settings & Models**:
-   - Check Ollama server connection, inspect installed models table, and save default configurations.
+   - Check Ollama / Gemini server connection, inspect installed models table, and save default configurations.
 
 ---
 
 ## 🗺 Roadmap
 
 - [x] **Phase 1: Core Document Ingestion & Prompt Playground**
-  - Pixeltable unified schema definition.
-  - PyMuPDF / Markdown / Text chunkers.
+  - Pixeltable unified schema definition and identifier sanitization.
+  - Multi-modal directory scanner and text extraction.
   - Gradio UI with dry-run sample testing & batch execution.
 - [x] **Phase 2: Test Hardening, Media Inspection & Export Engine**
   - Test suite isolation with automated teardown hooks.
   - In-table HTML media thumbnails, audio/video players, and interactive Media Inspector drawer.
-  - Prompt-driven Markdown report exports.
-- [ ] **Phase 3: Lineage & Multimodal Expansion**
-  - Snapshot explorer and rollback UI.
+  - 1-Click Lineage Undo and safe table/domain deletion workflows.
+  - Unified AI Markdown report export engine with `{table_context}` interpolation.
+- [ ] **Phase 3: Lineage, Controller Decoupling & Multimodal Extensions**
+  - Decouple UI event handlers into testable pure controllers (`src/controllers/`).
   - Hugging Face model hub & Ultralytics YOLO vision classification engines (e.g. WikiArt 27-movement painting classifier) with dynamic table auto-split columns.
-  - Image OCR/Vision LLM and Audio/Video transcription (Whisper/Gemini).
+  - Mobile / tablet responsive UI design (`@media (max-width: 768px)`).
+  - Multi-branch version history and table revision timeline.
+- [ ] **Phase 4: Dynamic Ingestion Context, Skills Integration & Document Reader**
+  - Stateful dynamic context accumulation across multi-row ingestion for entity deduplication and learned dataset intelligence (`domain-table-ingestion-context.md`).
+  - Project skills integration with in-prompt `/` slash command discovery from `.agents/skills/`.
+  - Single-record rich Markdown Document Reader with collapsible sections, theme selectors, and embedded Mermaid diagrams.
+  - Touch-friendly visual column pill toggles and LLM-assisted prompt chip insertion.
 
 ---
 

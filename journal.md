@@ -227,3 +227,33 @@ This journal records verbatim developer instructions, architectural directives, 
    - Truncated text columns in the DataFrame to 250 characters for UI display, keeping JSON response sizes tiny (<50KB) even on large document datasets.
 4. **All 27 Automated Tests Passing**:
    - Verified with `uv run python -m tests`.
+
+---
+
+## 📅 2026-09-02: Decoupled UI Controllers & Phase 4 Roadmap Expansion
+
+**Context:** Decoupling Gradio UI event handlers into pure, testable controller classes, expanding the automated test suite to 36 tests, and defining Phase 4 roadmap architecture.
+
+**Verbatim Instruction:**
+> `ok, make sure thats all documented in the readme, good tool feature descriptions`
+> `go ahead with the decouple ui event handlers, and update unit tests based on new capabilities.`
+> `lets add more to the roadmap too, put in detail with your addition and suggestions, do not remove any of my detail points, do not implement just document in our plan:`
+> `  ingestion-context - add dynamic context to multi-row ingestion process, so the tool 'learns' about the data as it's ingesting it. as each row is processed it starts with the context from all previous rows, and system prompt, can use information such as previous row entitity spelling to help deduplication, lots of potential. When the table has been processed, the current context is learned knowledge about the data - could be useful in itself. at the end of each batch write the context out to a file 'domain-table-ingestion-context.md' for example (are there standards around context knowledge structure?) ?what does pixeltable provide?`
+> `  skills handling - want to do a / slash command to load skills from the prompt boxes. lets just search project .agents/skills to start. ?what does pixeltable provide?`
+> `  document UX - instead of tables of rows, with large blobs of text in cells, the document view shows a single row of data, but as markdown data - use markdown formating (with borders, color..) to show field label and data, headers and lists for rollups, data (ideally the UX has collapse/expand on header levels and lists), nice formatted and wrapped text, theme selector for different layouts/css, embedded charts/mermaid/images. User could move to next/previous to see a different row. this document ux would be useful for any of the table views, but maybe it's just for export - this is essentially the export markdown document/sidecar for each row feature of export, so maybe it's not that important.  The real idea here is to make long text fields easier to view/review, and second maybe a newspaper/blog type view of the data, or even the entire app would be fun and useful. !lets consider newspaper view type app ux!`
+> `Not sure about tech approach - single big markdown doc easy but inflexible, table with each cell a separate markdown fragment could be cool but complexe. ?what are our other markdown related options, we do want to save/export this as markdown with yaml or other frontmatter? ?what our non-markdown options - for displaying this type of rich data?`
+> `  column/field selection - need fast way to select columns in the ui, both tables and documents, definitely not a list of fields, must be direct, visual and touch based. each column has a hide icon/toggle, hide maybe just sends it to the end of the doc/row, or hides it, but then we have a hidden view toggle to unhide, not ideal. selecting fields is ideally just done with the llm, in the prompt.  Table views need to filter/hide, and ?pixeltable has calls that could help? Not sure i want to bother with views that get saved, although temporary maybe.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Decoupled Controller Architecture (`src/controllers/`)**:
+   - Extracted all UI event logic into three pure, testable controllers:
+     - `IngestController`: Directory suggestion generation, path validation, scanner aggregation, and Pixeltable insertion.
+     - `PlaygroundController`: Provider/model routing, domain/table auto-population, dry-run sample testing, batch column creation, and 1-click lineage undo.
+     - `TablesController`: Table data loading, zero-query client memory row inspection formatting, safe 2-step table & domain deletion, and AI report export.
+   - UI tabs (`src/ui/`) now serve strictly as declarative layout definitions and event routers.
+2. **Comprehensive Controller Unit Tests (`tests/test_controllers.py`)**:
+   - Added 9 dedicated controller test methods testing business logic and error boundaries directly without Gradio server overhead.
+   - Total automated test suite expanded to **36 tests (`36 Passed, 0 Failed, 0 Errors`)**.
+3. **Phase 4 Roadmap & Architecture Specifications (`planning.md`)**:
+   - Documented `RES-12` (Dynamic Ingestion Context & State Accumulation), `RES-13` (Skills Integration via `/` slash commands), `RES-14` (Single-Record Document Reader & Newspaper Editorial UX), and `RES-15` (Direct Touch-Based Column Selection & Declarative Views).
+

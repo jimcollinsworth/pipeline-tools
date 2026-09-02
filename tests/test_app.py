@@ -585,7 +585,15 @@ def run_tests():
     print("  PIPELINE TOOLS AUTOMATED TEST SUITE", flush=True)
     print(header + "\n", flush=True)
     
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestPipelineTools)
+    loader = unittest.TestLoader()
+    suite = unittest.TestSuite()
+    suite.addTests(loader.loadTestsFromTestCase(TestPipelineTools))
+    try:
+        from tests.test_controllers import TestControllers
+        suite.addTests(loader.loadTestsFromTestCase(TestControllers))
+    except Exception:
+        pass
+
     total_count = suite.countTestCases()
     result = CleanTestResult(sys.stdout, total_tests=total_count)
     

@@ -29,6 +29,8 @@ from src.core.config import get_settings, update_last_entry
 from src.core.llm_service import LLMService
 from src.db.manager import DBManager
 from src.prompts.executor import PromptExecutor
+from src.controllers.playground_controller import PlaygroundController
+from src.controllers.tables_controller import TablesController
 
 def render_playground_tab(tab=None):
     """Render the Data Enhancement prompt workbench and batch execution tab."""
@@ -207,32 +209,8 @@ def render_playground_tab(tab=None):
 
     # Helper to load table preview and available columns
     def load_table_preview(domain, table_name, lightweight=True):
-        if not domain or not table_name:
-            return (
-                "⚠️ Select a valid Domain and Table.",
-                gr.update(headers=["Notice"], value=[["No table selected"]]),
-                "💡 **Available Column Placeholders:** *No table selected.*"
-            )
-        
-        res = DBManager.get_table_data(domain, table_name, limit=10, lightweight=lightweight)
-        if res.get("error"):
-            return (
-                f"⚠️ **Table `{domain}.{table_name}` not found or empty.**",
-                gr.update(headers=["Status"], value=[[res.get("error")]]),
-                "💡 **Available Column Placeholders:** *Error loading table.*"
-            )
-        
-        cols = res.get("columns", [])
-        datatypes = res.get("datatypes", ["str"] * len(cols))
-        data = res.get("data", [])
-        total = res.get("total_rows", len(data))
-        mode_label = "⚡ Lightweight" if lightweight else "🔍 Full Media"
-        
-        info_text = f"✅ **Table `{res.get('domain', domain)}.{res.get('table', table_name)}`** ({mode_label}) — Total Rows: **{total}** (showing first {len(data)})"
-        cols_pills = ", ".join([f"`{{{c}}}`" for c in cols if c != "media_preview"]) if cols else "*None*"
-        cols_text = f"💡 **Available Column Placeholders:** {cols_pills} | Standard: `{{file_name}}`, `{{content}}`, `{{rel_path}}`, `{{modality}}`, `{{file_size}}`"
-        
-        return info_text, gr.update(headers=cols, datatype=datatypes, value=data), cols_text
+        res = PlaygroundController.load_table_preview(domain, table_name, lightweight=lightweight)
+        return res["stats_text"], gr.update(headers=res["columns"], datatype=res["datatypes"], value=res["data"]), res["placeholders_text"]
 
     def on_output_mode_change(selected_mode):
         is_single = (selected_mode == "📄 Single Target Column")
@@ -246,29 +224,13 @@ def render_playground_tab(tab=None):
 
     # Auto-refresh and event handlers
     def on_provider_change(selected_provider):
-        models = LLMService.list_models_for_provider(selected_provider)
-        curr = get_settings()
-        if selected_provider == "Gemini":
-            chosen = curr.default_gemini_model if curr.default_gemini_model in models else (models[0] if models else "gemini-3.6-flash")
-        else:
-            chosen = curr.default_ollama_model if curr.default_ollama_model in models else (models[0] if models else "llama3.2")
-        update_last_entry(last_provider=selected_provider, last_model=chosen)
-        return gr.update(choices=models, value=chosen)
+        res = PlaygroundController.handle_provider_change(selected_provider)
+        return gr.update(choices=res["choices"], value=res["value"])
 
     def on_domain_change(selected_domain):
         """Auto-populate tables when domain selection changes."""
-        if not selected_domain:
-            return gr.update(choices=[], value="")
-        domain_str = selected_domain.strip()
-        update_last_entry(last_domain=domain_str)
-        
-        discovered_tables = DBManager.list_tables(domain_str)
-        if not discovered_tables:
-            discovered_tables = ["raw_assets"]
-        
-        curr_settings = get_settings()
-        selected_tbl = curr_settings.last_table if curr_settings.last_table in discovered_tables else discovered_tables[0]
-        return gr.update(choices=discovered_tables, value=selected_tbl)
+        res = PlaygroundController.handle_domain_change(selected_domain)
+        return gr.update(choices=res["choices"], value=res["value"])
 
     def on_table_change(selected_table, current_domain, is_lightweight):
         """Persist last table selection and refresh table preview."""
@@ -284,59 +246,14 @@ def render_playground_tab(tab=None):
             return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else 0
-
-        row_dict = {}
-        if hasattr(current_df, "iloc") and row_idx < len(current_df):
-            row_dict = current_df.iloc[row_idx].to_dict()
-        elif isinstance(current_df, list) and row_idx < len(current_df):
-            val = current_df[row_idx]
-            if isinstance(val, dict):
-                row_dict = val
-        elif isinstance(current_df, dict) and "data" in current_df:
-            headers = current_df.get("headers", [])
-            data_rows = current_df.get("data", [])
-            if row_idx < len(data_rows):
-                row_dict = dict(zip(headers, data_rows[row_idx]))
-
-        if not row_dict:
-            clean_dir = domain.strip() if domain else "default"
-            clean_tbl = table_name.strip() if table_name else "raw_assets"
-            res = DBManager.get_table_data(clean_dir, clean_tbl, limit=10, lightweight=False)
-            cols = res.get("columns", [])
-            data = res.get("data", [])
-            if row_idx < len(data):
-                row_dict = dict(zip(cols, data[row_idx]))
-
-        file_path = str(row_dict.get("file_path", ""))
-        file_name = str(row_dict.get("file_name", "Unknown File"))
-        modality = str(row_dict.get("modality", "")).lower()
-        file_type = str(row_dict.get("file_type", "")).lower()
-        content = str(row_dict.get("content", ""))
-        size = row_dict.get("file_size", "")
-
-        summary_lines = [
-            f"### 📄 **{file_name}**",
-            f"- **Modality:** `{modality}` | **Format:** `{file_type}` | **Size:** {size} bytes",
-            f"- **File Path:** `{file_path}`"
-        ]
-        for k, v in row_dict.items():
-            if k not in ["id", "file_name", "file_path", "rel_path", "modality", "file_type", "file_size", "content", "media_preview", "doc", "image", "audio", "video", "metadata", "created_at"] and v:
-                summary_lines.append(f"- **{k}:** {v}")
-
-        details_md = "\n".join(summary_lines)
-        file_exists = os.path.exists(file_path) if file_path else False
-        img_val = file_path if (modality == "images" or file_type in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"]) and file_exists else None
-        audio_val = file_path if (modality == "audio" or file_type in [".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"]) and file_exists else None
-        video_val = file_path if (modality == "video" or file_type in [".mp4", ".webm", ".mov", ".avi", ".mkv"]) and file_exists else None
-        has_content = bool(content and content.strip())
-
+        insp = TablesController.handle_row_inspection(row_idx, current_df, domain, table_name)
         return (
             gr.update(visible=True),
-            gr.update(value=img_val, visible=bool(img_val)),
-            gr.update(value=audio_val, visible=bool(audio_val)),
-            gr.update(value=video_val, visible=bool(video_val)),
-            details_md,
-            gr.update(value=content if has_content else "", visible=has_content)
+            gr.update(value=insp["image_path"], visible=insp["has_image"]),
+            gr.update(value=insp["audio_path"], visible=insp["has_audio"]),
+            gr.update(value=insp["video_path"], visible=insp["has_video"]),
+            insp["details_markdown"],
+            gr.update(value=insp["content_text"], visible=insp["has_content"])
         )
 
     def on_test_sample(domain, table_name, provider, model, system_prompt, prompt_template, sample_count, output_mode,

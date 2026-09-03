@@ -96,7 +96,7 @@ class IngestController:
         updated_choices = IngestController.get_directory_suggestions(str(p))
 
         if modalities is None:
-            modalities = ["docs", "images", "audio", "video", "other"]
+            modalities = ["docs", "images", "audio", "video", "csv"]
 
         files = scan_directory(str(p), recursive=recursive, modalities=modalities)
         if not files:
@@ -156,13 +156,50 @@ class IngestController:
 
         update_last_entry(last_domain=safe_dir, last_table=safe_tbl)
 
-        res = DBManager.ingest_files(
-            dir_name=safe_dir,
-            table_name=safe_tbl,
-            files_info=scanned_files,
-            overwrite=overwrite,
-            progress_callback=progress_callback
-        )
+        # Check for CSV files in scanned_files
+        csv_files = [f for f in scanned_files if f.get("modality") == "csv" or f.get("extension", "").lower() == ".csv"]
+        if csv_files:
+            if len(csv_files) > 1:
+                return {
+                    "status": "error",
+                    "message": (
+                        f"### ⚠️ Single CSV Ingestion Rule\n"
+                        f"> In Pipeline Tools, **only one CSV can be ingested at a time** because each row in the CSV becomes an individual record in the table.\n\n"
+                        f"Found **{len(csv_files)} CSV files** in the scan list. Please isolate the specific CSV file you wish to ingest, or deselect other modalities."
+                    ),
+                    "domain_choices": DBManager.list_dirs() or [safe_dir],
+                    "table_choices": DBManager.list_tables(safe_dir) or [safe_tbl]
+                }
+            if len(scanned_files) > 1:
+                return {
+                    "status": "error",
+                    "message": (
+                        f"### ⚠️ Mixed Ingestion Not Permitted\n"
+                        f"> Found 1 CSV file (`{csv_files[0]['name']}`) alongside other media/document files.\n\n"
+                        f"CSV files are ingested into tabular rows, whereas documents/media are ingested as individual file asset rows. "
+                        f"Please uncheck 'csv' to ingest media files, or scan only the folder/file containing your CSV."
+                    ),
+                    "domain_choices": DBManager.list_dirs() or [safe_dir],
+                    "table_choices": DBManager.list_tables(safe_dir) or [safe_tbl]
+                }
+
+            # Exactly 1 CSV file: route to DBManager.ingest_csv
+            csv_path = csv_files[0].get("abs_path", "")
+            res = DBManager.ingest_csv(
+                dir_name=safe_dir,
+                table_name=safe_tbl,
+                csv_path=csv_path,
+                overwrite=overwrite,
+                progress_callback=progress_callback
+            )
+        else:
+            res = DBManager.ingest_files(
+                dir_name=safe_dir,
+                table_name=safe_tbl,
+                files_info=scanned_files,
+                overwrite=overwrite,
+                progress_callback=progress_callback
+            )
 
         all_domains = DBManager.list_dirs()
         if not all_domains:
@@ -181,10 +218,12 @@ class IngestController:
             if dir_sanitized or tbl_sanitized:
                 sanitization_note = f"\n> *Note: Target identifier was sanitized for SQL compatibility: `{clean_dir}.{clean_tbl}` → `{safe_dir}.{safe_tbl}`*"
 
+            cols_line = f"\n- **Columns:** {res.get('columns_count')} ({', '.join(res.get('columns', [])[:8])}{'...' if len(res.get('columns', [])) > 8 else ''})" if "columns_count" in res else ""
             status_msg = (
                 f"### ✅ Pixeltable Ingestion Complete!\n"
                 f"- **Target Table:** `{safe_dir}.{safe_tbl}`\n"
-                f"- **Rows Inserted:** {res.get('rows_inserted', len(scanned_files))}\n"
+                f"- **Rows Inserted:** {res.get('rows_inserted', len(scanned_files))}"
+                f"{cols_line}\n"
                 f"- **Status:** Successfully written to persistent storage.{sanitization_note}"
             )
             return {

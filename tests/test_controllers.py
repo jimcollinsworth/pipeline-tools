@@ -187,3 +187,49 @@ class TestControllers(unittest.TestCase):
                 self.assertEqual(sidecar_res["status"], "success")
                 self.assertIn("Per-Row Sidecars", sidecar_res["message"])
                 self.assertTrue(len(sidecar_res.get("saved_files", [])) > 0)
+
+    def test_ingest_controller_single_csv_rules(self):
+        """[Controller] Verify IngestController validates and enforces the single-CSV ingestion rule."""
+        import tempfile
+
+        # 1. Multiple CSVs rejected
+        fake_multiple_csvs = [
+            {"name": "file1.csv", "abs_path": "C:/file1.csv", "modality": "csv", "extension": ".csv"},
+            {"name": "file2.csv", "abs_path": "C:/file2.csv", "modality": "csv", "extension": ".csv"}
+        ]
+        res_multi = IngestController.ingest_files_flow(self.TEST_DOMAIN, "csv_multi_test", fake_multiple_csvs)
+        self.assertEqual(res_multi["status"], "error")
+        self.assertIn("Single CSV Ingestion Rule", res_multi["message"])
+
+        # 2. Mixed CSV and media rejected
+        fake_mixed = [
+            {"name": "file1.csv", "abs_path": "C:/file1.csv", "modality": "csv", "extension": ".csv"},
+            {"name": "photo.jpg", "abs_path": "C:/photo.jpg", "modality": "images", "extension": ".jpg"}
+        ]
+        res_mixed = IngestController.ingest_files_flow(self.TEST_DOMAIN, "csv_mixed_test", fake_mixed)
+        self.assertEqual(res_mixed["status"], "error")
+        self.assertIn("Mixed Ingestion Not Permitted", res_mixed["message"])
+
+        # 3. Single valid CSV accepted
+        if PIXELTABLE_AVAILABLE:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+                tmp_csv = f.name
+                f.write("City,Population\nTokyo,37000000\nDelhi,32000000\n")
+
+            try:
+                single_csv = [{
+                    "name": "cities.csv",
+                    "abs_path": tmp_csv,
+                    "rel_path": "cities.csv",
+                    "modality": "csv",
+                    "extension": ".csv"
+                }]
+                res_single = IngestController.ingest_files_flow(self.TEST_DOMAIN, "cities_tbl", single_csv, overwrite=True)
+                self.assertEqual(res_single["status"], "success", f"Failed with message: {res_single.get('message')}")
+                self.assertIn("Rows Inserted", res_single["message"])
+            finally:
+                try:
+                    os.unlink(tmp_csv)
+                except Exception:
+                    pass
+

@@ -438,6 +438,133 @@ class DBManager:
             }
 
     @classmethod
+    def ingest_csv(
+        cls,
+        dir_name: str,
+        table_name: str,
+        csv_path: str,
+        overwrite: bool = False,
+        progress_callback: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Ingest a single CSV file into Pixeltable where each CSV row becomes an individual table record.
+        Uses native declarative pxt.create_table(source=...) or table.insert(...) with sanitized column headers.
+        """
+        if not PIXELTABLE_AVAILABLE:
+            return {
+                "status": "error",
+                "message": "Pixeltable is not installed in the current environment (`uv pip install pixeltable`)."
+            }
+
+        p = Path(csv_path)
+        if not p.exists() or not p.is_file():
+            return {"status": "error", "message": f"CSV file not found: `{csv_path}`"}
+
+        if p.suffix.lower() != ".csv":
+            return {"status": "error", "message": f"File is not a CSV: `{p.name}`"}
+
+        try:
+            valid_dir, safe_dir, dir_msg = sanitize_identifier(dir_name or "default")
+            valid_tbl, safe_tbl, tbl_msg = sanitize_identifier(table_name or "csv_data")
+            if not valid_dir:
+                return {"status": "error", "message": f"Invalid Domain name: {dir_msg}"}
+            if not valid_tbl:
+                return {"status": "error", "message": f"Invalid Table name: {tbl_msg}"}
+
+            full_table_path = cls.resolve_table_path(safe_dir, safe_tbl)
+
+            # Ensure domain directory exists in Pixeltable
+            pxt.create_dir(safe_dir, if_exists="ignore")
+
+            import pandas as pd
+            import tempfile
+
+            if progress_callback:
+                progress_callback(0.2, 1.0, f"Reading and validating CSV: {p.name}...")
+
+            # Read CSV to sanitize headers and detect row count
+            df = pd.read_csv(p, encoding="utf-8", encoding_errors="ignore")
+            if df.empty:
+                return {"status": "error", "message": f"CSV `{p.name}` is empty (0 rows)."}
+
+            # Sanitize column headers for Pixeltable SQL compatibility
+            sanitized_cols = []
+            seen_cols = set()
+            for col in df.columns:
+                _, safe_col, _ = sanitize_identifier(str(col).strip().lower())
+                base_safe = safe_col
+                counter = 1
+                while safe_col in seen_cols:
+                    safe_col = f"{base_safe}_{counter}"
+                    counter += 1
+                seen_cols.add(safe_col)
+                sanitized_cols.append(safe_col)
+
+            df.columns = sanitized_cols
+            total_rows = len(df)
+
+            existing_tables = cls.list_tables(safe_dir)
+            table_exists = safe_tbl in existing_tables
+            overwritten_notice = ""
+
+            if table_exists and overwrite:
+                if progress_callback:
+                    progress_callback(0.4, 1.0, f"Overwriting table '{safe_dir}.{safe_tbl}'...")
+                try:
+                    pxt.drop_table(full_table_path, if_not_exists="ignore")
+                    overwritten_notice = " (Previous table version archived in Pixeltable lineage)"
+                except Exception:
+                    pass
+                table_exists = False
+
+            if not table_exists:
+                if progress_callback:
+                    progress_callback(0.6, 1.0, f"Creating Pixeltable table '{safe_dir}.{safe_tbl}' from CSV...")
+
+                # Write sanitized CSV to a clean, closed temporary file to avoid Windows lock contention
+                import uuid
+                tmp_path = Path(tempfile.gettempdir()) / f"pxt_ingest_{uuid.uuid4().hex[:8]}.csv"
+                df.to_csv(tmp_path, index=False)
+
+                try:
+                    try:
+                        table = pxt.create_table(full_table_path, source=str(tmp_path))
+                    except Exception:
+                        table = pxt.create_table(full_table_path, source=df)
+                finally:
+                    try:
+                        if tmp_path.exists():
+                            tmp_path.unlink()
+                    except Exception:
+                        pass
+            else:
+                if progress_callback:
+                    progress_callback(0.6, 1.0, f"Appending {total_rows} rows to existing table '{safe_dir}.{safe_tbl}'...")
+                table = pxt.get_table(full_table_path)
+                records = df.where(pd.notnull(df), None).to_dict(orient="records")
+                table.insert(records, on_error="ignore")
+
+            final_count = table.count()
+            if progress_callback:
+                progress_callback(1.0, 1.0, f"Successfully ingested {total_rows} rows!")
+
+            return {
+                "status": "success",
+                "message": f"Successfully ingested CSV `{p.name}` ({total_rows} rows, {len(df.columns)} columns) into table `{safe_dir}.{safe_tbl}`{overwritten_notice}. Total rows in table: {final_count}.",
+                "rows_inserted": total_rows,
+                "columns_count": len(df.columns),
+                "columns": list(df.columns),
+                "domain": safe_dir,
+                "table": safe_tbl,
+                "total_count": final_count
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to ingest CSV into Pixeltable: {type(e).__name__}: {str(e)}"
+            }
+
+    @classmethod
     def pil_to_base64_data_uri(cls, img, size: tuple = (60, 60)) -> str:
         """Convert a PIL Image instance to a base64 data URI."""
         if img is None:

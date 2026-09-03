@@ -68,9 +68,11 @@ class TestPipelineTools(unittest.TestCase):
         self.assertTrue(len(settings.ollama_host) > 0)
 
     def test_modality_classification(self):
-        """[Scanner] Verify file extensions are correctly classified into modalities (docs, images, audio, video)."""
+        """[Scanner] Verify file extensions are correctly classified into modalities (docs, images, audio, video, csv)."""
         self.assertEqual(classify_modality(".pdf"), "docs")
         self.assertEqual(classify_modality(".md"), "docs")
+        self.assertEqual(classify_modality(".html"), "docs")
+        self.assertEqual(classify_modality(".csv"), "csv")
         self.assertEqual(classify_modality(".png"), "images")
         self.assertEqual(classify_modality(".mp3"), "audio")
         self.assertEqual(classify_modality(".mp4"), "video")
@@ -429,6 +431,96 @@ class TestPipelineTools(unittest.TestCase):
         )
         self.assertEqual(res.get("status"), "error")
         self.assertTrue(len(res.get("message", "")) > 0)
+
+    def test_yaml_frontmatter_in_exports(self):
+        """[Export] Verify MarkdownExporter generates standardized YAML frontmatter across export modes."""
+        from unittest.mock import patch
+
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [{
+                "name": "frontmatter_sample.md",
+                "abs_path": str(Path("planning.md").resolve()),
+                "rel_path": "planning.md",
+                "modality": "docs",
+                "extension": ".md",
+                "size_bytes": 100,
+                "size": "100 B"
+            }]
+            DBManager.ingest_files(self.TEST_DOMAIN, "frontmatter_tbl", fake_files, overwrite=True)
+
+            mock_synthesis = "## Synthesis Output\nDocument insights verified."
+            with patch("src.core.llm_service.LLMService.generate", return_value=mock_synthesis):
+                # 1. Test single synthesis export frontmatter
+                res_single = MarkdownExporter.generate_report(
+                    domain=self.TEST_DOMAIN,
+                    table_name="frontmatter_tbl",
+                    prompt_template="Analyze records",
+                    system_prompt="Journalist persona",
+                    provider="Ollama",
+                    model="test-model",
+                    mode="llm"
+                )
+                self.assertEqual(res_single.get("status"), "success")
+                content = res_single.get("markdown_content", "")
+                self.assertTrue(content.startswith("---"))
+                self.assertIn("title:", content)
+                self.assertIn("description:", content)
+                self.assertIn("exported_at:", content)
+                self.assertIn(f"domain: \"{self.TEST_DOMAIN}\"", content)
+                self.assertIn("table: \"frontmatter_tbl\"", content)
+                self.assertIn("export_strategy: \"single_synthesis\"", content)
+                self.assertIn("provider: \"Ollama\"", content)
+                self.assertIn("model: \"test-model\"", content)
+
+                # 2. Test sidecar export frontmatter
+                res_sidecar = MarkdownExporter.generate_report(
+                    domain=self.TEST_DOMAIN,
+                    table_name="frontmatter_tbl",
+                    prompt_template="Sidecar summary",
+                    system_prompt="Sidecar persona",
+                    provider="Ollama",
+                    model="test-model",
+                    mode="sidecar"
+                )
+                self.assertEqual(res_sidecar.get("status"), "success")
+                sc_content = res_sidecar.get("markdown_content", "")
+                self.assertTrue(sc_content.startswith("---"))
+                self.assertIn("source_file: \"frontmatter_sample.md\"", sc_content)
+                self.assertIn("export_strategy: \"per_row_sidecar\"", sc_content)
+
+    def test_dbmanager_ingest_csv(self):
+        """[Database] Verify DBManager.ingest_csv converts CSV rows into Pixeltable table records."""
+        import tempfile
+
+        if PIXELTABLE_AVAILABLE:
+            # Create a temporary CSV with 3 rows and custom headers
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+                tmp_csv = f.name
+                f.write("Item Name,Price USD,In Stock\nApple,1.25,True\nBanana,0.75,True\nCherry,3.50,False\n")
+
+            try:
+                res = DBManager.ingest_csv(
+                    dir_name=self.TEST_DOMAIN,
+                    table_name="csv_test_table",
+                    csv_path=tmp_csv,
+                    overwrite=True
+                )
+                self.assertEqual(res.get("status"), "success", f"Failed with message: {res.get('message')}")
+                self.assertEqual(res.get("rows_inserted"), 3)
+                self.assertIn("item_name", res.get("columns", []))
+                self.assertIn("price_usd", res.get("columns", []))
+                self.assertIn("in_stock", res.get("columns", []))
+
+                # Verify data queryable via get_table_data
+                tbl_data = DBManager.get_table_data(self.TEST_DOMAIN, "csv_test_table", limit=10)
+                self.assertEqual(len(tbl_data.get("data", [])), 3)
+                self.assertEqual(tbl_data.get("total_rows"), 3)
+            finally:
+                try:
+                    os.unlink(tmp_csv)
+                except Exception:
+                    pass
+
 
     def test_format_media_preview_html(self):
         """[Database] Verify DBManager.format_media_preview_html generates valid HTML tags for images, audio, video, and docs."""

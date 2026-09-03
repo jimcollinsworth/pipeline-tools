@@ -59,6 +59,41 @@ def render_tables_tab(tab=None):
 
     with gr.Column():
         gr.Markdown("### 📊 View & Export (Pixeltable DataTables & Markdown Reports)")
+
+        with gr.Accordion("💡 View, Media Inspector & AI Export Guide (Click to Expand)", open=False):
+            gr.HTML("""
+            <div style="max-height: 280px; overflow-y: auto; padding: 12px 16px; background: rgba(0,0,0,0.02); border: 1px solid #e5e7eb; border-radius: 8px; font-size: 13px; line-height: 1.6;">
+                <h4 style="margin-top: 0; color: #3b82f6;">📄 View & Export Strategies</h4>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #ddd; text-align: left;">
+                            <th style="padding: 6px;">Strategy</th>
+                            <th style="padding: 6px;">Output File Path</th>
+                            <th style="padding: 6px;">Best For</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 6px;"><strong>📄 Single Synthesis</strong></td>
+                            <td style="padding: 6px;"><code>exports/{domain}_{table}_report_{timestamp}.md</code></td>
+                            <td style="padding: 6px;">Aggregates multiple rows into one comprehensive dossier, newspaper broadsheet, or executive briefing.</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px;"><strong>🗂️ Per-Row Sidecars</strong></td>
+                            <td style="padding: 6px;"><code>exports/{source_stem}_meta.md</code></td>
+                            <td style="padding: 6px;">Executes 1 LLM call per row to produce standalone sidecar files with YAML frontmatter, media links, and live streaming previews.</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <h4 style="color: #3b82f6;">✨ Key Capabilities & Safeguards</h4>
+                <ul style="line-height: 1.6; margin-bottom: 0;">
+                    <li><strong>Standardized YAML Frontmatter:</strong> Every exported Markdown file starts with a complete, self-documenting YAML header containing run metadata, model details, domain/table source, and exact prompts used.</li>
+                    <li><strong>Zero-Memory Database Streaming:</strong> Multi-megabyte text cells are sliced directly inside the PostgreSQL engine to keep memory usage under 0.1 MB and Gradio WebSocket payloads under 50 KB.</li>
+                    <li><strong>🔬 Selected Record Media Inspector:</strong> Click on any row in the preview table to open the on-demand inspector drawer for high-res images, audio playback, video playback, and extracted text.</li>
+                    <li><strong>Fast Markdown Invariant:</strong> Presets enforce clean GitHub-flavored Markdown and forbid heavy raw HTML or inline SVG code, keeping row generation latency at 1–2 seconds.</li>
+                </ul>
+            </div>
+            """)
         
         with gr.Row():
             domain_dropdown = gr.Dropdown(

@@ -129,6 +129,56 @@ class MarkdownExporter:
     }
 
     @classmethod
+    def build_yaml_frontmatter(
+        cls,
+        title: str,
+        description: str,
+        domain: str,
+        table: str,
+        export_strategy: str,
+        provider: str,
+        model: str,
+        total_records: int,
+        system_prompt: Optional[str] = None,
+        user_prompt: Optional[str] = None,
+        extra_fields: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Construct clean, single-line YAML frontmatter block for exported Markdown files.
+        Safely escapes double quotes and collapses newlines to keep lines compact, self-documenting, and parseable.
+        """
+        def _clean_val(val: Any) -> str:
+            if val is None:
+                return '""'
+            s = str(val).replace('"', '\\"').replace('\r\n', ' ').replace('\n', ' ').strip()
+            return f'"{s}"'
+
+        lines = [
+            "---",
+            f"title: {_clean_val(title)}",
+            f"description: {_clean_val(description)}",
+            f"exported_at: {_clean_val(datetime.datetime.now().isoformat())}",
+            f"domain: {_clean_val(domain)}",
+            f"table: {_clean_val(table)}",
+            f"export_strategy: {_clean_val(export_strategy)}",
+            f"provider: {_clean_val(provider)}",
+            f"model: {_clean_val(model)}",
+            f"total_records: {total_records}",
+            f"system_prompt: {_clean_val(system_prompt or '')}",
+            f"user_prompt: {_clean_val(user_prompt or '')}",
+        ]
+
+        if extra_fields:
+            for k, v in extra_fields.items():
+                if isinstance(v, (int, float, bool)):
+                    lines.append(f"{k}: {v}")
+                else:
+                    lines.append(f"{k}: {_clean_val(v)}")
+
+        lines.append("---\n\n")
+        return "\n".join(lines)
+
+    @classmethod
     def format_row_template(cls, row_dict: Dict[str, Any], template: str) -> str:
         """Replace {column_name} placeholders in template with row values."""
         rendered = template
@@ -136,6 +186,7 @@ class MarkdownExporter:
             val_str = "" if v is None else str(v)
             rendered = rendered.replace(f"{{{k}}}", val_str)
         return rendered
+
 
     @classmethod
     def generate_single_report(
@@ -196,7 +247,20 @@ class MarkdownExporter:
                 row_str = cls.format_row_template(r, prompt_template)
                 sections.append(f"## Record #{i}\n\n{row_str}\n\n---\n")
 
-            rendered_markdown = "\n".join(sections)
+            desc = f"Direct template data export of {total_rows} records from {clean_dir}.{clean_tbl}"
+            frontmatter = cls.build_yaml_frontmatter(
+                title=f"{clean_tbl.replace('_', ' ').title()} — Data Export",
+                description=desc,
+                domain=clean_dir,
+                table=clean_tbl,
+                export_strategy="direct_template",
+                provider="Direct (Template)",
+                model="None",
+                total_records=total_rows,
+                system_prompt="",
+                user_prompt=prompt_template
+            )
+            rendered_markdown = f"{frontmatter}{''.join(sections)}"
         else:
             # LLM Synthesis Mode
             context_blocks = []
@@ -232,7 +296,21 @@ class MarkdownExporter:
                     prompt=user_prompt,
                     system=system_prompt
                 )
+                desc = f"AI synthesis report analyzing {total_rows} records from {clean_dir}.{clean_tbl}"
+                frontmatter = cls.build_yaml_frontmatter(
+                    title=f"{clean_tbl.replace('_', ' ').title()} — AI Synthesis Report",
+                    description=desc,
+                    domain=clean_dir,
+                    table=clean_tbl,
+                    export_strategy="single_synthesis",
+                    provider=provider,
+                    model=target_model,
+                    total_records=total_rows,
+                    system_prompt=system_prompt,
+                    user_prompt=prompt_template
+                )
                 rendered_markdown = (
+                    f"{frontmatter}"
                     f"# {clean_tbl.replace('_', ' ').title()} — AI Synthesis Report\n\n"
                     f"> **Generated via:** `{provider}` ({target_model}) | **Domain:** `{clean_dir}` | "
                     f"**Table:** `{clean_tbl}` | **Records Analyzed:** {total_rows} | **Date:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
@@ -369,17 +447,27 @@ class MarkdownExporter:
                 if not re.search(r'!\[.*?\]\(.*?\)', llm_output):
                     image_embed = f"![{file_name}]({file_path})\n\n"
 
-            # Clean frontmatter
-            frontmatter = (
-                f"---\n"
-                f"source_file: \"{file_name}\"\n"
-                f"source_path: \"{file_path}\"\n"
-                f"domain: \"{clean_dir}\"\n"
-                f"table: \"{clean_tbl}\"\n"
-                f"row_index: {idx}\n"
-                f"engine: \"{provider} ({target_model})\"\n"
-                f"exported_at: \"{datetime.datetime.now().isoformat()}\"\n"
-                f"---\n\n"
+            # Standardized clean YAML frontmatter
+            extra_meta = {
+                "source_file": file_name,
+                "source_path": file_path,
+                "row_index": idx,
+                "modality": modality,
+                "file_type": str(row.get("file_type", ""))
+            }
+            sidecar_desc = f"AI metadata sidecar for {file_name} from {clean_dir}.{clean_tbl}"
+            frontmatter = cls.build_yaml_frontmatter(
+                title=f"Metadata Sidecar: {file_name}",
+                description=sidecar_desc,
+                domain=clean_dir,
+                table=clean_tbl,
+                export_strategy="per_row_sidecar",
+                provider=provider,
+                model=target_model,
+                total_records=total_rows,
+                system_prompt=system_prompt,
+                user_prompt=prompt_template,
+                extra_fields=extra_meta
             )
 
             sidecar_md = f"{frontmatter}{image_embed}{llm_output.strip()}\n"

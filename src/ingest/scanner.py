@@ -3,10 +3,11 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 SUPPORTED_EXTENSIONS = {
-    "docs": {".pdf", ".md", ".markdown", ".txt", ".json", ".yaml", ".yml", ".csv"},
+    "docs": {".pdf", ".md", ".markdown", ".txt", ".html", ".htm", ".json", ".yaml", ".yml"},
     "images": {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"},
     "audio": {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"},
-    "video": {".mp4", ".mkv", ".mov", ".avi", ".webm"}
+    "video": {".mp4", ".mkv", ".mov", ".avi", ".webm"},
+    "csv": {".csv"}
 }
 
 def classify_modality(ext: str) -> str:
@@ -23,7 +24,7 @@ def scan_directory(directory_path: str, recursive: bool = True, modalities: List
         return []
 
     if modalities is None:
-        modalities = ["docs", "images", "audio", "video", "other"]
+        modalities = ["docs", "images", "audio", "video", "csv", "other"]
 
     files_info = []
     pattern = "**/*" if recursive else "*"

@@ -163,6 +163,14 @@ flowchart TD
     - *Alternative B (Case Convention & SQL Portability)*: Because PostgreSQL and Pixeltable sanitize identifiers to lowercase snake_case by default, standardize on lowercase prefixes (`i_`, `c_`, `u_`) in the database engine to avoid SQL quoted-identifier collisions (`"I_file_name"` vs `i_file_name`), while rendering capitalized badges (`[I]`, `[C]`, `[U]`) in the UI.
     - *Alternative C (UI De-Prefixing & Color-Coded Pill Tabs)*: Group table columns visually in the UI into dedicated tabs/filters (📥 *Imported*, ⚡ *Calculated*, ✍️ *User Input*), showing clean display names (`file_name`, `summary`) with distinct color-coded chips.
     - *Alternative D (Smart Template Auto-Aliasing)*: In prompt templates, allow users to type either `{file_name}` or `{i_file_name}` — the prompt executor automatically resolves bare names to their prefixed equivalents.
+- [ ] **Live Debug & LLM Activity Console Drawer (`RES-22`, Backlog / Under Consideration)**
+  - **Problem & Goal**: To understand and debug the pipeline in real time, users need direct visibility into active prompt contexts, network requests, raw LLM input/output tokens, and database events across Data Enhancement, Export, and Provider setup.
+  - **UI Architecture**: A persistent or collapsible bottom drawer / accordion panel (`max-height: 250px; overflow-y: auto`) available across tabs that displays live logging and network activity without obstructing main workbench controls.
+  - **Volume & Noise Management**:
+    - Filterable log levels / toggles: *LLM Prompts & Responses*, *Network Traffic / HTTP Status*, *Database Operations*, *System Info*.
+    - Rotating log file (e.g. `logs/pipeline_activity.log`) paired with an in-memory ring buffer (last 500 lines) to prevent browser memory bloat.
+    - 1-click Clear / Copy Log buttons for fast troubleshooting.
+
     - *Alternative E (Nested Struct vs Flat Columns)*: Evaluate storing raw ingestion metadata in a single nested `source` struct (`source.file_name`, `source.file_path`) versus flat prefixed columns (`i_file_name`). Flat prefixed columns offer superior querying, filtering, and indexing performance in Pixeltable.
 
 ### Phase 6: Packaging, Cross-Platform Distribution & Mobile/Tablet Companion (Planned)
@@ -239,4 +247,6 @@ flowchart TD
 | RES-19 | Column Name Prefixes & Visual Schema Grouping | Open | Standardize on column prefixes (I_ imported, C_ calculated/LLM, U_ user input) with UI badge tabs, case sensitivity handling, and template placeholder auto-aliasing. |
 | RES-20 | Zero-Memory Table Streaming & OOM Safeguards | Complete | In-engine database substring slicing `table.content.slice(0, 500)` in PostgreSQL, universal 250-char cell truncation, and 1 MB ingestion file read limits to prevent RAM exhaustion. |
 | RES-21 | Fast Markdown Sidecar Architecture & Media Safety | Complete | Path-based image references (no binary media uploads to LLMs), strict Markdown system prompt enforcement preventing 4K-token HTML/SVG generation, and automatic record context fallback. |
+| RES-22 | Live Debug & LLM Activity Console Drawer | Backlog | Bottom collapsible accordion / slide-up drawer streaming real-time pipeline activity, LLM prompt/response payloads, network calls, and rotating file logs with volume controls. |
+
 

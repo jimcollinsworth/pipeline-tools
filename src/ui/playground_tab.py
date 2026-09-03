@@ -59,6 +59,21 @@ def render_playground_tab(tab=None):
 
     with gr.Column():
         gr.Markdown("### 🧪 Data Enhancement (Prompt Workbench & Batch Execution)")
+
+        with gr.Accordion("💡 Data Enhancement & Prompt Workbench Guide (Click to Expand)", open=False):
+            gr.HTML("""
+            <div style="max-height: 280px; overflow-y: auto; padding: 12px 16px; background: rgba(0,0,0,0.02); border: 1px solid #e5e7eb; border-radius: 8px; font-size: 13px; line-height: 1.6;">
+                <h4 style="margin-top: 0; color: #3b82f6;">⚡ How Data Enhancement Works</h4>
+                <p>The prompt workbench allows you to test, refine, and execute AI extraction and synthesis pipelines across Pixeltable datasets.</p>
+                <ul style="line-height: 1.6;">
+                    <li><strong>Sample-First Iteration:</strong> Always dry-run your prompt on 1–2 sample rows first using the <em>Run Sample Preview</em> button to verify output quality before executing on the entire table.</li>
+                    <li><strong>Dynamic Placeholders:</strong> Use <code>{column_name}</code> placeholders in your prompt template (e.g. <code>{content}</code>, <code>{file_name}</code>, <code>{modality}</code>). They are dynamically replaced with each row's values during evaluation.</li>
+                    <li><strong>⚡ JSON Auto-Split Engine:</strong> If your prompt asks for structured JSON (e.g. <code>{"summary": "...", "sentiment": "positive", "score": 9.2}</code>), checking <em>Auto-Split JSON Output into Table Columns</em> will automatically parse the keys and create native, strongly typed Pixeltable columns!</li>
+                    <li><strong>↩️ 1-Click Lineage Undo:</strong> If an extraction test produces unwanted columns, click <em>Undo Last Batch Operation</em> to cleanly drop the newly added columns without touching raw ingested data.</li>
+                    <li><strong>Multi-Provider Routing:</strong> Easily toggle between local Ollama models (offline, zero-cost) and Google Gemini (cloud multimodal models).</li>
+                </ul>
+            </div>
+            """)
         
         with gr.Row():
             with gr.Column(scale=1):

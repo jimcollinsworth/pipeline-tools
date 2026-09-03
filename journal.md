@@ -347,17 +347,22 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
-## 📅 2026-09-03: Commit Workflow Directives & Antigravity Permission Guidelines
+## 📅 2026-09-03: YAML Frontmatter, CSV Import, In-App Help, and Debug Activity Panel Backlog
 
-**Context:** Reverting `.commit_msg` workaround in favor of standard Antigravity commit pattern (`git commit -m "..."`).
+**Context:** Implementation of three core user requested features (YAML export frontmatter, dedicated single-CSV ingestion, in-app scrollable help accordions) and capture of debug/activity pipeline monitoring concept.
 
-**Verbatim Instruction:**
-> `forget the .commit_msg stuff, just use the preferred way in antigravity. my only pet peeve was having to approve every commit, so go back to your preffered way, tell me if i can change permissions or such`
+**Verbatim Instructions:**
+> `1 when markdown is exported lets always add frontmatter, normal markdown keyword: values or standard approach. add description, date exported, model/options, domain/table source, prompts used. then the generated exported data. this helps makes things more self documenting. basically the run data as metadata plus more.`
+> `2 csv import - add csv option to ingest file types. for a csv, each row becomes a row in the table. only one csv can be selected/ingested at a time. for now limit doc import to valid text, pdf, html file types, exclude csvs.`
+> `3 online/inapp help -something like the ingest file types need more help, maybe a help accordian for some dialog sections. it would expand and show file extentions. Every page/tab could have one expando for help/info explain overall functionality, provide examples, maybe a big scrolling page in a limited window if possible, please advise.`
+> `in the pursuit of seeing the actual pipeline activity, we need a way to see the context, network traffic, llm calls, etc during enhancement, export, settings/llm setup. how about another accordian panel, except this one is at the bottom or opens up from the bottom to display a debug/activity panel. especially want to see the llm activity. not sure how to control the volumn of data, also maybe this display is simply the text low level log file that we could create and write. add to backlog for consideration, needs more thought`
 
-**Key Decisions & Guidance:**
-- Reverted to standard Antigravity convention: `git commit -m "..."` and `git push origin main`.
-- Work verified through testing and reviewed with the user is pre-approved for commit.
-- Provided user with instructions for configuring Antigravity IDE auto-approve command permissions in workspace settings.
+**Key Decisions & Implementation:**
+- **Feature 1 (YAML Frontmatter)**: Implemented `MarkdownExporter.build_yaml_frontmatter()` producing clean single-line quoted YAML blocks (`---`) with title, description, timestamp, domain, table, strategy, provider, model, system prompt, and user prompt.
+- **Feature 2 (Dedicated CSV Modality & Ingestion)**: Created dedicated `"csv"` modality (`.csv` excluded from docs; `.html`/`.htm` added to docs). Implemented `DBManager.ingest_csv()` using native `pxt.create_table(source=...)` with lowercase snake_case column header sanitization and Windows file-lock safeguards. Added single-CSV validation rule in `IngestController`.
+- **Feature 3 (In-App Scrollable Help Accordions)**: Added compact, scrollable help accordions (`max-height: 280px; overflow-y: auto`) across Ingest, Playground, and Tables tabs.
+- **Backlog Addition (`RES-22`)**: Added Live Debug & LLM Activity Console Drawer to `planning.md` backlog exploring bottom slide-up drawers, log rotation (`logs/pipeline_activity.log`), ring buffers, and selective verbosity toggles.
+- **Verification**: Added 3 new unit tests across `test_app.py` and `test_controllers.py`. Full 41-test suite passed in 13.9s.
 
 
 

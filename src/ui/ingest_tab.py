@@ -27,11 +27,61 @@ def render_ingest_tab(tab=None):
         with gr.Row():
             modality_filters = gr.CheckboxGroup(
                 label="Include Modalities",
-                choices=["docs", "images", "audio", "video", "other"],
-                value=["docs", "images", "audio", "video"],
+                choices=["docs", "images", "audio", "video", "csv", "other"],
+                value=["docs", "images", "audio", "video", "csv"],
                 scale=3
             )
             recursive_check = gr.Checkbox(label="Recursive Subdirectories", value=True, scale=1)
+
+        with gr.Accordion("💡 Supported File Formats & Ingestion Guide (Click to Expand)", open=False):
+            gr.HTML("""
+            <div style="max-height: 280px; overflow-y: auto; padding: 12px 16px; background: rgba(0,0,0,0.02); border: 1px solid #e5e7eb; border-radius: 8px; font-size: 13px; line-height: 1.6;">
+                <h4 style="margin-top: 0; color: #3b82f6;">📁 Supported File Formats by Modality</h4>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #ddd; text-align: left;">
+                            <th style="padding: 6px;">Modality</th>
+                            <th style="padding: 6px;">Supported Extensions</th>
+                            <th style="padding: 6px;">Ingestion Behavior</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 6px;"><strong>📄 Docs</strong></td>
+                            <td style="padding: 6px;"><code>.pdf</code>, <code>.md</code>, <code>.markdown</code>, <code>.txt</code>, <code>.html</code>, <code>.htm</code>, <code>.json</code>, <code>.yaml</code>, <code>.yml</code></td>
+                            <td style="padding: 6px;">1 row per file. Native text extracted into <code>content</code>; PDFs processed via <code>pypdfium2</code>.</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 6px;"><strong>📊 CSV</strong></td>
+                            <td style="padding: 6px;"><code>.csv</code></td>
+                            <td style="padding: 6px;"><strong>Tabular Ingestion:</strong> 1 CSV ingested at a time; <em>each row in the CSV becomes a distinct table record</em> with typed columns matching headers.</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 6px;"><strong>🖼️ Images</strong></td>
+                            <td style="padding: 6px;"><code>.png</code>, <code>.jpg</code>, <code>.jpeg</code>, <code>.webp</code>, <code>.gif</code>, <code>.bmp</code>, <code>.tiff</code></td>
+                            <td style="padding: 6px;">1 row per file. Preserves image path, generates thumbnails for preview, and supports multimodal vision workflows.</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 6px;"><strong>🎵 Audio</strong></td>
+                            <td style="padding: 6px;"><code>.mp3</code>, <code>.wav</code>, <code>.m4a</code>, <code>.ogg</code>, <code>.flac</code>, <code>.aac</code></td>
+                            <td style="padding: 6px;">1 row per file. Interactive playback in Media Inspector; ready for transcription pipelines.</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px;"><strong>🎬 Video</strong></td>
+                            <td style="padding: 6px;"><code>.mp4</code>, <code>.mkv</code>, <code>.mov</code>, <code>.avi</code>, <code>.webm</code></td>
+                            <td style="padding: 6px;">1 row per file. Interactive video playback in Media Inspector.</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <h4 style="color: #3b82f6;">🚀 Workflow Steps</h4>
+                <ol style="margin-bottom: 0;">
+                    <li><strong>Step 1:</strong> Select or type a source directory path above and click <strong>🔍 Scan Directory</strong>.</li>
+                    <li><strong>Step 2:</strong> Review the discovered files in the table. Filter by modalities as needed.</li>
+                    <li><strong>Step 3:</strong> Specify a <strong>Pixeltable Domain</strong> (folder) and <strong>Table Name</strong>.</li>
+                    <li><strong>Step 4:</strong> Click <strong>⚡ Ingest Scanned Files into Pixeltable</strong> to commit to persistent storage.</li>
+                </ol>
+            </div>
+            """)
 
         summary_markdown = gr.Markdown("#### Scan Summary: *No directory scanned yet.*")
 

@@ -345,6 +345,23 @@ This journal records verbatim developer instructions, architectural directives, 
    - Synchronized `README.md`, `planning.md` (added RES-20 & RES-21), `journal.md`, and code docstrings.
    - Verified automated test suite: **38 Passed, 0 Failed, 0 Errors**.
 
+---
+
+## 📅 2026-09-03: Commit Protocol Convention (`.commit_msg`)
+
+**Context:** Eliminating interactive IDE terminal permission prompts when committing verified code.
+
+**Verbatim Instruction:**
+> `make sure to create a .commit_msg file instead of using the -m parameter so i dont have to approve everytime. as long as the work as already been tested and reviewed/viewed/discussed with me, it's approved to commit`
+
+**Protocol Standardized:**
+- Write commit message to `.commit_msg` using `write_to_file`.
+- Commit using `git commit -F .commit_msg`.
+- Push to `main`.
+- `.commit_msg` is ignored in `.gitignore`.
+- Work verified via test suite and reviewed with the user is pre-approved for commit.
+
+
 
 
 

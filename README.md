@@ -48,12 +48,16 @@ Many modern "all-in-one" RAG frameworks, monolithic chat apps, and autonomous ag
   - Recursively scans local project folders, classifying files into modalities (*Docs*, *Images*, *Audio*, *Video*, *Code*).
   - One-file-to-one-row ingestion with native text extraction (Markdown, TXT) and PDF page extraction via Pixeltable's bundled `pypdfium2` engine into the `content` column.
   - Intelligent filterable type-ahead dropdowns for directories, domains, and tables with automatic discovery.
-- **Sample-First Prompt Playground (Data Enhancement)**:
+- **Sample-First Prompt Playground & Telemetry Engine (Data Enhancement)**:
   - Dry-run and iterate on system/user prompts with `{column}` placeholders across 1–N sample rows before running full-scale batch jobs.
+  - **⏱️ Live Performance & Throughput Telemetry**: Real-time measurement and display of execution speed (`tokens/sec`), prompt ingest time, eval duration, and token counts for every model invocation.
+  - **🖼️ Multimodal Vision Guard**: Gated via an explicit `Multimodal Vision` toggle. Prevents accidental 10–15s vision model inference and heavy base64 image uploads during pure text/metadata operations, delivering <1.0s response times.
   - **⚡ JSON Auto-Split Engine**: Extract structured JSON payloads from model output and dynamically create native Pixeltable schema columns (`pxt.String`, `pxt.Int`, `pxt.Float`, `pxt.Json`, `pxt.Bool`) in one pass.
-- **Incremental & Cached Execution**:
-  - Leverages Pixeltable declarative computed columns to ensure LLM operations are cached, incremental, and version-controlled.
-  - Minimizes redundant LLM calls per row, and accepts structured typed output inserted/appended into table columns.
+- **Pixeltable Declarative Compute & In-Engine Caching**:
+  - Eliminates sequential imperative Python loops by leveraging Pixeltable's declarative `@pxt.udf` compute engine.
+  - **Automatic PostgreSQL Caching**: Computations are cached at the database cell level; existing rows are served in 0.001s without redundant LLM calls.
+  - **Zero-Cost JSON Unpacking**: Unpacks JSON dictionary keys directly into individual computed columns via native database projections without making additional LLM calls.
+  - **Incremental Execution**: Inserting new records into an enriched table automatically triggers the computed column pipeline *only* for the newly added rows.
 - **Declarative Data Management & Media Inspector**:
   - Fast **⚡ Lightweight Mode** (skips binary deserialization, reducing Python RAM by >95%) and **🔍 Full Media Mode** with inline HTML thumbnails (`<img>`), audio players (`<audio>`), video players (`<video>`), and PDF badges.
   - **Zero-Memory Database Streaming**: Large text columns (`content`) are sliced directly inside the database engine (`table.content.slice(0, 500)`), avoiding loading multi-megabyte strings into Python RAM. All table cells are safely truncated to 250 characters, keeping Gradio WebSocket payloads under 50 KB.

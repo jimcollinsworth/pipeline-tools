@@ -142,7 +142,14 @@ def render_playground_tab(tab=None):
                 available_columns_info = gr.Markdown(initial_cols_text)
 
                 gr.Markdown("#### 3. Test on Sample Rows")
-                sample_count_slider = gr.Slider(minimum=1, maximum=10, value=2, step=1, label="Number of Test Rows")
+                with gr.Row():
+                    sample_count_slider = gr.Slider(minimum=1, maximum=10, value=2, step=1, label="Number of Test Rows", scale=2)
+                    enable_vision_cb = gr.Checkbox(
+                        label="🖼️ Multimodal Vision",
+                        value=False,
+                        info="Send images to Vision LLM (10-15s per image). Unchecked = fast text (<1s).",
+                        scale=2
+                    )
                 test_sample_btn = gr.Button("🚀 Run Test on Sample Rows", variant="primary")
 
             with gr.Column(scale=2):
@@ -178,8 +185,8 @@ def render_playground_tab(tab=None):
                 gr.Markdown("---")
                 gr.Markdown("#### 🧪 Sample Test Results Preview")
                 test_results_table = gr.Dataframe(
-                    headers=["Row ID", "File Name", "Source Snippet", "Rendered Prompt", "Model Output"],
-                    datatype=["str", "str", "str", "str", "str"],
+                    headers=["Row ID", "File Name", "Telemetry & Speed", "Source Snippet", "Rendered Prompt", "Model Output"],
+                    datatype=["str", "str", "str", "str", "str", "str"],
                     value=[],
                     interactive=False,
                     wrap=True
@@ -271,7 +278,7 @@ def render_playground_tab(tab=None):
             gr.update(value=insp["content_text"], visible=insp["has_content"])
         )
 
-    def on_test_sample(domain, table_name, provider, model, system_prompt, prompt_template, sample_count, output_mode,
+    def on_test_sample(domain, table_name, provider, model, system_prompt, prompt_template, sample_count, output_mode, enable_vision,
                        progress=gr.Progress(track_tqdm=False)):
         if not domain or not table_name:
             gr.Warning("Domain and Table selection required.")
@@ -307,6 +314,7 @@ def render_playground_tab(tab=None):
                 table_name=table_name.strip(),
                 sample_count=int(sample_count),
                 auto_split=is_auto_split,
+                enable_vision=enable_vision,
                 progress_callback=cb
             )
 
@@ -319,19 +327,20 @@ def render_playground_tab(tab=None):
                             all_keys.append(k)
 
                 if all_keys:
-                    headers = ["Row ID", "File Name"] + all_keys
+                    headers = ["Row ID", "File Name", "Telemetry & Speed"] + all_keys
                     rows = []
                     for r in results:
                         parsed = r.get("parsed_json", {})
-                        row_vals = [r["row_id"], r["file_name"]] + [str(parsed.get(k, "")) for k in all_keys]
+                        telem = r.get("telemetry") or "⚡ Fast (<1s)"
+                        row_vals = [r["row_id"], r["file_name"], telem] + [str(parsed.get(k, "")) for k in all_keys]
                         rows.append(row_vals)
                     gr.Info(f"Evaluated {len(results)} rows: Extracted {len(all_keys)} dynamic columns ({', '.join(all_keys)})!")
                     return gr.update(headers=headers, datatype=["str"] * len(headers), value=rows)
 
             # Fallback to standard single output table
-            headers = ["Row ID", "File Name", "Source Snippet", "Rendered Prompt", "Model Output"]
+            headers = ["Row ID", "File Name", "Telemetry & Speed", "Source Snippet", "Rendered Prompt", "Model Output"]
             rows = [
-                [r["row_id"], r["file_name"], r["source_content"], r["prompt_rendered"], r["model_output"]]
+                [r["row_id"], r["file_name"], r.get("telemetry") or "⚡ Fast (<1s)", r["source_content"], r["prompt_rendered"], r["model_output"]]
                 for r in results
             ]
             gr.Info(f"Evaluated {len(results)} sample rows with [{provider}] {model} successfully!")
@@ -342,7 +351,7 @@ def render_playground_tab(tab=None):
             return gr.update(headers=["Error"], value=[[err_msg]])
 
     def on_commit_batch(domain, table_name, provider, model, system_prompt, prompt_template,
-                        output_mode, target_col, mode, limit_num, is_lightweight,
+                        output_mode, target_col, mode, limit_num, enable_vision, is_lightweight,
                         progress=gr.Progress(track_tqdm=False)):
         if not domain or not table_name:
             gr.Warning("Select a valid Domain and Table first.")
@@ -382,6 +391,7 @@ def render_playground_tab(tab=None):
                 mode=mode,
                 limit=limit_val,
                 auto_split=is_auto_split,
+                enable_vision=enable_vision,
                 progress_callback=cb
             )
 
@@ -447,7 +457,7 @@ def render_playground_tab(tab=None):
     
     test_sample_btn.click(
         fn=on_test_sample,
-        inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, sample_count_slider, output_mode_radio],
+        inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, sample_count_slider, output_mode_radio, enable_vision_cb],
         outputs=[test_results_table]
     )
 
@@ -490,7 +500,7 @@ def render_playground_tab(tab=None):
 
     commit_batch_btn.click(
         fn=on_commit_batch,
-        inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, output_mode_radio, target_column_input, write_mode_radio, limit_rows_input, preview_mode_toggle],
+        inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, output_mode_radio, target_column_input, write_mode_radio, limit_rows_input, enable_vision_cb, preview_mode_toggle],
         outputs=[batch_status_markdown, table_info_markdown, current_table_preview, available_columns_info]
     )
 

@@ -236,7 +236,7 @@ flowchart TD
 | RES-08 | Hugging Face & YOLO Vision Model Architecture | Open | Planned integration of Hugging Face Hub / Ultralytics vision classifiers (e.g. WikiArt 27-movement classifier) with output auto-splitting into Pixeltable table columns. |
 | RES-09 | Mobile / Tablet Architecture & Cloud Serving | Open | Overcome embedded PostgreSQL mobile restriction by hosting Gradio + Pixeltable on cloud containers / remote server with persistent volume, serving responsive PWA to mobile devices. |
 | RES-10 | Responsive Mobile / Tablet Design | Open | Adapt Gradio layout with mobile CSS breakpoints, stacked columns, touch-friendly button targets (>=44px), and compact card table views. |
-| RES-11 | Pixeltable Lineage & Simple 'Undo' Architecture | Open | Define mutating operation versioning in Pixeltable, design 1-click 'Undo Last Operation' button (column drop / version rollback), and table revision timeline. |
+| RES-11 | Pixeltable Declarative Compute & 1-Click Undo | Complete | Implemented 1-click Undo operation history, replaced sequential Python loop with native @pxt.udf computed columns, automatic PostgreSQL caching, and JSON key unpacking. |
 | RES-12 | Dynamic Ingestion Context & State Accumulation | Open | Stateful cross-row context accumulator during batch ingestion to enable entity deduplication and synthetic knowledge export (`domain-table-ingestion-context.md`). |
 | RES-13 | Project Skills Integration & Prompt `/` Commands | Open | Dynamic discovery of `.agents/skills/` definitions triggered by `/` prompt slash commands with automatic instruction injection and Pixeltable UDF mapping. |
 | RES-14 | Document UX & Newspaper / Magazine Layouts | Open | Single-record rich Markdown reader with collapsible sections, theme selectors, embedded media/Mermaid, and editorial newspaper-style multi-record feeds. |
@@ -248,5 +248,6 @@ flowchart TD
 | RES-20 | Zero-Memory Table Streaming & OOM Safeguards | Complete | In-engine database substring slicing `table.content.slice(0, 500)` in PostgreSQL, universal 250-char cell truncation, and 1 MB ingestion file read limits to prevent RAM exhaustion. |
 | RES-21 | Fast Markdown Sidecar Architecture & Media Safety | Complete | Path-based image references (no binary media uploads to LLMs), strict Markdown system prompt enforcement preventing 4K-token HTML/SVG generation, and automatic record context fallback. |
 | RES-22 | Live Debug & LLM Activity Console Drawer | Backlog | Bottom collapsible accordion / slide-up drawer streaming real-time pipeline activity, LLM prompt/response payloads, network calls, and rotating file logs with volume controls. |
+| RES-23 | Multimodal Vision Guard & LLM Telemetry Engine | Complete | Eliminated 15s latency bottleneck by gating image uploads behind explicit enable_vision toggle (<1s text speedup); extracted nanosecond timings and tokens/sec telemetry from Ollama and Gemini. |
 
 

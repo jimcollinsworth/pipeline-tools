@@ -41,6 +41,12 @@ class LLMService:
                 return [m["name"] for m in models]
             return [curr_settings.default_ollama_model, "llama3.2", "mistral", "phi3"]
 
+    last_telemetry: Optional[Dict[str, Any]] = None
+
+    @classmethod
+    def get_last_telemetry(cls) -> Optional[Dict[str, Any]]:
+        return cls.last_telemetry
+
     @classmethod
     def generate(cls, provider: str, model: str, prompt: str, system: Optional[str] = None,
                  media_path: Optional[str] = None, json_mode: bool = False,
@@ -51,20 +57,25 @@ class LLMService:
 
         if prov == "gemini":
             client = GeminiClient(api_key=curr_settings.gemini_api_key)
-            return client.generate(
+            out = client.generate(
                 model=model,
                 prompt=prompt,
                 system=system,
                 media_path=media_path,
                 json_mode=json_mode
             )
+            cls.last_telemetry = getattr(client, "last_telemetry", None)
+            return out
         else:
             client = OllamaClient(host=curr_settings.ollama_host)
-            return client.generate(
+            out = client.generate(
                 model=model,
                 prompt=prompt,
                 system=system or "",
                 media_path=media_path,
                 json_mode=json_mode
             )
+            cls.last_telemetry = getattr(client, "last_telemetry", None)
+            return out
+
 

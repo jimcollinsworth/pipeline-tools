@@ -34,7 +34,10 @@ from src.core.ollama_client import OllamaClient
 from src.ingest.scanner import scan_directory, classify_modality
 from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
 from src.core.llm_service import LLMService
-from src.prompts.executor import PromptExecutor, extract_json_payload, infer_pixeltable_type
+from src.prompts.executor import (
+    PromptExecutor, extract_json_payload, infer_pixeltable_type,
+    get_row_media_path, build_prompt_expr
+)
 from src.export.exporter import MarkdownExporter
 
 
@@ -310,6 +313,79 @@ class TestPipelineTools(unittest.TestCase):
                 self.assertIn("doc_summary", table_data.get("columns", []))
                 self.assertIn("doc_haiku", table_data.get("columns", []))
                 self.assertIn("confidence", table_data.get("columns", []))
+
+    def test_multimodal_vision_guard(self):
+        """[Playground] Verify get_row_media_path only returns paths when enable_vision is explicitly True."""
+        row_with_image = {
+            "file_name": "test_photo.jpg",
+            "file_path": str(Path("tests/test_app.py").resolve()), # Existing file on disk
+            "modality": "images"
+        }
+        # With default enable_vision=False, MUST return None to avoid 15s vision inference latency
+        self.assertIsNone(get_row_media_path(row_with_image, enable_vision=False))
+
+        # With enable_vision=True and image extension, returns path
+        fake_img_row = {
+            "image": str(Path("tests/test_app.py").resolve())
+        }
+        # Rename or mock extension
+        with unittest.mock.patch("os.path.splitext", return_value=("test", ".jpg")):
+            self.assertIsNotNone(get_row_media_path(fake_img_row, enable_vision=True))
+
+    def test_llm_telemetry_tracking(self):
+        """[Router] Verify OllamaClient and LLMService capture latency and tokens/sec telemetry."""
+        from unittest.mock import patch, MagicMock
+        import io
+        import json
+
+        mock_resp_data = {
+            "response": "Fast response text",
+            "total_duration": 820000000,    # 0.82s
+            "eval_duration": 500000000,     # 0.50s
+            "prompt_eval_duration": 40000000, # 0.04s
+            "load_duration": 10000000,
+            "eval_count": 25,
+            "prompt_eval_count": 120
+        }
+        mock_http = MagicMock()
+        mock_http.read.return_value = json.dumps(mock_resp_data).encode("utf-8")
+        mock_http.__enter__.return_value = mock_http
+
+        with patch("urllib.request.urlopen", return_value=mock_http):
+            res = LLMService.generate(
+                provider="Ollama",
+                model="llama3.2",
+                prompt="Test prompt"
+            )
+            self.assertEqual(res, "Fast response text")
+            telem = LLMService.get_last_telemetry()
+            self.assertIsNotNone(telem)
+            self.assertEqual(telem.get("provider"), "Ollama")
+            self.assertEqual(telem.get("total_sec"), 0.82)
+            self.assertEqual(telem.get("eval_tokens"), 25)
+            self.assertEqual(telem.get("eval_tps"), 50.0) # 25 / 0.5s = 50 tok/s
+            self.assertIn("50.0 tok/s", telem.get("summary", ""))
+
+    def test_prompt_expression_builder(self):
+        """[Playground] Verify build_prompt_expr creates string expressions from templates."""
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [{
+                "name": "concat_doc.md",
+                "abs_path": str(Path("planning.md").resolve()),
+                "rel_path": "planning.md",
+                "modality": "docs",
+                "extension": ".md",
+                "size_bytes": 100,
+                "size": "100 B"
+            }]
+            DBManager.ingest_files(self.TEST_DOMAIN, "concat_test", fake_files, overwrite=True)
+            tbl = pxt.get_table(f"{self.TEST_DOMAIN}.concat_test")
+
+            expr = build_prompt_expr("Summarize {file_name}: {modality}", tbl)
+            self.assertIsNotNone(expr)
+            # Static template with no placeholders returns string literal
+            static_expr = build_prompt_expr("Plain prompt with no variables", tbl)
+            self.assertEqual(static_expr, "Plain prompt with no variables")
 
     def test_markdown_export_direct_template(self):
         """[Export] Verify MarkdownExporter creates formatted Markdown files using column placeholders."""

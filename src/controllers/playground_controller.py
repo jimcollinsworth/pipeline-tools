@@ -106,9 +106,10 @@ class PlaygroundController:
         prompt_template: str,
         sample_count: int = 1,
         output_mode: str = "⚡ Auto-Split JSON Keys into Columns",
+        enable_vision: bool = False,
         progress_callback: Optional[Callable[[float, str], None]] = None
     ) -> Dict[str, Any]:
-        """Execute prompt dry-run against 1–N sample rows with side-by-side inspection."""
+        """Execute prompt dry-run against 1–N sample rows with side-by-side inspection and telemetry."""
         if not domain or not table_name:
             return {
                 "status": "error",
@@ -144,17 +145,19 @@ class PlaygroundController:
             provider=provider,
             model=model,
             limit=int(sample_count),
+            enable_vision=enable_vision,
             progress_callback=progress_callback
         )
 
         if res.get("status") == "success":
             results = res.get("results", [])
-            headers = ["Row ID", "File Name", "Source Snippet", "Rendered Prompt", "Model Output"]
+            headers = ["Row ID", "File Name", "Telemetry & Speed", "Source Snippet", "Rendered Prompt", "Model Output"]
             rows = []
             for r in results:
                 rows.append([
                     str(r.get("row_id", "")),
                     str(r.get("file_name", "")),
+                    str(r.get("telemetry", "⚡ Fast (<1s)")),
                     str(r.get("source_snippet", "")),
                     str(r.get("rendered_prompt", "")),
                     str(r.get("llm_output", ""))
@@ -185,10 +188,11 @@ class PlaygroundController:
         target_column: str,
         write_mode: str = "replace",
         limit_rows: int = 0,
+        enable_vision: bool = False,
         is_lightweight: bool = True,
         progress_callback: Optional[Callable[[float, str], None]] = None
     ) -> Dict[str, Any]:
-        """Apply tested prompt across table rows and save newly generated columns."""
+        """Apply tested prompt across table rows using native Pixeltable computed columns."""
         if not domain or not table_name:
             return {
                 "status": "error",
@@ -225,6 +229,7 @@ class PlaygroundController:
             write_mode=write_mode,
             limit=int(limit_rows),
             auto_split_json=is_auto_split,
+            enable_vision=enable_vision,
             progress_callback=progress_callback
         )
 

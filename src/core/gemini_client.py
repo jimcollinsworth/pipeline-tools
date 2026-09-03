@@ -27,6 +27,7 @@ class GeminiClient:
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.last_telemetry: Dict[str, Any] = {}
 
     def get_client(self, api_key: Optional[str] = None) -> Any:
         key = self.api_key if api_key is None else api_key
@@ -242,12 +243,31 @@ class GeminiClient:
                 except Exception:
                     contents = prompt
 
+        import time
+        start_t = time.perf_counter()
         try:
             response = client.models.generate_content(
                 model=target_model,
                 contents=contents,
                 config=config
             )
+            elapsed_sec = round(time.perf_counter() - start_t, 2)
+            usage = getattr(response, "usage_metadata", None)
+            prompt_tokens = getattr(usage, "prompt_token_count", 0) if usage else 0
+            eval_tokens = getattr(usage, "candidates_token_count", 0) if usage else 0
+            tps = round(eval_tokens / elapsed_sec, 1) if elapsed_sec > 0 and eval_tokens > 0 else 0.0
+
+            self.last_telemetry = {
+                "provider": "Gemini",
+                "model": target_model,
+                "total_sec": elapsed_sec,
+                "eval_sec": elapsed_sec,
+                "eval_tokens": eval_tokens,
+                "eval_tps": tps,
+                "prompt_tokens": prompt_tokens,
+                "summary": f"⏱️ {elapsed_sec}s ({tps} tok/s) | Ingest: {prompt_tokens} tok | Generated: {eval_tokens} tok | Model: {target_model}"
+            }
+
             if response.text:
                 return response.text.strip()
             return "{}" if json_mode else "[Empty response from Gemini]"

@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Tuple, Optional
 class OllamaClient:
     def __init__(self, host: str = "http://localhost:11434"):
         self.host = host.rstrip("/")
+        self.last_telemetry: Dict[str, Any] = {}
 
     def check_connection(self) -> Tuple[bool, str]:
         """Test if Ollama server is running and accessible."""
@@ -79,4 +80,31 @@ class OllamaClient:
         )
         with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read().decode("utf-8"))
+
+            total_ns = data.get("total_duration", 0)
+            eval_ns = data.get("eval_duration", 0)
+            prompt_ns = data.get("prompt_eval_duration", 0)
+            load_ns = data.get("load_duration", 0)
+            eval_count = data.get("eval_count", 0)
+            prompt_count = data.get("prompt_eval_count", 0)
+
+            eval_tps = round(eval_count / (eval_ns / 1e9), 1) if eval_ns > 0 else 0.0
+            prompt_tps = round(prompt_count / (prompt_ns / 1e9), 1) if prompt_ns > 0 else 0.0
+            total_sec = round(total_ns / 1e9, 2)
+            eval_sec = round(eval_ns / 1e9, 2)
+            prompt_sec = round(prompt_ns / 1e9, 2)
+
+            self.last_telemetry = {
+                "provider": "Ollama",
+                "model": model,
+                "total_sec": total_sec,
+                "eval_sec": eval_sec,
+                "eval_tokens": eval_count,
+                "eval_tps": eval_tps,
+                "prompt_sec": prompt_sec,
+                "prompt_tokens": prompt_count,
+                "prompt_tps": prompt_tps,
+                "load_sec": round(load_ns / 1e9, 2),
+                "summary": f"⏱️ {total_sec}s ({eval_tps} tok/s) | Ingest: {prompt_count} tok in {prompt_sec}s | Generated: {eval_count} tok | Model: {model}"
+            }
             return data.get("response", "")

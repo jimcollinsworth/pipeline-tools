@@ -4,6 +4,44 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 
 ---
 
+## 💡 Why Pipeline Tools? (Philosophy)
+
+Many modern "all-in-one" RAG frameworks, monolithic chat apps, and autonomous agent harnesses attempt to do too much implicitly—hiding chunking decisions, opaque vector lookups, prompt mutations, and silent failures behind heavy abstractions.
+
+**Pipeline Tools is built on a different philosophy: small, transparent, and controllable steps.**
+- **Take Any Directory**: Point the scanner at any local folder containing an ad-hoc mix of text documents, PDFs, photos, audio memos, or video clips.
+- **Inspect & Control**: Inspect every file in the Media Drawer, test extraction and synthesis prompts across 1–2 sample rows first, and verify what the LLM actually sees before committing to batch operations.
+- **Generate Reusable Markdown Sidecars**: Execute prompts per row to generate structured Markdown sidecar files (`_meta.md`) with clean YAML frontmatter and standard media links.
+- **Feed Downstream Engines**: Rather than locking your data inside a proprietary vector store, the enriched Markdown sidecars become portable assets ready to power external RAG pipelines, WikiLLMs, Obsidian knowledge vaults, or autonomous coding/research agents.
+- **Powered by Pixeltable**: Declarative computed columns, zero-memory database streaming, versioned table lineage, and automatic incremental caching make Pixeltable the ideal multimodal foundation for this workflow.
+
+---
+
+## 🎯 Real-World Use Cases
+
+### 🏢 Use Case 1: Building Co-op & HOA Document Intelligence (EBA Building)
+* **Goal**: Index, cross-reference, and research decades of building co-op and HOA meeting notes, financial proposals, vendor bids, bylaws, and maintenance logs without getting lost in deep folder hierarchies.
+* **Pipeline Tools Workflow**:
+  1. **Ingest Archive**: Point the directory scanner at the building's historical records folder (`PDFs`, meeting minutes, budget spreadsheets, contractor proposals) and ingest them into domain `coop_hoa`, table `documents`.
+  2. **Extract & Structure (Data Enhancement)**: Use the prompt workbench on 2 sample rows with Gemini or Ollama to extract voting outcomes, monetary figures, contractor names, maintenance deadlines, and action items into clean JSON keys (`meeting_date`, `vote_passed`, `expenditure_usd`, `contractor`, `action_items`). The ⚡ Auto-Split engine turns these into queryable database columns.
+  3. **Inspect & Triage (View & Export)**: Use the Media Inspector drawer to preview scans and PDFs side-by-side with extracted metadata.
+  4. **Export Knowledge Sidecars**: Run the **Per-Row Sidecars** exporter to generate `{file_stem}_meta.md` dossiers with YAML frontmatter, or run **Single Synthesis** to generate a comprehensive 5-year building maintenance timeline for board review. These Markdown files directly feed into local RAG engines or personal search tools.
+
+---
+
+### 🧠 Use Case 2: Personal Daily Multimodal Pipeline (Life OS & Second Brain)
+* **Goal**: Ingest an ongoing daily stream of ad-hoc captures—phone photos, quick voice memos, whiteboard sketches, starred email exports, chat messages, and video snippets. Automatically categorize, rank, transcribe audio, identify visual objects, and surface high-priority thoughts (`!ideas!`, `?questions?`, `*todos*`).
+* **Pipeline Tools Workflow**:
+  1. **Continuous Ingestion**: Point the scanner at the daily inbox capture folder (e.g. `captures/2026-09-03/`) and append to the `daily_journal` table.
+  2. **Enrich & Classify**:
+     - Voice memos and audio recordings are transcribed and summarized.
+     - Images and video frames have key subjects/objects identified (e.g., *car, bus, violin, sax, Beethoven's 8th, Netflix action comedy*).
+     - Prompts parse text notes to extract and categorize key markers: `!ideas!`, `?questions?`, and `*todos*`.
+  3. **Verify in Workbench**: Review newly ingested daily entries with lightweight previews and instant media playback in the interactive inspector.
+  4. **Redistribute & Action**: Generate per-row sidecars (`{file_name}_meta.md`) linking back to the source media (local paths, Google Drive, Google Photos). Exported Markdown files automatically sync into **Obsidian** vaults, **Google Drive**, or trigger autonomous **Antigravity coding & research agents** for scheduled follow-ups and action items.
+
+---
+
 ## 🛠 Features
 
 - **Multimodal Directory Ingestion & Scanner**:

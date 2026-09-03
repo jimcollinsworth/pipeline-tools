@@ -35,11 +35,21 @@ This document defines core conventions, toolchain rules, architecture patterns, 
   - Multimodal declarative database layer for document/media ingestion, computed columns, and lineage.
   - Tables are grouped under directories/domains (e.g. `default`, `project_alpha`).
   - Sanitize all SQL/Pixeltable table and column identifiers with `sanitize_identifier()`.
-- **Local LLM Engine (`src/core/ollama_client.py` & `src/prompts/executor.py`)**:
-  - Ollama REST API for local model discovery, health checks, and batched prompt execution.
+  - **Zero-Memory Table Queries & Cell Truncation**:
+    - Never query raw binary pointers (`image`, `doc`, `audio`, `video`, `thumbnail`) into preview DataFrames.
+    - Project heavy text columns using database-level slicing (`table.content.slice(0, 500)`) so PostgreSQL computes `SUBSTRING` in-engine; never materialize multi-megabyte strings into Python RAM for tabular display.
+    - Apply `_truncate_cell(val, 250)` to all columns (including JSON objects in `metadata`) to keep WebSocket payloads < 50 KB.
+    - Cap raw file text extraction (`DBManager.extract_file_content`) at 1 MB during ingestion to prevent giant CSVs or log files from bloating single database cells.
+    - Rely on the single-record Media Inspector drawer for on-demand inspection rather than overloading the multi-row table grid.
+- **Local & Cloud LLM Engine (`src/core/` & `src/export/exporter.py`)**:
+  - Unified router for Ollama and Google Gemini.
+  - **Never Send Binary Media to LLMs for Document Exports**: Do NOT upload base64 images or binary buffers to LLMs during synthesis or export. Pass only text metadata and local path strings for Markdown links (`![caption](filepath)`). Multimodal image inputs are reserved strictly for explicit vision analysis requests.
+  - **Enforce Fast Markdown Constraints**: System prompts and presets must mandate clean GitHub-flavored Markdown and strictly forbid heavy raw HTML (`<!DOCTYPE html>`, `<table>`, inline CSS) or inline `<svg>` generation. Raw HTML/SVG causes 4,000+ token explosions that take 30+ seconds per row; standard Markdown outputs in 1–2 seconds.
+  - **Context Fallback Invariant**: If a user's prompt template omits column placeholders (`{content}`, `{file_name}`), the export engine must automatically append the structured record data context so the model receives factual record grounding.
 - **Configuration & Persistence (`src/core/config.py`)**:
   - Application settings are managed via Pydantic `Settings`.
   - User selections (recent directories, selected domain/table, prompt templates, models) must be persisted to `config.json` via `update_last_entry()`.
+
 
 ---
 

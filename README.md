@@ -16,15 +16,18 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 - **Incremental & Cached Execution**:
   - Leverages Pixeltable declarative computed columns to ensure LLM operations are cached, incremental, and version-controlled.
   - Minimizes redundant LLM calls per row, and accepts structured typed output inserted/appended into table columns.
-- **Embedded Multimodal Media & Interactive Inspector**:
+- **Declarative Data Management & Media Inspector**:
   - Fast **⚡ Lightweight Mode** (skips binary deserialization, reducing Python RAM by >95%) and **🔍 Full Media Mode** with inline HTML thumbnails (`<img>`), audio players (`<audio>`), video players (`<video>`), and PDF badges.
-  - Interactive **🔬 Selected Record Media Inspector** drawer opens on row selection for deep inspection of full-resolution images, audio playback, video playback, and extracted text.
+  - **Zero-Memory Database Streaming**: Large text columns (`content`) are sliced directly inside the database engine (`table.content.slice(0, 500)`), avoiding loading multi-megabyte strings into Python RAM. All table cells are safely truncated to 250 characters, keeping Gradio WebSocket payloads under 50 KB.
+  - Ingestion safeguards cap text extraction from giant files (CSVs, server logs) at 1 MB to prevent memory bloat.
+  - Interactive **🔬 Selected Record Media Inspector** drawer opens on row selection for on-demand inspection of full-resolution images, audio playback, video playback, and extracted text.
 - **1-Click Lineage Undo & Safe Database Management**:
   - **↩️ 1-Click Undo**: Instantly drops newly added LLM columns (including auto-split columns) and rolls back table schema without touching raw ingested assets.
   - **🗑️ Safe Deletion**: 2-step confirmation drawers for dropping individual tables or entire domains with on-screen summary cards and logging.
 - **Dual Export Strategies & Live Streaming Previews (View & Export)**:
   - **📄 Single Document Synthesis**: Aggregates multi-row dataset context into one structured Markdown briefing, intelligence dossier, or media catalog (`exports/{domain}_{table}_report_{timestamp}.md`).
   - **🗂️ Per-Row Sidecars (`_meta.md`)**: Executes one LLM call per row to produce rich, standalone sidecar documents (`exports/{source_stem}_meta.md`) with clean YAML frontmatter, automatic row-specific image embedding (`![photo](file_path)`), and continuous real-time preview updates in the browser.
+  - **Fast Markdown Constraints & Media Safety**: Exports pass pure text metadata and local path strings to LLMs—never uploading raw binary media. Prompts strictly enforce clean GitHub-flavored Markdown and forbid heavy raw HTML/SVG code, keeping row generation fast (1–2 seconds) and preventing 30+ second latency spikes.
   - **Task-Oriented Presets**: *📰 Newspaper Story & Embedded Photo*, *Entity & Keyword Intelligence*, *Visual & Scene Breakdown*, *Thematic Summary & Patterns*, and *Structured Media Catalog*.
   - Live in-browser Markdown preview and instant 1-click file download from `exports/`.
 - **Decoupled Controller Layer**:

@@ -331,7 +331,9 @@ class MarkdownExporter:
                 except Exception:
                     pass
 
-            # Render row-specific prompt
+            # Architecture Rule: We pass pure textual record metadata and file paths to the LLM
+            # rather than uploading binary media buffers. This avoids multi-megabyte payloads and keeps latency low.
+            # Media files are referenced via standard Markdown image embeds: `![Caption](file_path)`
             row_prompt = cls.format_row_template(row, prompt_template)
             row_prompt = row_prompt.replace("{domain}", clean_dir).replace("{table}", clean_tbl)
 
@@ -341,6 +343,8 @@ class MarkdownExporter:
                 row_context = "\n".join([f"- **{k}:** {v}" for k, v in row.items() if v and k != "media_preview"])
                 row_prompt = f"{row_prompt}\n\n### Record Data:\n{row_context}"
 
+            # Token Constraint Invariant: Enforce clean Markdown and forbid heavy raw HTML/inline SVG
+            # to prevent the LLM from outputting 4,000+ tokens of code that cause 30+ second latency spikes.
             effective_sys = system_prompt.strip() if system_prompt and system_prompt.strip() else (
                 "You are an AI synthesis assistant. Output clean, concise GitHub-flavored Markdown. "
                 "Do not generate heavy raw HTML, inline CSS, or SVG code. "

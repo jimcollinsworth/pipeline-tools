@@ -312,5 +312,39 @@ This journal records verbatim developer instructions, architectural directives, 
 4. **Automated Verification**:
    - Full test suite verified: **38 Passed, 0 Failed, 0 Errors**.
 
+---
+
+## 📅 2026-09-03: Binary Media Safety, Fast Markdown Enforcement & Agent Rules
+
+**Context:** User observed a 30-second latency spike on row 1 of sidecar generation and asked if images were being sent to the LLM.
+
+**Verbatim Instruction:**
+> `took 30 seconds to process on row, why so long? are we sending the image to the llm? don't do that`
+> `make sure these insight are documented in comments, readme, planning, journal as appropriate. update agent rules to enforce. pull code as it's been updated.`
+
+**Root Cause Analysis:**
+1. **Binary Media Check**:
+   - Confirmed: Raw images and binary media are **never** passed or uploaded to LLMs in the export pipeline (`media_path` is `None`).
+   - Images are linked exclusively via standard Markdown syntax (`![caption](filepath)`) using local path strings.
+2. **Token Bloat & Latency Cause**:
+   - The user's prompt requested "a one page newspaper article with embedded graphics using a random style".
+   - Because no negative constraints were present, Gemini literally generated **463 lines (19.3 KB, ~4,500 tokens)** of hand-coded HTML with inline vector `<svg>` Victorian woodcut diagrams, CSS layouts, and web fonts.
+   - Generating 4,500+ tokens of raw SVG and HTML over the API took 30.8 seconds. By contrast, clean Markdown output (~300 tokens) takes only 1–2 seconds.
+
+**Key Decisions & Engineering Fixes:**
+1. **Strict Markdown System Prompt Constraints**:
+   - Enforced `effective_sys` in `src/export/exporter.py` mandating clean GitHub-flavored Markdown and strictly forbidding raw HTML (`<!DOCTYPE html>`, `<table>`, inline CSS) or inline `<svg>` generation.
+2. **Automatic Context Fallback**:
+   - If user prompt templates omit explicit `{content}` or `{file_name}` placeholders, the exporter automatically appends the record context so the LLM has factual grounding.
+3. **Agent Rules Updated (`AGENTS.md`)**:
+   - Codified mandatory repository rules in `AGENTS.md`:
+     - *Zero-Memory Table Streaming & Cell Truncation*: Always use `table.content.slice(0, 500)` in database queries and truncate cells to 250 characters.
+     - *Media Safety*: Never upload binary media to LLMs for document exports; use pure text metadata and path strings.
+     - *Fast Markdown Invariant*: Always enforce standard Markdown output and disallow raw HTML/SVG generation.
+4. **Documentation & Tests**:
+   - Synchronized `README.md`, `planning.md` (added RES-20 & RES-21), `journal.md`, and code docstrings.
+   - Verified automated test suite: **38 Passed, 0 Failed, 0 Errors**.
+
+
 
 

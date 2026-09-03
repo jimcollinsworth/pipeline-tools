@@ -101,6 +101,14 @@ flowchart TD
   - Added *Newspaper Story & Embedded Photo* preset with journalist framing.
   - Continuous live row-by-row streaming preview in the UI using Python generators.
   - Added binary media safeguards in `DBManager.ingest_files` to prevent table insertion errors on missing files.
+  - **Zero-Memory Database Streaming (`RES-20`)**:
+    - Direct in-engine substring projection `table.content.slice(0, 500)` in PostgreSQL eliminating memory spikes on massive text cells (e.g. 108 MB CSV rows in `thinkpad.data_dir2`).
+    - Universal cell truncation (`_truncate_cell(val, 250)`) across all table columns and JSON objects, keeping WebSocket payloads under 50 KB.
+    - 1 MB text extraction limit during ingestion to safeguard against giant data dumps.
+  - **Fast Markdown Sidecar Generation & Media Safety (`RES-21`)**:
+    - Path-based image references: pure text metadata and file paths (`![caption](filepath)`) are passed to the LLM; binary media is never uploaded.
+    - Markdown-only system prompt enforcement preventing heavy raw HTML/inline SVG generation, reducing sidecar latency from 30+ seconds to 1–2 seconds.
+    - Automatic record data context fallback when prompt templates omit explicit placeholders.
   - Verified with 38 unit tests (`38 Passed, 0 Failed, 0 Errors`).
 
 ### Phase 4: Multimodal Vision & Entity Classification Engines (Planned)
@@ -229,3 +237,6 @@ flowchart TD
 | RES-17 | Remote Hosting, Mobile/Tablet Companion & Local-Connect Tunnel | Open | Overcome embedded PostgreSQL mobile limitation via Antigravity-style desktop local-connect (Tailscale / Cloudflare Tunnel / Gradio Share); tablet/phone acts as review dashboard and direct camera/media ingestion source. |
 | RES-18 | App Publication, Community Launch & Developer Blog Strategy | Open | Multi-channel launch plan: closed beta test user cohort, PyPI/`pip` packaging with `uvx` support, Show HN submission, X/Twitter demo thread, and comprehensive technical deep-dive blog post. |
 | RES-19 | Column Name Prefixes & Visual Schema Grouping | Open | Standardize on column prefixes (I_ imported, C_ calculated/LLM, U_ user input) with UI badge tabs, case sensitivity handling, and template placeholder auto-aliasing. |
+| RES-20 | Zero-Memory Table Streaming & OOM Safeguards | Complete | In-engine database substring slicing `table.content.slice(0, 500)` in PostgreSQL, universal 250-char cell truncation, and 1 MB ingestion file read limits to prevent RAM exhaustion. |
+| RES-21 | Fast Markdown Sidecar Architecture & Media Safety | Complete | Path-based image references (no binary media uploads to LLMs), strict Markdown system prompt enforcement preventing 4K-token HTML/SVG generation, and automatic record context fallback. |
+

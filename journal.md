@@ -347,19 +347,18 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
-## 📅 2026-09-03: Commit Protocol Convention (`.commit_msg`)
+## 📅 2026-09-03: Commit Workflow Directives & Antigravity Permission Guidelines
 
-**Context:** Eliminating interactive IDE terminal permission prompts when committing verified code.
+**Context:** Reverting `.commit_msg` workaround in favor of standard Antigravity commit pattern (`git commit -m "..."`).
 
 **Verbatim Instruction:**
-> `make sure to create a .commit_msg file instead of using the -m parameter so i dont have to approve everytime. as long as the work as already been tested and reviewed/viewed/discussed with me, it's approved to commit`
+> `forget the .commit_msg stuff, just use the preferred way in antigravity. my only pet peeve was having to approve every commit, so go back to your preffered way, tell me if i can change permissions or such`
 
-**Protocol Standardized:**
-- Write commit message to `.commit_msg` using `write_to_file`.
-- Commit using `git commit -F .commit_msg`.
-- Push to `main`.
-- `.commit_msg` is ignored in `.gitignore`.
-- Work verified via test suite and reviewed with the user is pre-approved for commit.
+**Key Decisions & Guidance:**
+- Reverted to standard Antigravity convention: `git commit -m "..."` and `git push origin main`.
+- Work verified through testing and reviewed with the user is pre-approved for commit.
+- Provided user with instructions for configuring Antigravity IDE auto-approve command permissions in workspace settings.
+
 
 
 

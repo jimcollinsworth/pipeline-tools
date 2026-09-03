@@ -15,14 +15,10 @@ This document defines core conventions, toolchain rules, architecture patterns, 
   - Launch standard: `uv run python app.py`
   - Run test suite: `uv run python -m tests` (or `uv run python tests/test_app.py`)
   - Install dependencies: `uv pip install -e .`
-- **Git Commit Protocol**:
-  - **NEVER use `git commit -m "..."`**: Inline `-m` commands with quotes trigger IDE permission approval prompts.
-  - **Always write commit messages to `.commit_msg`**:
-    1. Write the commit message to `.commit_msg` using `write_to_file`.
-    2. Commit using `git commit -F .commit_msg`.
-    3. Push using `git push origin main`.
-  - Once work is verified through testing and reviewed/discussed with the user, it is pre-approved for commit without requiring approval stops.
-  - `.commit_msg` is ignored in `.gitignore`.
+- **Git Commit Workflow**:
+  - Standard convention: `git commit -m "..."` followed by `git push origin main`.
+  - Work verified through testing and reviewed/discussed with the user is pre-approved for commit.
+
 
 ---
 

@@ -824,6 +824,18 @@ def run_tests():
     except Exception:
         pass
 
+    try:
+        from tests.test_context_manager import TestContextProcessing
+        suite.addTests(loader.loadTestsFromTestCase(TestContextProcessing))
+    except Exception:
+        pass
+
+    try:
+        from tests.test_document_view import TestDocumentView
+        suite.addTests(loader.loadTestsFromTestCase(TestDocumentView))
+    except Exception:
+        pass
+
     total_count = suite.countTestCases()
     result = CleanTestResult(sys.stdout, total_tests=total_count)
     

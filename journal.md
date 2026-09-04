@@ -2,7 +2,7 @@
 title: "Developer Journal & Key Architectural Directives"
 description: "Chronological record of key developer directives, mentoring instructions, retraining notes, architectural decisions, and generalized software engineering lessons."
 created_at: 2026-08-31
-last_updated: 2026-08-31
+last_updated: 2026-09-04
 author: "Jim Collinsworth"
 tags: ["mentoring", "architecture", "testing", "directives", "tdd", "pixeltable", "postgres"]
 ---
@@ -401,9 +401,90 @@ This journal records verbatim developer instructions, architectural directives, 
   - Added 3 new unit tests (`test_multimodal_vision_guard`, `test_llm_telemetry_tracking`, `test_prompt_expression_builder`).
   - Verified complete test suite: **44 Passed, 0 Failed, 0 Errors** (100% pass rate).
 
+---
 
+## 📅 2026-09-04: Context Processing, EBA Index/Xref Engine, Modular Feature Docs & Export Row Filtering
 
+**Context:** Launching new work session focused on continuous pipeline learning, persistent context memory files (`domain_table_context.md`), cross-referencing and indexing for the EBA use case, modular feature docs architecture under `docs/`, and export row filtering strategies.
 
+**Verbatim Developer Directives:**
+> `new work session, fix up some ui things (but not a big change yet), get some more requirements specified, work on eba usecase, need index/xref docs output, but also a new feature - context handling during processing (ingestion, enhancement, export) in all cases the tool learns from you and the data in it's context, our rules/training are in the systemprompt (for the table) or skills, pulled into the context. context wants to keep lists of entities with referenced doc links, deduplicate entity names and maintain aliases (people, places, things). also things done to the data, lessons learned. the generated output of the llm query such as new entities, identified objects, names, summary are loaded into the context, for the next iteration. context is loaded and saved as file domain_table_context.md for each operation (like enhance 2000 rows), so it can be tracked in git and it continues to learn overtime, kind of a combined memory/context.  The user can view or even edit it at any time, distiguish the different parts of the context somehow in the file so we can see system prompt vs other components/skills  (capture all these details in the planning, requirements doc, and summarized in journal, this is a general rule for agents.)  at a minimum when an ingestion, enhancement or exporting is done there is a system and user prompt for the row level column processing.`
+> `new item for backlog - add an llm call for filtering rows on export, maybe this works now just with the llm prompt need to try it. But another approach would first filter rows using lightweight row data only and a lightweight LLM to return row/file IDS to join with the full row data, and pass that one at a time to the LLM. need to maintain use of the native pixeltable processing for LLM efficiency. discusion/research needed.`
+> `i think we can start creating feature docs, as the planning doc will get too long otherwise. this feature is 'docs/context-processing.md. will have our requirements, thoughts, analysis, implementation, user help, implementation plan/checklist can have more detail then in planning.md.   use the name context-processing as the ID in our docs. Go ahead and pull out our 4 or 5 big feature areas from planning into feature docs for future definition and analysis, update the plans with work done, work to do, known requirements. some possible features are user-interface (we will do a complete refresh soon, abstract, cool, interactive document), publishing (get this tool shared, pip, ycombinator, pixeltable forums, my personal blog, need docs, testing, packaging, blog article, what else?)`
 
+**Key Decisions & Engineering Takeaways:**
+1. **Modular Feature Documentation Architecture (`docs/`)**:
+   - Decomposed monolithic planning into dedicated feature documents:
+     - `docs/context-processing.md` (ID: `context-processing`): Dynamic cross-row learning, entity index/xref, Git memory file `{domain}_{table}_context.md`.
+     - `docs/user-interface.md` (ID: `user-interface`): Modern refresh, abstract document canvas, visual pill column toggles, live debug drawer.
+     - `docs/publishing.md` (ID: `publishing`): PyPI package (`uvx`), developer blog deep dive, Show HN, Pixeltable forums, and community launch.
+     - `docs/multimodal-vision.md` (ID: `multimodal-vision`): 27-class art taxonomy classification, GLiNER zero-shot NER, Hugging Face Hub.
+     - `docs/document-ux.md` (ID: `document-ux`): Living document reader, editorial newspaper feeds, YAML frontmatter sidecars.
+   - Authorized documentation rule in `AGENTS.md` updated in spirit: user-authorized feature documents under `docs/` complement `README.md`, `planning.md`, and `journal.md`.
+2. **Persistent Context File (`{domain}_{table}_context.md`)**:
+   - Plain Markdown file tracked in Git, viewable and editable by users at any time.
+   - Clearly separated sections: System Prompt & Governance, Active Skills / Tools, Canonical Entity Register (People, Places, Organizations, Things with aliases and doc links), Dataset Thematic Summary, and Lessons Learned / Actions Performed.
+   - Reloaded on future operations (e.g. batch enhancing 2,000 rows) so intelligence accumulates over time.
+3. **EBA Use Case & Index/Xref Engine**:
+   - Cross-referencing entities with source document links (`[title](path)`).
+   - Generates consolidated `index.md` dossiers and cross-reference matrices across unstructured document archives.
+4. **Row-Level System & User Prompting Standard**:
+   - Ingestion, enhancement, and export pipelines must always pair a row-level system prompt and user prompt alongside active table context.
+5. **Backlog Research: Two-Stage LLM Row Filtering (`RES-24`)**:
+   - Pre-filtering rows via lightweight row metadata + fast lightweight LLM returning candidate IDs, joined natively with full row data in Pixeltable for single-record deep LLM synthesis.
+6. **Data Enhancement Single-Column Full-Width UX**:
+   - Converted `src/ui/playground_tab.py` to a stacked single-column layout matching View & Export, giving preview tables full screen width (`min_width=800`) and removing horizontal column cutoffs.
+7. **Native Entity Highlighting with Gradio (`gr.HighlightedText`)**:
+   - Implemented `TablesController.build_highlighted_spans` and `extract_entities_from_row_dict` to extract entity targets (people, organizations, locations, dates) and compute exact substring match intervals in row text.
+   - Added `gr.HighlightedText` in the Selected Record Media Inspector across both Data Enhancement and View & Export tabs, rendering colored entity badges without custom CSS.
+   - Added `test_tables_controller_entity_highlighting` in `tests/test_controllers.py` (45/45 tests passing).
 
+---
+
+## 📅 2026-09-04: The LLM Wiki Architecture (Compounding Knowledge vs. Ephemeral RAG)
+
+**Context:** Incorporating the LLM Wiki paradigm into the architecture and feature roadmap: each domain/table maintains an evolving persistent wiki/knowledge base to learn and compound insights over time, moving away from stateless chunked RAG.
+
+**Verbatim Developer Directive:**
+> `here some discussion on the llm wiki ideas, not exactly what we want but the concepts should ring true, lets capture some of these ideas in the feature docs/readme roadmap, but don't implement yet. each domain/table gets it's own wiki to learn and evolve based on it's data and advise.`
+
+**Key Concepts & Architectural Design:**
+1. **The Core Philosophy — Compounding Knowledge vs. Ephemeral RAG**:
+   - In traditional RAG, an LLM rediscovers knowledge from scratch on every question; there is no accumulation. Multi-document synthesis requires repeatedly hunting for and assembling scattered fragments.
+   - In the LLM Wiki pattern, knowledge compounds. Facts, entities, aliases, and source citations are progressively compiled into an evolving persistent Markdown wiki for each domain and table.
+2. **Tri-Layer Architecture**:
+   - **Layer 1: Raw Sources (Immutable)**: Original documents, PDFs, images, and tabular data tracked in Pixeltable tables. Read-only ground truth.
+   - **Layer 2: The LLM Wiki (Persistent Memory)**: Plain Markdown files (`{domain}_{table}_context.md`, `index.md`, topic dossiers, `log.md`) maintained by the LLM and user. Git-tracked, zero vendor lock-in, human-inspectable.
+   - **Layer 3: Schema & Governance (Directives)**: Table-level system prompts and `.agents/skills/` enforcing citation formatting, canonical naming, alias resolution, and conflict reconciliation.
+3. **Core Lifecycle Operations**:
+   - **Ingest / Enhance**: When new rows are ingested or enhanced, extract entities, resolve aliases to canonical names, append source document links (`[doc](filepath)`), and flag contradictions with prior records.
+   - **Query & Synthesis**: Query the compiled wiki pages and structured entity registers directly rather than searching raw chunk vectors.
+   - **Lint & Reconcile**: Audit the wiki to identify orphan concepts, reconcile conflicting facts between sources, and refresh cross-reference indexes.
+4. **Scope & Roadmap Placement**:
+   - Captured in `docs/context-processing.md`, `planning.md` (Phase 5 / `RES-12`), and `README.md`.
+   - Explicitly deferred implementation per user directive until design and context viewing are aligned.
+
+---
+
+## 📅 2026-09-04: Document UX & Table vs. Single Document View Toggle (Option 1)
+
+**Context:** Designing an intuitive, consistent way to switch between multi-row table scanning and focused single-record document inspection without cramped columns or horizontal table scrolling.
+
+**Verbatim Developer Directives:**
+> `some ui changes to document in roadmap/plan - want ot have a consistent way to toggle between table row/cell views and a single document view (for current row) that shows full text, images, video, audio..... don't want to much formatting complexity for preview (export is different), so lets discuss options/design before doing.`
+> `option 1.`
+> `question can we easily change column sequence, hide/show columns in the table (and our new document view), using clicks on the column headers/names. what is our current table engine implementation, we want to keep using same but not overcomplicate.`
+> `yes do the updates, plan the design, new tests, code and test then /test-driven-development /gradio`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Option 1: Segmented View Mode Toggle**:
+   - Radio toggle `[ 📊 Table Grid ]`  `[ 📄 Single Document ]` placed directly above dataset views in View & Export.
+   - **Table Grid Mode**: Full-width multi-row spreadsheet view (`gr.Dataframe`) for rapid scanning and row selection.
+   - **Single Document Mode**: Focused full-width single-record document card with row paging toolbar (`◀ Previous`, `Record X of Y`, `Next ▶`), untruncated text, entity highlighting (`gr.HighlightedText`), and active media players.
+2. **Preview vs. Export Formatting Separation**:
+   - In-app preview is intentionally simple and responsive: uses clean native Gradio components without fragile custom CSS or HTML tables.
+   - Rich editorial/newspaper styling remains reserved for final document exports (`_meta.md` / synthesis reports).
+3. **Interactive Column Visibility Pill Bar**:
+   - Avoided fragile DOM JavaScript hooks into `gr.Dataframe` headers.
+   - Implemented clickable interactive column pills (`gr.CheckboxGroup`) directly above the table/document to hide/show columns in both views.
 

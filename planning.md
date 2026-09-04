@@ -36,6 +36,13 @@ flowchart TD
 
 ## 2. Implementation Roadmap & Task Lists
 
+> **Modular Feature Specifications (`docs/`)**: Detailed specifications, analysis, user help, and task checklists for major subsystems are maintained in dedicated feature documents:
+> - [`docs/context-processing.md`](file:///c:/Users/jimco/Projects/pipeline-tools/docs/context-processing.md): Dynamic cross-row learning, entity index/xref, and `{domain}_{table}_context.md` Git memory.
+> - [`docs/user-interface.md`](file:///c:/Users/jimco/Projects/pipeline-tools/docs/user-interface.md): Modern UI refresh, abstract living document canvas, touch column toggles, and live debug drawer.
+> - [`docs/publishing.md`](file:///c:/Users/jimco/Projects/pipeline-tools/docs/publishing.md): PyPI packaging (`uvx`), developer blog deep-dive, Show HN, Pixeltable forums, and community launch.
+> - [`docs/multimodal-vision.md`](file:///c:/Users/jimco/Projects/pipeline-tools/docs/multimodal-vision.md): 27-class art taxonomy classification, GLiNER zero-shot NER, and Hugging Face pipelines.
+> - [`docs/document-ux.md`](file:///c:/Users/jimco/Projects/pipeline-tools/docs/document-ux.md): Living document reader, editorial newspaper feeds, and YAML frontmatter sidecars.
+
 ### Phase 1: Core Foundation & Prompt Playground (Completed & Tested)
 - [x] **Environment & Core Config Setup**
   - Dependency setup & config module (`config.json` with Ollama, default models, directories).
@@ -133,24 +140,37 @@ flowchart TD
   - Single-column stacked layouts, touch-friendly tap targets ($\ge 44\text{px}$), and adaptive table views (horizontal scroll cards / compact summary cards) for phone and tablet screens.
 
 ### Phase 5: Dynamic Ingestion Context, Skills Integration, Document Reader & Newspaper UX (Planned)
-- [ ] **Dynamic Ingestion Context & State Accumulation (`RES-12`)**
-  - **Dynamic Cross-Row Memory**: Inject accumulated context into multi-row batch ingestion and prompt pipelines so the system 'learns' as it ingests each row.
-  - **Deduplication & Entity Normalization**: Leverage previous row entity spellings, discovered taxonomies, and cross-document relationships to resolve entity ambiguities and maintain uniform naming.
-  - **Learned Knowledge Export**: Upon batch completion, write the final accumulated dataset context to `exports/{domain}-{table}-ingestion-context.md` containing global summaries, entity registers, and discovered themes.
-  - **Context Structure Standards**: Evaluate structured Markdown knowledge registers, JSON-LD / schema.org triples, and hierarchical memory banks.
-  - **Pixeltable Integration**: Leverage Pixeltable table metadata attributes and persistent state views to version and retain learned context alongside dataset lineage.
+- [ ] **Context Processing, Dynamic Learning & Entity Cross-Referencing (`RES-12`, `docs/context-processing.md`)**
+  - **The LLM Wiki Architecture (Compounding Knowledge vs Ephemeral RAG)**:
+    - Shift from rediscovering facts from scratch on each query to compiling a persistent, evolving Markdown wiki per domain/table.
+    - **Tri-Layer Pattern**:
+      1. *Raw Sources (Immutable)*: Original PDFs, images, text, and CSVs in Pixeltable tables.
+      2. *The LLM Wiki (Persistent Memory)*: Git-tracked Markdown files (`{domain}_{table}_context.md`, `index.md`, topic dossiers, `log.md`) maintaining canonical entities, aliases, bidirectional links (`[doc](filepath)`), and lessons learned.
+      3. *Schema & Governance (Directives)*: Table-level system prompts and `.agents/skills/` enforcing citation rules, canonical naming, and link integrity.
+    - **Core Lifecycle Operations**:
+      - *Ingest / Enhance*: Extract facts, link back to raw sources, resolve entity aliases, and flag contradictions with prior records.
+      - *Query*: Direct fast synthesis against compiled wiki pages rather than chunked vector searches.
+      - *Lint / Reconcile*: Audit wiki for orphaned concepts, broken links, and unresolved contradictions.
+  - **Evolving Cross-Row Memory**: Continuous learning during ingestion, enhancement, and export. Rules and governance are drawn from table system prompts or skills, while LLM outputs (new entities, summaries, tags) accumulate into context for subsequent iterations.
+  - **Persistent Context File (`{domain}_{table}_context.md`)**: Context is loaded and saved to a Git-tracked Markdown file per operation (e.g. batch enhancement of 2,000 rows), enabling human review, editing, and continuous learning over time.
+  - **Distinct Context Sections**: Structural separation between System Prompt / Governance, Active Skills / Tools, Canonical Entity Register, Global Dataset Summary, and Lessons Learned / Actions Performed.
+  - **Entity Normalization & Deduplication**: Maintain registers of People, Places, Organizations, and Things with canonical IDs and alias mappings.
+  - **EBA Cross-Referencing & Index Output**: Entities maintain bidirectional links to referencing source documents (`[title](path)`). Dedicated export engine produces comprehensive indexed cross-reference dossiers (`index.md`).
+  - **Row-Level Prompting Standard**: Mandatory pairing of row-level system prompt and user prompt during column processing.
 - [ ] **Project Skills Integration & Prompt `/` Slash Commands (`RES-13`)**
   - **In-Prompt Slash Command Discovery**: Type `/` in prompt input textareas to trigger intelligent auto-completion of skills discovered from `.agents/skills/`.
   - **Dynamic Prompt Decoration**: Automatically parse and inject `SKILL.md` rules, tool definitions, and domain instructions directly into active prompt templates.
   - **Pixeltable Tool Registry**: Map project skills to declarative Pixeltable User Defined Functions (`@pxt.udf`) and tool calling pipelines for seamless row-level evaluation.
-- [x] **Document UX & Newspaper / Magazine Layout Engine (`RES-14`)**
-  - **Single-Record Document Reader**: Dedicated rich Markdown reader view displaying one record at a time with clean visual styling, custom border colors, header-level collapsible/expandable accordions, styled rollup lists, embedded Mermaid diagrams, interactive charts, and full-resolution media.
-  - **Interactive Navigation**: Instant Previous / Next record navigation buttons with hotkeys for rapid qualitative inspection.
-  - **Newspaper / Blog Feed View**: Multi-column editorial magazine/newspaper layout organizing dataset rows into interactive story cards, hero image headlines, thematic badges, and executive callouts.
-  - **Theme & Layout Selector**: User-selectable visual themes (e.g., *Modern Editorial*, *Technical Dossier*, *Clean Minimal*, *Dark Terminal*) controlling CSS typography, colors, and layout structure.
-  - **Dual Export Strategies & Per-Row Sidecars (`_meta.md`)**: Implemented dual export pipelines in `MarkdownExporter` and `TablesController` supporting both unified multi-record synthesis reports and individual per-record Markdown sidecars (`{source_stem}_meta.md`) with automatic media embedding (`![title](filepath)`), clean YAML frontmatter, and real-time streaming preview updates.
-- [ ] **Direct, Visual & Touch-Based Column/Field Selection (`RES-15`)**
-  - **Touch-Friendly Visual Selectors**: Replace tedious multi-select field dropdowns with direct visual pill toggles, drag-to-reorder columns, and 1-tap column hide/show icons.
+- [ ] **Document UX & Table vs. Single Document View Toggle (`RES-14`, `docs/document-ux.md`)**
+  - **Option 1: Unified Display Toggle (`[ 📊 Table Grid ]` / `[ 📄 Single Document ]`)**:
+    - Instant mode toggle placed directly above dataset views across Data Enhancement and View & Export.
+    - **Table Grid Mode**: Full-width multi-row spreadsheet view (`gr.Dataframe`) for multi-record scanning and row selection.
+    - **Single Document Mode**: Focused full-width single-record document card with row paging toolbar (`◀ Previous`, `Record X of Y`, `Next ▶`), untruncated text, entity highlighting (`gr.HighlightedText`), and active media players.
+    - **Simplicity Invariant**: Keep in-app preview formatting clean and lightweight using native Gradio components without fragile custom HTML/CSS; rich editorial layouts remain reserved for final document exports.
+  - **Dual Export Strategies & Per-Row Sidecars (`_meta.md`)**: Unified multi-record synthesis reports and individual per-record Markdown sidecars with automatic media embedding (`![title](filepath)`) and clean YAML frontmatter.
+- [ ] **Direct, Visual & Touch-Based Column/Field Selection (`RES-15`, `docs/user-interface.md`)**
+  - **Interactive Column Visibility Pill Bar**: Clickable interactive chips (`[✓ file_name]  [✓ content]  [✓ summary]  [✗ file_size]`) directly above the table/document to hide/show columns in both views.
+  - **Bulk Column Toggles**: 1-click `Select All` and `Deselect All` buttons for rapid column subsetting.
   - **LLM-Assisted Column Referencing**: Automatically detect and highlight active table columns within prompt templates, providing 1-click chip insertion (`{column_name}`).
   - **Pixeltable Projection & Temporary Views**: Utilize Pixeltable's declarative view engine (`pxt.create_view`) and zero-memory column projection filters to render custom visible column subsets on demand without table duplication.
 - [ ] **Structured Column Name Prefixes & Visual Schema Grouping (`RES-19`)**
@@ -237,7 +257,7 @@ flowchart TD
 | RES-09 | Mobile / Tablet Architecture & Cloud Serving | Open | Overcome embedded PostgreSQL mobile restriction by hosting Gradio + Pixeltable on cloud containers / remote server with persistent volume, serving responsive PWA to mobile devices. |
 | RES-10 | Responsive Mobile / Tablet Design | Open | Adapt Gradio layout with mobile CSS breakpoints, stacked columns, touch-friendly button targets (>=44px), and compact card table views. |
 | RES-11 | Pixeltable Declarative Compute & 1-Click Undo | Complete | Implemented 1-click Undo operation history, replaced sequential Python loop with native @pxt.udf computed columns, automatic PostgreSQL caching, and JSON key unpacking. |
-| RES-12 | Dynamic Ingestion Context & State Accumulation | Open | Stateful cross-row context accumulator during batch ingestion to enable entity deduplication and synthetic knowledge export (`domain-table-ingestion-context.md`). |
+| RES-12 | Dynamic Context, Compounding LLM Wiki & State Accumulation | Open | Shift from ephemeral RAG to compounding LLM Wiki per domain/table (`{domain}_{table}_context.md`). Stateful cross-row context accumulator during batch operations to enable entity deduplication, alias resolution, source cross-referencing, and synthetic knowledge export (`index.md`). |
 | RES-13 | Project Skills Integration & Prompt `/` Commands | Open | Dynamic discovery of `.agents/skills/` definitions triggered by `/` prompt slash commands with automatic instruction injection and Pixeltable UDF mapping. |
 | RES-14 | Document UX & Newspaper / Magazine Layouts | Open | Single-record rich Markdown reader with collapsible sections, theme selectors, embedded media/Mermaid, and editorial newspaper-style multi-record feeds. |
 | RES-15 | Visual Touch-Based Column Selection & Views | Open | Direct visual pill column toggling, LLM-assisted prompt chip insertion, and Pixeltable declarative filtered view projections. |
@@ -249,5 +269,6 @@ flowchart TD
 | RES-21 | Fast Markdown Sidecar Architecture & Media Safety | Complete | Path-based image references (no binary media uploads to LLMs), strict Markdown system prompt enforcement preventing 4K-token HTML/SVG generation, and automatic record context fallback. |
 | RES-22 | Live Debug & LLM Activity Console Drawer | Backlog | Bottom collapsible accordion / slide-up drawer streaming real-time pipeline activity, LLM prompt/response payloads, network calls, and rotating file logs with volume controls. |
 | RES-23 | Multimodal Vision Guard & LLM Telemetry Engine | Complete | Eliminated 15s latency bottleneck by gating image uploads behind explicit enable_vision toggle (<1s text speedup); extracted nanosecond timings and tokens/sec telemetry from Ollama and Gemini. |
+| RES-24 | Two-Stage LLM Row Filtering on Export | Open | Backlog item: Evaluate filtering rows during export via prompt vs. two-stage filtering where a lightweight LLM receives compact row metadata, returns selected row/file IDs, and joins natively with full row data in Pixeltable for single-record deep LLM synthesis. Maintains native Pixeltable compute efficiency. |
 
 

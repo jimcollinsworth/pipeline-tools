@@ -12,7 +12,8 @@ Many modern "all-in-one" RAG frameworks, monolithic chat apps, and autonomous ag
 - **Take Any Directory**: Point the scanner at any local folder containing an ad-hoc mix of text documents, PDFs, photos, audio memos, or video clips.
 - **Inspect & Control**: Inspect every file in the Media Drawer, test extraction and synthesis prompts across 1–2 sample rows first, and verify what the LLM actually sees before committing to batch operations.
 - **Generate Reusable Markdown Sidecars**: Execute prompts per row to generate structured Markdown sidecar files (`_meta.md`) with clean YAML frontmatter and standard media links.
-- **Feed Downstream Engines**: Rather than locking your data inside a proprietary vector store, the enriched Markdown sidecars become portable assets ready to power external RAG pipelines, WikiLLMs, Obsidian knowledge vaults, or autonomous coding/research agents.
+- **Compounding LLM Wiki vs. Ephemeral RAG**: Instead of rediscovering facts from scratch on every query, the workbench maintains an evolving Markdown wiki (`{domain}_{table}_context.md`) per domain and table. Discoveries, canonical entities, aliases, and source citations compound over time.
+- **Feed Downstream Engines**: Rather than locking your data inside a proprietary vector store, the enriched Markdown sidecars and compiled wikis become portable assets ready to power external RAG pipelines, Obsidian knowledge vaults, or autonomous coding/research agents.
 - **Powered by Pixeltable**: Declarative computed columns, zero-memory database streaming, versioned table lineage, and automatic incremental caching make Pixeltable the ideal multimodal foundation for this workflow.
 
 ---
@@ -181,8 +182,10 @@ Open your browser at `http://127.0.0.1:7860`.
   - GLiNER zero-shot Named Entity Recognition (`urchade/gliner`) for fast, hallucination-free entity extraction.
   - Hugging Face model hub & Ultralytics YOLO vision classification engines (e.g. WikiArt 27-movement classifier).
   - Mobile / tablet responsive UI design (`@media (max-width: 768px)`).
-- [ ] **Phase 5: Dynamic Ingestion Context, Skills Integration & Document Reader**
-  - Stateful dynamic context accumulation across multi-row ingestion (`domain-table-ingestion-context.md`).
+- [ ] **Phase 5: Dynamic Ingestion Context, Compounding LLM Wiki & Document Reader**
+  - Compounding LLM Wiki per domain/table (`{domain}_{table}_context.md`) maintaining canonical entities, aliases, and source citations (`[doc](filepath)`).
+  - Dynamic cross-row context accumulation across multi-row ingestion, enhancement, and export.
+  - EBA cross-reference index generation (`index.md`) for organizational dossiers.
   - Project skills integration with in-prompt `/` slash command discovery from `.agents/skills/`.
   - Single-record rich Markdown Document Reader with collapsible sections, theme selectors, and embedded Mermaid diagrams.
   - Touch-friendly visual column pill toggles and LLM-assisted prompt chip insertion.

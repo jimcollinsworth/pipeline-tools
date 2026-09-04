@@ -128,13 +128,64 @@ def render_tables_tab(tab=None):
 
         table_stats_markdown = gr.Markdown("#### Table Stats: *Click 'Load / Refresh Table' or select a table to view data.*")
 
-        data_view_table = gr.Dataframe(
-            headers=["Column 1", "Column 2", "Column 3"],
-            datatype=["str", "str", "str"],
-            value=[],
-            interactive=False,
-            wrap=True
-        )
+        # Client-side state for column filtering and zero-query row navigation
+        full_table_data_state = gr.State([])
+        full_table_cols_state = gr.State([])
+        current_row_idx_state = gr.State(0)
+
+        # View Mode & Column Visibility Controls
+        with gr.Row():
+            with gr.Column(scale=5):
+                view_mode_radio = gr.Radio(
+                    choices=["📊 Table Grid", "📄 Single Document"],
+                    value="📊 Table Grid",
+                    label="Display Mode",
+                    interactive=True
+                )
+            with gr.Column(scale=3):
+                with gr.Row():
+                    select_all_cols_btn = gr.Button("✓ Select All", size="sm", variant="secondary")
+                    deselect_all_cols_btn = gr.Button("✕ Deselect All", size="sm", variant="secondary")
+
+        with gr.Row():
+            column_selector = gr.CheckboxGroup(
+                choices=[],
+                value=[],
+                label="Visible Columns (Click to Toggle in Table & Document)",
+                interactive=True
+            )
+
+        # 1. Multi-Row Table Grid View
+        with gr.Column(visible=True) as table_grid_container:
+            data_view_table = gr.Dataframe(
+                headers=["Column 1", "Column 2", "Column 3"],
+                datatype=["str", "str", "str"],
+                value=[],
+                interactive=False,
+                wrap=True
+            )
+
+        # 2. Single Document Reader View (Option 1)
+        with gr.Column(visible=False, elem_classes=["status-panel"]) as doc_view_container:
+            with gr.Row():
+                doc_prev_btn = gr.Button("◀ Previous Record", size="sm", scale=2)
+                doc_counter_text = gr.Markdown("### Record 0 of 0", scale=4)
+                doc_next_btn = gr.Button("Next Record ▶", size="sm", scale=2)
+
+            with gr.Row():
+                doc_image = gr.Image(label="🖼️ Media Image", visible=False, scale=2, interactive=False)
+                doc_audio = gr.Audio(label="🎵 Media Audio", visible=False, scale=2, interactive=False)
+                doc_video = gr.Video(label="🎬 Media Video", visible=False, scale=2, interactive=False)
+
+            doc_title = gr.Markdown("### 📄 Document Title")
+            doc_highlighted = gr.HighlightedText(
+                label="🏷️ Extracted Intelligence & Highlighted Entities",
+                visible=False,
+                combine_adjacent=True,
+                show_legend=True
+            )
+            doc_content = gr.Textbox(label="📄 Uncut Document Text", lines=8, visible=False, interactive=False)
+            doc_attributes = gr.Markdown("#### Active Columns & Attributes\n*(Select columns above to inspect)*")
 
         # Interactive Media Inspector Drawer (Opens when row is clicked)
         with gr.Group(visible=False, elem_classes=["status-panel"]) as media_inspector_group:
@@ -149,6 +200,12 @@ def render_tables_tab(tab=None):
 
                 with gr.Column(scale=3):
                     inspector_details = gr.Markdown("*(Select a row in the table above to inspect full media & metadata)*")
+                    inspector_highlighted = gr.HighlightedText(
+                        label="🏷️ Extracted Intelligence & Highlighted Entities",
+                        visible=False,
+                        combine_adjacent=True,
+                        show_legend=True
+                    )
                     inspector_content = gr.Textbox(label="📄 Extracted Content / Text", lines=6, visible=False, interactive=False)
 
         gr.Markdown("---")
@@ -239,10 +296,88 @@ def render_tables_tab(tab=None):
                 with gr.Column(scale=1):
                     download_file_component = gr.File(label="📥 Download Exported Markdown File", interactive=False)
 
+    # Helper: Render Document View from in-memory row data
+    def render_doc_view(row_idx, all_data, all_cols, active_cols):
+        """Render single document view fields from in-memory row data without re-querying database."""
+        if not all_data or not all_cols:
+            return (
+                "### 📄 No Record Available",
+                "### Record 0 of 0",
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                "*No data loaded.*"
+            )
+        safe_idx = max(0, min(len(all_data) - 1, int(row_idx or 0)))
+        row_values = all_data[safe_idx]
+        row_dict = dict(zip(all_cols, row_values))
+
+        doc = TablesController.format_document_view(
+            row_dict=row_dict,
+            active_columns=active_cols if active_cols else all_cols,
+            row_index=safe_idx,
+            total_rows=len(all_data)
+        )
+
+        has_img = doc["modality"] == "images" and bool(doc["media_path"])
+        has_audio = doc["modality"] == "audio" and bool(doc["media_path"])
+        has_video = doc["modality"] == "video" and bool(doc["media_path"])
+        has_hl = bool(doc["highlighted_spans"])
+        raw_content = str(row_dict.get("content") or "")
+
+        return (
+            f"### 📄 {doc['title_text']}",
+            f"### {doc['counter_text']}",
+            gr.update(value=doc["media_path"], visible=has_img),
+            gr.update(value=doc["media_path"], visible=has_audio),
+            gr.update(value=doc["media_path"], visible=has_video),
+            gr.update(value=doc["highlighted_spans"], visible=has_hl),
+            gr.update(value=raw_content, visible=not has_hl and bool(raw_content)),
+            doc["attributes_md"]
+        )
+
     # Event handlers
     def on_load_table(domain, table_name, limit, is_lightweight=True):
         res = TablesController.handle_load_table(domain, table_name, limit=limit, is_lightweight=is_lightweight)
-        return res["stats_text"], gr.update(headers=res["columns"], datatype=res["datatypes"], value=res["data"]), res["placeholders_text"]
+        data = res.get("data", [])
+        cols = res.get("columns", [])
+        doc_renders = render_doc_view(0, data, cols, cols)
+
+        return (
+            res["stats_text"],
+            gr.update(headers=cols, datatype=res["datatypes"], value=data),
+            res["placeholders_text"],
+            gr.update(choices=cols, value=cols),
+            data,
+            cols,
+            0,
+            *doc_renders
+        )
+
+    def on_view_mode_change(mode, row_idx, data, cols, active_cols):
+        is_table = (mode == "📊 Table Grid")
+        doc_renders = render_doc_view(row_idx, data, cols, active_cols)
+        return (
+            gr.update(visible=is_table),
+            gr.update(visible=not is_table),
+            *doc_renders
+        )
+
+    def on_column_selector_change(selected_cols, data, cols, row_idx):
+        filtered_data, filtered_cols = TablesController.filter_dataframe_columns(data, cols, selected_cols)
+        doc_renders = render_doc_view(row_idx, data, cols, selected_cols)
+        return (
+            gr.update(headers=filtered_cols, value=filtered_data),
+            doc_renders[-1]
+        )
+
+    def on_nav_doc(delta, current_idx, data, cols, active_cols):
+        total = len(data) if data else 0
+        new_idx = TablesController.navigate_row(int(current_idx or 0), delta, total)
+        doc_renders = render_doc_view(new_idx, data, cols, active_cols)
+        return (new_idx, *doc_renders)
 
     def on_domain_change(domain):
         """Update table dropdown choices when domain selection changes."""
@@ -262,21 +397,37 @@ def render_tables_tab(tab=None):
         strat = "🗂️ Per-Row Sidecars (_meta.md)" if preset.get("mode") == "sidecar" else "📄 Single Document Synthesis"
         return preset["system_prompt"], preset["prompt_template"], strat
 
-    def on_select_table_row(evt: gr.SelectData, current_df, domain, table_name):
-        """Populate and display the Media Inspector drawer when a table row is clicked without re-querying the database."""
+    def on_select_table_row(evt: gr.SelectData, current_df, domain, table_name, all_data, all_cols, active_cols):
+        """Populate Inspector drawer and sync active row index for Document View."""
         if not evt or evt.index is None:
-            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            return (
+                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+                0,
+                "### 📄 No Record Selected",
+                "### Record 0 of 0",
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                "*No data loaded.*"
+            )
 
         row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else 0
         insp = TablesController.handle_row_inspection(row_idx, current_df, domain, table_name)
-        return (
+        show_hl = insp.get("has_highlighted", False)
+        inspector_updates = (
             gr.update(visible=True),
             gr.update(value=insp["image_path"], visible=insp["has_image"]),
             gr.update(value=insp["audio_path"], visible=insp["has_audio"]),
             gr.update(value=insp["video_path"], visible=insp["has_video"]),
             insp["details_markdown"],
-            gr.update(value=insp["content_text"], visible=insp["has_content"])
+            gr.update(value=insp["content_text"], visible=insp["has_content"] and not show_hl),
+            gr.update(value=insp.get("highlighted_spans", []), visible=show_hl)
         )
+
+        doc_renders = render_doc_view(row_idx, all_data, all_cols, active_cols)
+        return (*inspector_updates, row_idx, *doc_renders)
 
     def on_generate_export(
         domain, table_name, provider, model,
@@ -375,32 +526,100 @@ def render_tables_tab(tab=None):
         outputs=[table_dropdown]
     )
 
+    table_load_outputs = [
+        table_stats_markdown, data_view_table, available_columns_info,
+        column_selector, full_table_data_state, full_table_cols_state, current_row_idx_state,
+        doc_title, doc_counter_text, doc_image, doc_audio, doc_video,
+        doc_highlighted, doc_content, doc_attributes
+    ]
+
     # Rule 2: Child dropdown (table_dropdown) sequentially loads the table data once.
     table_dropdown.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+        outputs=table_load_outputs
     )
 
     # Rule 3: Parameter controls (limit slider & lightweight toggle) refresh the view on change.
     limit_slider.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+        outputs=table_load_outputs
     )
 
     lightweight_toggle.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+        outputs=table_load_outputs
     )
 
-    # Rule 4: Zero-query row inspection. Passing data_view_table directly allows extracting
+    # Rule 4: View Mode Toggle (Table Grid vs. Single Document)
+    view_mode_radio.change(
+        fn=on_view_mode_change,
+        inputs=[view_mode_radio, current_row_idx_state, full_table_data_state, full_table_cols_state, column_selector],
+        outputs=[
+            table_grid_container, doc_view_container,
+            doc_title, doc_counter_text, doc_image, doc_audio, doc_video,
+            doc_highlighted, doc_content, doc_attributes
+        ]
+    )
+
+    # Rule 5: Column Visibility Pill Bar Filtering
+    column_selector.change(
+        fn=on_column_selector_change,
+        inputs=[column_selector, full_table_data_state, full_table_cols_state, current_row_idx_state],
+        outputs=[data_view_table, doc_attributes]
+    )
+
+    select_all_cols_btn.click(
+        fn=lambda cols: gr.update(value=cols),
+        inputs=[full_table_cols_state],
+        outputs=[column_selector]
+    )
+
+    deselect_all_cols_btn.click(
+        fn=lambda: gr.update(value=[]),
+        outputs=[column_selector]
+    )
+
+    # Rule 6: Single Document Navigation (◀ Previous / Next ▶)
+    doc_prev_btn.click(
+        fn=lambda c, d, cols, a: on_nav_doc(-1, c, d, cols, a),
+        inputs=[current_row_idx_state, full_table_data_state, full_table_cols_state, column_selector],
+        outputs=[
+            current_row_idx_state,
+            doc_title, doc_counter_text, doc_image, doc_audio, doc_video,
+            doc_highlighted, doc_content, doc_attributes
+        ]
+    )
+
+    doc_next_btn.click(
+        fn=lambda c, d, cols, a: on_nav_doc(1, c, d, cols, a),
+        inputs=[current_row_idx_state, full_table_data_state, full_table_cols_state, column_selector],
+        outputs=[
+            current_row_idx_state,
+            doc_title, doc_counter_text, doc_image, doc_audio, doc_video,
+            doc_highlighted, doc_content, doc_attributes
+        ]
+    )
+
+    # Rule 7: Zero-query row inspection. Passing data_view_table directly allows extracting
     # the selected row in 0ms from client memory with zero database queries.
     data_view_table.select(
         fn=on_select_table_row,
-        inputs=[data_view_table, domain_dropdown, table_dropdown],
-        outputs=[media_inspector_group, inspector_image, inspector_audio, inspector_video, inspector_details, inspector_content]
+        inputs=[data_view_table, domain_dropdown, table_dropdown, full_table_data_state, full_table_cols_state, column_selector],
+        outputs=[
+            media_inspector_group,
+            inspector_image,
+            inspector_audio,
+            inspector_video,
+            inspector_details,
+            inspector_content,
+            inspector_highlighted,
+            current_row_idx_state,
+            doc_title, doc_counter_text, doc_image, doc_audio, doc_video,
+            doc_highlighted, doc_content, doc_attributes
+        ]
     )
 
     close_inspector_btn.click(

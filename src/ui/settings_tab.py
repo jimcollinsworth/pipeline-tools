@@ -88,15 +88,15 @@ def render_settings_tab(tab=None):
                     [
                         m.get("name", ""),
                         m.get("modalities", "Text, Vision"),
-                        m.get("input_window", "1M tokens"),
-                        m.get("output_limit", "8K tokens"),
+                        m.get("input_window", "1,048,576"),
+                        m.get("output_limit", "8,192"),
                         m.get("cost_tier", "Standard"),
                         m.get("description", "")
                     ]
                     for m in models_list
                 ]
                 gemini_models_table = gr.Dataframe(
-                    headers=["Model Identifier", "Modalities", "Context Window", "Max Output", "Cost Tier", "Capabilities & Description"],
+                    headers=["Model Identifier", "Modalities", "Context Window (t)", "Max Output (t)", "Cost Tier", "Capabilities & Description"],
                     datatype=["str", "str", "str", "str", "str", "str"],
                     value=gemini_models_data,
                     interactive=False,
@@ -142,8 +142,8 @@ def render_settings_tab(tab=None):
                 [
                     m.get("name", ""),
                     m.get("modalities", "Text, Vision"),
-                    m.get("input_window", "1M tokens"),
-                    m.get("output_limit", "8K tokens"),
+                    m.get("input_window", "1,048,576"),
+                    m.get("output_limit", "8,192"),
                     m.get("cost_tier", "Standard"),
                     m.get("description", "")
                 ]

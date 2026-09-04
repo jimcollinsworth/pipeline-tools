@@ -91,8 +91,8 @@ class GeminiClient:
                         input_limit = getattr(m, "input_token_limit", None)
                         output_limit = getattr(m, "output_token_limit", None)
                         
-                        input_str = f"{input_limit:,} tokens" if input_limit else "1,048,576 tokens"
-                        output_str = f"{output_limit:,} tokens" if output_limit else "8,192 tokens"
+                        input_str = f"{input_limit:,}" if input_limit else "1,048,576"
+                        output_str = f"{output_limit:,}" if output_limit else "8,192"
                         
                         # Inferred modalities
                         modalities = "Text, Vision, PDF, Audio, Video" if "flash" in name_lower or "pro" in name_lower else "Text, Code"
@@ -101,11 +101,11 @@ class GeminiClient:
                         if "gemma" in name_lower:
                             cost_tier = "Open Weights (Free)"
                         elif "flash-lite" in name_lower:
-                            cost_tier = "Ultra Low ($0.038 / 1M tokens)"
+                            cost_tier = "Ultra Low ($0.038 / 1M)"
                         elif "flash" in name_lower:
-                            cost_tier = "Standard ($0.075 / 1M tokens)"
+                            cost_tier = "Standard ($0.075 / 1M)"
                         elif "pro" in name_lower:
-                            cost_tier = "Advanced ($1.25 / 1M tokens)"
+                            cost_tier = "Advanced ($1.25 / 1M)"
                         else:
                             cost_tier = "Pay-as-you-go"
 
@@ -133,53 +133,53 @@ class GeminiClient:
                 "name": "gemini-3.7-flash",
                 "display_name": "Gemini 3.7 Flash",
                 "modalities": "Text, Vision, PDF, Audio, Video",
-                "input_window": "1,048,576 tokens",
-                "output_limit": "8,192 tokens",
-                "cost_tier": "Standard ($0.075 / 1M tokens)",
+                "input_window": "1,048,576",
+                "output_limit": "8,192",
+                "cost_tier": "Standard ($0.075 / 1M)",
                 "description": "Next-gen hybrid reasoning & coding speed"
             },
             {
                 "name": "gemini-3.6-flash",
                 "display_name": "Gemini 3.6 Flash",
                 "modalities": "Text, Vision, PDF, Audio, Video",
-                "input_window": "1,048,576 tokens",
-                "output_limit": "8,192 tokens",
-                "cost_tier": "Standard ($0.075 / 1M tokens)",
+                "input_window": "1,048,576",
+                "output_limit": "8,192",
+                "cost_tier": "Standard ($0.075 / 1M)",
                 "description": "Fast, balanced, state-of-the-art general model (Recommended)"
             },
             {
                 "name": "gemini-3.5-flash-lite",
                 "display_name": "Gemini 3.5 Flash-Lite",
                 "modalities": "Text, Vision, PDF",
-                "input_window": "1,048,576 tokens",
-                "output_limit": "8,192 tokens",
-                "cost_tier": "Ultra Low ($0.038 / 1M tokens)",
+                "input_window": "1,048,576",
+                "output_limit": "8,192",
+                "cost_tier": "Ultra Low ($0.038 / 1M)",
                 "description": "Lowest latency & cost for high-throughput batch execution"
             },
             {
                 "name": "gemini-3.1-pro-preview",
                 "display_name": "Gemini 3.1 Pro",
                 "modalities": "Text, Vision, PDF, Audio, Video",
-                "input_window": "2,097,152 tokens",
-                "output_limit": "8,192 tokens",
-                "cost_tier": "Advanced ($1.25 / 1M tokens)",
+                "input_window": "2,097,152",
+                "output_limit": "8,192",
+                "cost_tier": "Advanced ($1.25 / 1M)",
                 "description": "Advanced reasoning, complex analysis, and coding"
             },
             {
                 "name": "gemini-3.1-flash-lite",
                 "display_name": "Gemini 3.1 Flash-Lite",
                 "modalities": "Text, Vision, PDF",
-                "input_window": "1,048,576 tokens",
-                "output_limit": "8,192 tokens",
-                "cost_tier": "Ultra Low ($0.038 / 1M tokens)",
+                "input_window": "1,048,576",
+                "output_limit": "8,192",
+                "cost_tier": "Ultra Low ($0.038 / 1M)",
                 "description": "Cost-efficient, ultra-fast performance for lightweight tasks"
             },
             {
                 "name": "gemma-4-31b-it",
                 "display_name": "Gemma 4 31B IT",
                 "modalities": "Text, Code",
-                "input_window": "131,072 tokens",
-                "output_limit": "8,192 tokens",
+                "input_window": "131,072",
+                "output_limit": "8,192",
                 "cost_tier": "Open Weights (Free)",
                 "description": "Gemma 4 Dense 31B instruction-tuned open weights"
             },
@@ -187,8 +187,8 @@ class GeminiClient:
                 "name": "gemma-4-26b-a4b-it",
                 "display_name": "Gemma 4 26B A4B",
                 "modalities": "Text, Code",
-                "input_window": "131,072 tokens",
-                "output_limit": "8,192 tokens",
+                "input_window": "131,072",
+                "output_limit": "8,192",
                 "cost_tier": "Open Weights (Free)",
                 "description": "Gemma 4 MoE 26B total / 4B active parameters"
             },

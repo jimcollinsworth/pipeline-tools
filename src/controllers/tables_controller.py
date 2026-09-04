@@ -7,6 +7,8 @@ and safe 2-step table & domain deletion workflows.
 """
 
 import os
+import re
+import json
 from typing import List, Dict, Any, Optional, Callable, Tuple
 from src.core.config import get_settings, update_last_entry
 from src.core.llm_service import LLMService
@@ -86,8 +88,140 @@ class TablesController:
         }
 
     @staticmethod
+    def build_highlighted_spans(text: str, entities: List[Tuple[str, str]]) -> List[Tuple[str, Optional[str]]]:
+        """
+        Given raw text and a list of (entity_text, category_label) tuples,
+        computes non-overlapping matches and returns Gradio HighlightedText spans:
+        [(span_text, category_or_None), ...]
+        """
+        if not text:
+            return []
+        if not entities:
+            return [(text, None)]
+
+        valid_targets = []
+        seen = set()
+        for ent_text, label in entities:
+            if not ent_text or not isinstance(ent_text, str):
+                continue
+            ent_clean = ent_text.strip()
+            if len(ent_clean) < 2 or ent_clean.lower() in seen:
+                continue
+            seen.add(ent_clean.lower())
+            valid_targets.append((ent_clean, label or "Entity"))
+
+        if not valid_targets:
+            return [(text, None)]
+
+        valid_targets.sort(key=lambda x: len(x[0]), reverse=True)
+
+        intervals = []  # (start, end, label)
+        for ent_text, label in valid_targets:
+            pattern = re.escape(ent_text)
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                s, e = match.start(), match.end()
+                overlap = any(not (e <= existing_s or s >= existing_e) for existing_s, existing_e, _ in intervals)
+                if not overlap:
+                    intervals.append((s, e, label))
+
+        if not intervals:
+            return [(text, None)]
+
+        intervals.sort(key=lambda x: x[0])
+
+        spans: List[Tuple[str, Optional[str]]] = []
+        curr_idx = 0
+        for s, e, label in intervals:
+            if s > curr_idx:
+                spans.append((text[curr_idx:s], None))
+            spans.append((text[s:e], label))
+            curr_idx = e
+
+        if curr_idx < len(text):
+            spans.append((text[curr_idx:], None))
+
+        return spans
+
+    @staticmethod
+    def extract_entities_from_row_dict(row_dict: Dict[str, Any]) -> List[Tuple[str, str]]:
+        """
+        Inspects row dictionary to discover extracted entity targets and their category labels.
+        Supports lists, JSON strings, dicts, and comma-separated entity column values.
+        """
+        entities: List[Tuple[str, str]] = []
+
+        LABEL_MAPPING = {
+            "people": "Person",
+            "person": "Person",
+            "c_people": "Person",
+            "c_person": "Person",
+            "organizations": "Organization",
+            "organization": "Organization",
+            "c_organizations": "Organization",
+            "c_organization": "Organization",
+            "orgs": "Organization",
+            "c_orgs": "Organization",
+            "locations": "Location",
+            "location": "Location",
+            "c_locations": "Location",
+            "c_location": "Location",
+            "places": "Location",
+            "c_places": "Location",
+            "dates": "Date",
+            "c_dates": "Date",
+            "action_items": "Action Item",
+            "c_action_items": "Action Item",
+            "key_entities": "Entity",
+            "c_key_entities": "Entity",
+            "entities": "Entity",
+            "c_entities": "Entity",
+        }
+
+        def _add_item(item: Any, default_label: str):
+            if not item:
+                return
+            if isinstance(item, str):
+                for part in item.split(","):
+                    part_clean = part.strip().strip('"').strip("'")
+                    if len(part_clean) >= 2:
+                        entities.append((part_clean, default_label))
+            elif isinstance(item, (list, tuple)):
+                for sub in item:
+                    _add_item(sub, default_label)
+            elif isinstance(item, dict):
+                name = item.get("name") or item.get("text") or item.get("entity")
+                cat = item.get("type") or item.get("label") or item.get("category") or default_label
+                if name and isinstance(name, str) and len(name.strip()) >= 2:
+                    entities.append((name.strip(), str(cat)))
+
+        core_cols = {"id", "file_name", "file_path", "rel_path", "modality", "file_type", "file_size", "content", "media_preview", "doc", "image", "audio", "video", "metadata", "created_at"}
+
+        for col_name, val in row_dict.items():
+            if col_name in core_cols or val is None:
+                continue
+
+            lower_col = col_name.lower().strip()
+            default_label = LABEL_MAPPING.get(lower_col, lower_col.replace("c_", "").replace("_", " ").title())
+
+            if isinstance(val, str) and (val.startswith("{") or val.startswith("[")):
+                try:
+                    parsed = json.loads(val)
+                    if isinstance(parsed, dict):
+                        for k, sub_val in parsed.items():
+                            sub_lbl = LABEL_MAPPING.get(k.lower(), k.replace("_", " ").title())
+                            _add_item(sub_val, sub_lbl)
+                    elif isinstance(parsed, list):
+                        _add_item(parsed, default_label)
+                except Exception:
+                    _add_item(val, default_label)
+            else:
+                _add_item(val, default_label)
+
+        return entities
+
+    @staticmethod
     def handle_row_inspection(row_idx: int, current_df: Any, domain: str, table_name: str) -> Dict[str, Any]:
-        """Format row details, media file paths, and extracted text for the Media Inspector drawer."""
+        """Format row details, media file paths, extracted text, and highlighted entities for the Media Inspector drawer."""
         row_dict = {}
         if hasattr(current_df, "iloc") and 0 <= row_idx < len(current_df):
             row_dict = current_df.iloc[row_idx].to_dict()
@@ -134,6 +268,10 @@ class TablesController:
         video_val = file_path if (modality == "video" or file_type in [".mp4", ".webm", ".mov", ".avi", ".mkv"]) and file_exists else None
         has_content = bool(content and content.strip())
 
+        extracted_entities = TablesController.extract_entities_from_row_dict(row_dict)
+        highlighted_spans = TablesController.build_highlighted_spans(content, extracted_entities) if (has_content and extracted_entities) else []
+        has_highlighted = bool(highlighted_spans and any(lbl is not None for _, lbl in highlighted_spans))
+
         return {
             "image_path": img_val,
             "has_image": bool(img_val),
@@ -143,7 +281,9 @@ class TablesController:
             "has_video": bool(video_val),
             "details_markdown": details_md,
             "content_text": content if has_content else "",
-            "has_content": has_content
+            "has_content": has_content,
+            "highlighted_spans": highlighted_spans,
+            "has_highlighted": has_highlighted
         }
 
     @staticmethod
@@ -293,3 +433,74 @@ class TablesController:
                 "status": "error",
                 "message": f"### ❌ Export Failed\n```\n{err_msg}\n```"
             }
+
+    @staticmethod
+    def filter_dataframe_columns(data: list, columns: list, selected_columns: list) -> Tuple[list, list]:
+        """Project a 2D dataset to only include columns specified in selected_columns."""
+        if not selected_columns:
+            return data, columns
+
+        active_indices = [i for i, col in enumerate(columns) if col in selected_columns]
+        if not active_indices:
+            return data, columns
+
+        filtered_columns = [columns[i] for i in active_indices]
+        filtered_data = [
+            [row[i] for i in active_indices if i < len(row)]
+            for row in data
+        ]
+        return filtered_data, filtered_columns
+
+    @staticmethod
+    def navigate_row(current_index: int, delta: int, total_rows: int) -> int:
+        """Clamp row navigation index between 0 and total_rows - 1."""
+        if total_rows <= 0:
+            return 0
+        new_idx = current_index + delta
+        return max(0, min(total_rows - 1, new_idx))
+
+    @classmethod
+    def format_document_view(cls, row_dict: Dict[str, Any], active_columns: Optional[list] = None, row_index: int = 0, total_rows: int = 1) -> Dict[str, Any]:
+        """Format a single table row into a structured document view representation."""
+        if not row_dict:
+            return {
+                "counter_text": "Record 0 of 0",
+                "title_text": "No Record Selected",
+                "modality": "unknown",
+                "media_path": "",
+                "highlighted_spans": [],
+                "attributes_md": "*No attributes available.*"
+            }
+
+        safe_index = max(0, row_index)
+        safe_total = max(1, total_rows)
+        counter_text = f"Record {safe_index + 1} of {safe_total}"
+
+        title_text = str(row_dict.get("file_name") or row_dict.get("id") or f"Record #{safe_index + 1}")
+        modality = str(row_dict.get("modality") or "unknown").lower()
+        media_path = str(row_dict.get("file_path") or row_dict.get("path") or "")
+
+        content_text = str(row_dict.get("content") or "")
+        entities_dict = cls.extract_entities_from_row_dict(row_dict)
+        highlighted_spans = cls.build_highlighted_spans(content_text, entities_dict) if content_text else []
+
+        cols_to_show = active_columns if active_columns else list(row_dict.keys())
+        excluded_keys = {"content", "thumbnail"}
+
+        attr_lines = []
+        for k in cols_to_show:
+            if k in row_dict and k not in excluded_keys:
+                val = row_dict[k]
+                if val is not None and str(val).strip():
+                    attr_lines.append(f"- **{k}**: {val}")
+
+        attributes_md = "\n".join(attr_lines) if attr_lines else "*No additional attributes selected.*"
+
+        return {
+            "counter_text": counter_text,
+            "title_text": title_text,
+            "modality": modality,
+            "media_path": media_path,
+            "highlighted_spans": highlighted_spans,
+            "attributes_md": attributes_md
+        }

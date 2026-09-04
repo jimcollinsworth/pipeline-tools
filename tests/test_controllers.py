@@ -124,6 +124,46 @@ class TestControllers(unittest.TestCase):
         self.assertIn("llm_summary", insp["details_markdown"])
         self.assertTrue(insp["has_content"])
         self.assertEqual(insp["content_text"], "A beautiful scenic mountain landscape.")
+        self.assertFalse(insp["has_highlighted"])
+
+    def test_tables_controller_entity_highlighting(self):
+        """[Controller] Verify entity extraction and substring span highlighting for Gradio HighlightedText."""
+        text = "Minutes of Muroc Building Corporation held in Chicago. Chairman Wm. M. Dewey presiding with Al Wagner."
+        entities = [
+            ("Muroc Building Corporation", "Organization"),
+            ("Chicago", "Location"),
+            ("Wm. M. Dewey", "Person"),
+            ("Al Wagner", "Person")
+        ]
+
+        spans = TablesController.build_highlighted_spans(text, entities)
+        self.assertIsInstance(spans, list)
+
+        # Verify matched tokens have labels
+        org_spans = [s for s, lbl in spans if lbl == "Organization"]
+        self.assertIn("Muroc Building Corporation", org_spans)
+
+        loc_spans = [s for s, lbl in spans if lbl == "Location"]
+        self.assertIn("Chicago", loc_spans)
+
+        person_spans = [s for s, lbl in spans if lbl == "Person"]
+        self.assertIn("Wm. M. Dewey", person_spans)
+        self.assertIn("Al Wagner", person_spans)
+
+        # Test with row_dict containing entity columns
+        row_dict = {
+            "file_name": "minutes_1949.pdf",
+            "content": text,
+            "people": "Wm. M. Dewey, Al Wagner",
+            "organizations": "Muroc Building Corporation",
+            "locations": "Chicago"
+        }
+        extracted = TablesController.extract_entities_from_row_dict(row_dict)
+        self.assertTrue(len(extracted) >= 4)
+
+        insp = TablesController.handle_row_inspection(0, [row_dict], self.TEST_DOMAIN, "test")
+        self.assertTrue(insp["has_highlighted"])
+        self.assertTrue(len(insp["highlighted_spans"]) > 0)
 
     def test_tables_controller_delete_table_and_domain(self):
         """[Controller] Verify TablesController executes safe table and domain deletion with updated choices."""

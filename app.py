@@ -9,6 +9,7 @@ from src.ui.settings_tab import render_settings_tab
 from src.ui.ingest_tab import render_ingest_tab
 from src.ui.playground_tab import render_playground_tab
 from src.ui.tables_tab import render_tables_tab
+from src.ui.context_tab import render_context_tab
 
 # Gradio 6.0: theme and css must be passed to launch(), not Blocks()
 clean_theme = gr.themes.Default(
@@ -294,19 +295,23 @@ def create_app():
         
         with gr.Tabs():
             with gr.Tab("Ingestion & Scanner") as ingest_tab:
-                print("  [1/4] Initializing Ingestion & Scanner tab...", flush=True)
+                print("  [1/5] Initializing Ingestion & Scanner tab...", flush=True)
                 render_ingest_tab(tab=ingest_tab)
                 
             with gr.Tab("Data Enhancement") as playground_tab:
-                print("  [2/4] Initializing Data Enhancement tab (discovering models & tables)...", flush=True)
+                print("  [2/5] Initializing Data Enhancement tab (discovering models & tables)...", flush=True)
                 render_playground_tab(tab=playground_tab)
+
+            with gr.Tab("Context & Memory") as context_tab:
+                print("  [3/5] Initializing Context & Memory tab...", flush=True)
+                render_context_tab(tab=context_tab)
                 
             with gr.Tab("View & Export") as tables_tab:
-                print("  [3/4] Initializing View & Export tab...", flush=True)
+                print("  [4/5] Initializing View & Export tab...", flush=True)
                 render_tables_tab(tab=tables_tab)
                 
             with gr.Tab("Settings & Models") as settings_tab:
-                print("  [4/4] Initializing Settings & Models tab...", flush=True)
+                print("  [5/5] Initializing Settings & Models tab...", flush=True)
                 render_settings_tab(tab=settings_tab)
 
     print("  ✅ All workbench tabs and database connections initialized!", flush=True)

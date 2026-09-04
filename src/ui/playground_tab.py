@@ -75,159 +75,170 @@ def render_playground_tab(tab=None):
             </div>
             """)
         
+        # 1. Target Data & LLM Engine (Compact horizontal selector row)
         with gr.Row():
-            with gr.Column(scale=1):
-                gr.Markdown("#### 1. Target Data & LLM Engine")
-                with gr.Row():
-                    domain_dropdown = gr.Dropdown(
-                        label="Domain / Directory",
-                        choices=domains,
-                        value=initial_domain,
-                        allow_custom_value=True,
-                        scale=3
-                    )
-                    table_dropdown = gr.Dropdown(
-                        label="Table Name",
-                        choices=tables,
-                        value=initial_table,
-                        allow_custom_value=True,
-                        scale=3
-                    )
-                
-                with gr.Row():
-                    provider_dropdown = gr.Dropdown(
-                        label="LLM Provider",
-                        choices=["Ollama", "Gemini"],
-                        value=initial_provider,
-                        scale=2
-                    )
-                    model_dropdown = gr.Dropdown(
-                        label="Model",
-                        choices=initial_models,
-                        value=initial_model,
-                        allow_custom_value=True,
-                        scale=3
-                    )
+            domain_dropdown = gr.Dropdown(
+                label="Domain / Directory",
+                choices=domains,
+                value=initial_domain,
+                allow_custom_value=True,
+                scale=3
+            )
+            table_dropdown = gr.Dropdown(
+                label="Table Name",
+                choices=tables,
+                value=initial_table,
+                allow_custom_value=True,
+                scale=3
+            )
+            provider_dropdown = gr.Dropdown(
+                label="LLM Provider",
+                choices=["Ollama", "Gemini"],
+                value=initial_provider,
+                scale=2
+            )
+            model_dropdown = gr.Dropdown(
+                label="Model",
+                choices=initial_models,
+                value=initial_model,
+                allow_custom_value=True,
+                scale=3
+            )
+            preview_mode_toggle = gr.Checkbox(label="⚡ Lightweight Preview", value=True, scale=1)
 
-                gr.Markdown("#### 2. System & Prompt Configuration")
-                
-                with gr.Accordion("💡 Prompt Guide & Example Presets (Click to Apply)", open=False):
-                    gr.Markdown(
-                        """
-                        **How Prompts Work with Pixeltable**:
-                        * **System Prompt**: Defines the AI persona, tone, and behavioral constraints across all rows.
-                        * **User Prompt**: Supplies row variables (`{file_name}`, `{content}`, `{rel_path}`, `{modality}`).
-                        * **⚡ Auto-Split Mode**: Any top-level keys in the JSON response automatically become individual table columns!
-                        """
-                    )
-                    with gr.Row():
-                        preset_cv_btn = gr.Button("🖼️ Image Summary + CSV Objects", size="sm")
-                        preset_meta_btn = gr.Button("🔍 Precision Metadata", size="sm")
-                    with gr.Row():
-                        preset_art_btn = gr.Button("🎨 Creative Curator", size="sm")
-                        preset_doc_btn = gr.Button("📄 Document Intelligence", size="sm")
+        # 2. Status Row with Undo
+        with gr.Row():
+            table_info_markdown = gr.Markdown("#### 📊 Selected Table Preview: *Select a table to inspect*", scale=4)
+            undo_batch_btn = gr.Button("↩️ Undo Last Operation", variant="secondary", scale=1)
 
-                system_prompt_input = gr.Textbox(
-                    label="System Prompt",
-                    value=settings.last_system_prompt,
-                    lines=2
+        # 3. Full-Width Table Data Preview
+        current_table_preview = gr.Dataframe(
+            headers=["file_name", "modality", "content", "file_size"],
+            datatype=["str", "str", "str", "str"],
+            value=[],
+            interactive=False,
+            wrap=True,
+            min_width=800,
+            max_height=260
+        )
+
+        # 4. Media Inspector Drawer for selected row (Full Width)
+        with gr.Group(visible=False, elem_classes=["status-panel"]) as pg_media_inspector_group:
+            with gr.Row():
+                gr.Markdown("#### 🔬 Selected Record Media Inspector", scale=4)
+                pg_close_inspector_btn = gr.Button("✖️ Close", size="sm", scale=1)
+
+            with gr.Row():
+                pg_inspector_image = gr.Image(label="🖼️ Image Preview", visible=False, scale=2, interactive=False)
+                pg_inspector_audio = gr.Audio(label="🎵 Audio Playback", visible=False, scale=2, interactive=False)
+                pg_inspector_video = gr.Video(label="🎬 Video Player", visible=False, scale=2, interactive=False)
+
+                with gr.Column(scale=3):
+                    pg_inspector_details = gr.Markdown("*(Select a row in the table above to inspect full media & metadata)*")
+                    pg_inspector_highlighted = gr.HighlightedText(
+                        label="🏷️ Extracted Intelligence & Highlighted Entities",
+                        visible=False,
+                        combine_adjacent=True,
+                        show_legend=True
+                    )
+                    pg_inspector_content = gr.Textbox(label="📄 Extracted Content / Text", lines=6, visible=False, interactive=False)
+
+        gr.Markdown("---")
+
+        # 5. System & Prompt Configuration (Full Width Panel)
+        with gr.Group(elem_classes=["status-panel"]):
+            gr.Markdown("#### 💡 2. System & Prompt Configuration")
+            with gr.Accordion("💡 Prompt Guide & Example Presets (Click to Apply)", open=False):
+                gr.Markdown(
+                    """
+                    **How Prompts Work with Pixeltable**:
+                    * **System Prompt**: Defines the AI persona, tone, and behavioral constraints across all rows.
+                    * **User Prompt**: Supplies row variables (`{file_name}`, `{content}`, `{rel_path}`, `{modality}`).
+                    * **⚡ Auto-Split Mode**: Any top-level keys in the JSON response automatically become individual table columns!
+                    """
                 )
-                
-                prompt_template_input = gr.Textbox(
-                    label="User Prompt Template",
-                    value=settings.last_user_prompt,
-                    lines=6
+                with gr.Row():
+                    preset_cv_btn = gr.Button("🖼️ Image Summary + CSV Objects", size="sm")
+                    preset_meta_btn = gr.Button("🔍 Precision Metadata", size="sm")
+                with gr.Row():
+                    preset_art_btn = gr.Button("🎨 Creative Curator", size="sm")
+                    preset_doc_btn = gr.Button("📄 Document Intelligence", size="sm")
+
+            with gr.Row():
+                with gr.Column(scale=1):
+                    system_prompt_input = gr.Textbox(
+                        label="System Prompt",
+                        value=settings.last_system_prompt,
+                        lines=3
+                    )
+                with gr.Column(scale=2):
+                    prompt_template_input = gr.Textbox(
+                        label="User Prompt Template",
+                        value=settings.last_user_prompt,
+                        lines=5
+                    )
+
+            available_columns_info = gr.Markdown(initial_cols_text)
+
+            # 6. Test on Sample Rows
+            gr.Markdown("#### 🧪 3. Test on Sample Rows")
+            with gr.Row():
+                sample_count_slider = gr.Slider(minimum=1, maximum=10, value=2, step=1, label="Number of Test Rows", scale=2)
+                enable_vision_cb = gr.Checkbox(
+                    label="🖼️ Multimodal Vision",
+                    value=False,
+                    info="Send images to Vision LLM (10-15s per image). Unchecked = fast text (<1s).",
+                    scale=2
                 )
-                
-                available_columns_info = gr.Markdown(initial_cols_text)
+                test_sample_btn = gr.Button("🚀 Run Test on Sample Rows", variant="primary", scale=2)
 
-                gr.Markdown("#### 3. Test on Sample Rows")
-                with gr.Row():
-                    sample_count_slider = gr.Slider(minimum=1, maximum=10, value=2, step=1, label="Number of Test Rows", scale=2)
-                    enable_vision_cb = gr.Checkbox(
-                        label="🖼️ Multimodal Vision",
-                        value=False,
-                        info="Send images to Vision LLM (10-15s per image). Unchecked = fast text (<1s).",
-                        scale=2
-                    )
-                test_sample_btn = gr.Button("🚀 Run Test on Sample Rows", variant="primary")
+        # 7. Sample Test Results Preview (Full Width)
+        gr.Markdown("#### 🧪 Sample Test Results Preview")
+        test_results_table = gr.Dataframe(
+            headers=["Row ID", "File Name", "Telemetry & Speed", "Source Snippet", "Rendered Prompt", "Model Output"],
+            datatype=["str", "str", "str", "str", "str", "str"],
+            value=[],
+            interactive=False,
+            wrap=True,
+            min_width=800
+        )
 
-            with gr.Column(scale=2):
-                # Section 4: Live Table Data Preview
-                with gr.Row():
-                    table_info_markdown = gr.Markdown("#### 📊 Selected Table Preview: *Select a table to inspect*", scale=3)
-                    preview_mode_toggle = gr.Checkbox(label="⚡ Lightweight Preview", value=True, scale=1)
+        # 8. Apply & Save to Table Columns
+        gr.Markdown("---")
+        gr.Markdown("#### 💾 4. Apply & Save to Table Columns")
+        with gr.Row():
+            output_mode_radio = gr.Radio(
+                choices=["⚡ Auto-Split JSON Keys into Columns", "📄 Single Target Column"],
+                value="⚡ Auto-Split JSON Keys into Columns",
+                label="Output Mode",
+                scale=3
+            )
+        
+        with gr.Row(visible=False) as single_col_row:
+            target_column_input = gr.Textbox(
+                label="Target Column Name",
+                value="llm_summary",
+                placeholder="e.g. llm_summary, entities, tags",
+                scale=2
+            )
+            write_mode_radio = gr.Radio(
+                choices=["replace", "append"],
+                value="replace",
+                label="Write Mode",
+                scale=1
+            )
 
-                current_table_preview = gr.Dataframe(
-                    headers=["file_name", "modality", "content", "file_size"],
-                    datatype=["str", "str", "str", "str"],
-                    value=[],
-                    interactive=False,
-                    wrap=True,
-                    max_height=260
-                )
+        with gr.Row():
+            limit_rows_input = gr.Number(
+                label="Max Rows (0 = all)",
+                value=0,
+                precision=0,
+                scale=1
+            )
+            commit_batch_btn = gr.Button("⚡ Execute on Table & Save Columns", variant="primary", scale=2)
 
-                # Media Inspector Drawer for selected row
-                with gr.Group(visible=False, elem_classes=["status-panel"]) as pg_media_inspector_group:
-                    with gr.Row():
-                        gr.Markdown("#### 🔬 Selected Record Media Inspector", scale=4)
-                        pg_close_inspector_btn = gr.Button("✖️ Close", size="sm", scale=1)
-
-                    with gr.Row():
-                        pg_inspector_image = gr.Image(label="🖼️ Image Preview", visible=False, scale=2, interactive=False)
-                        pg_inspector_audio = gr.Audio(label="🎵 Audio Playback", visible=False, scale=2, interactive=False)
-                        pg_inspector_video = gr.Video(label="🎬 Video Player", visible=False, scale=2, interactive=False)
-
-                        with gr.Column(scale=3):
-                            pg_inspector_details = gr.Markdown("*(Select a row in the table above to inspect full media & metadata)*")
-                            pg_inspector_content = gr.Textbox(label="📄 Extracted Content / Text", lines=6, visible=False, interactive=False)
-
-                gr.Markdown("---")
-                gr.Markdown("#### 🧪 Sample Test Results Preview")
-                test_results_table = gr.Dataframe(
-                    headers=["Row ID", "File Name", "Telemetry & Speed", "Source Snippet", "Rendered Prompt", "Model Output"],
-                    datatype=["str", "str", "str", "str", "str", "str"],
-                    value=[],
-                    interactive=False,
-                    wrap=True
-                )
-
-                gr.Markdown("---")
-                gr.Markdown("#### 5. Apply & Save to Table Columns")
-                with gr.Row():
-                    output_mode_radio = gr.Radio(
-                        choices=["⚡ Auto-Split JSON Keys into Columns", "📄 Single Target Column"],
-                        value="⚡ Auto-Split JSON Keys into Columns",
-                        label="Output Mode",
-                        scale=3
-                    )
-                
-                with gr.Row(visible=False) as single_col_row:
-                    target_column_input = gr.Textbox(
-                        label="Target Column Name",
-                        value="llm_summary",
-                        placeholder="e.g. llm_summary, entities, tags",
-                        scale=2
-                    )
-                    write_mode_radio = gr.Radio(
-                        choices=["replace", "append"],
-                        value="replace",
-                        label="Write Mode",
-                        scale=1
-                    )
-
-                with gr.Row():
-                    limit_rows_input = gr.Number(
-                        label="Max Rows (0 = all)",
-                        value=0,
-                        precision=0,
-                        scale=1
-                    )
-                    commit_batch_btn = gr.Button("💾 Execute on Table & Save Columns", variant="primary", scale=2)
-                    undo_batch_btn = gr.Button("↩️ Undo Last Operation", variant="secondary", scale=1)
-
-                with gr.Group(elem_classes=["status-panel"]):
-                    batch_status_markdown = gr.Markdown("#### Batch Status: *Idle*")
+        with gr.Group(elem_classes=["status-panel"]):
+            batch_status_markdown = gr.Markdown("#### Batch Status: *Idle*")
 
     # Helper to load table preview and available columns
     def load_table_preview(domain, table_name, lightweight=True):
@@ -265,17 +276,19 @@ def render_playground_tab(tab=None):
     def on_select_preview_row(evt: gr.SelectData, current_df, domain, table_name):
         """Populate Media Inspector in Data Enhancement tab when a table row is clicked without re-querying the database."""
         if not evt or evt.index is None:
-            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else 0
         insp = TablesController.handle_row_inspection(row_idx, current_df, domain, table_name)
+        show_hl = insp.get("has_highlighted", False)
         return (
             gr.update(visible=True),
             gr.update(value=insp["image_path"], visible=insp["has_image"]),
             gr.update(value=insp["audio_path"], visible=insp["has_audio"]),
             gr.update(value=insp["video_path"], visible=insp["has_video"]),
             insp["details_markdown"],
-            gr.update(value=insp["content_text"], visible=insp["has_content"])
+            gr.update(value=insp["content_text"], visible=insp["has_content"] and not show_hl),
+            gr.update(value=insp.get("highlighted_spans", []), visible=show_hl)
         )
 
     def on_test_sample(domain, table_name, provider, model, system_prompt, prompt_template, sample_count, output_mode, enable_vision,
@@ -447,7 +460,15 @@ def render_playground_tab(tab=None):
     current_table_preview.select(
         fn=on_select_preview_row,
         inputs=[current_table_preview, domain_dropdown, table_dropdown],
-        outputs=[pg_media_inspector_group, pg_inspector_image, pg_inspector_audio, pg_inspector_video, pg_inspector_details, pg_inspector_content]
+        outputs=[
+            pg_media_inspector_group,
+            pg_inspector_image,
+            pg_inspector_audio,
+            pg_inspector_video,
+            pg_inspector_details,
+            pg_inspector_content,
+            pg_inspector_highlighted
+        ]
     )
 
     pg_close_inspector_btn.click(

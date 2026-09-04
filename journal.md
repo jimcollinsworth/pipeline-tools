@@ -512,4 +512,28 @@ This journal records verbatim developer instructions, architectural directives, 
    - Eliminated high-frequency `gr.Error` toast notifications that caused viewport jumping.
    - Render structured, calm warning statuses in the batch status panel and data preview table.
 
+---
+
+## 📅 2026-09-04: View & Export Top Selector Bar Mirroring & Controller Harmonization
+
+**Context:** The model and provider selectors were missing from the top selector bar on the View & Export tab, causing visual inconsistency with Data Enhancement and making model selection for prompt export difficult to locate.
+
+**Verbatim Developer Directives:**
+> `wheres the model selector on export/view, there's a prompt`
+> `/boost lets mirror the top selector bar, sounds good. update and improve tests /test-driven-development /brainstorming`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Mirrored Top Selector Bar Across Workbench Tabs**:
+   - Updated the top control row in View & Export (`src/ui/tables_tab.py`) to match Data Enhancement (`src/ui/playground_tab.py`):
+     `[ Domain / Directory ] [ Table Name ] [ LLM Provider ] [ Model ] [ ⚡ Lightweight Preview ]`
+   - Relocated the preview row limit slider (`limit_slider`, "Max Rows to Fetch") to the View Mode & Column Visibility toolbar next to the Display Mode radio.
+2. **Controller Harmonization & Model Discovery**:
+   - Added `TablesController.handle_provider_change` in `src/controllers/tables_controller.py` to mirror `PlaygroundController.handle_provider_change`.
+   - Discovers provider models dynamically, resolves defaults, and persists selections to `config.json`.
+3. **Streamlined AI Export Section & Full Tab Synchronization**:
+   - Removed duplicate provider and model dropdowns from the bottom export configuration group, eliminating redundancy and using the top bar controls as the single source of truth.
+   - Enhanced `tab.select` on the View & Export tab to synchronize domain, table, LLM provider, and model dropdowns seamlessly when switching tabs.
+4. **TDD Verification**:
+   - Created failing unit test `test_tables_controller_provider_change` in `tests/test_controllers.py` (RED), implemented the controller method (GREEN), and verified full test suite pass (`60 Passed, 0 Failed, 0 Errors`).
+
 

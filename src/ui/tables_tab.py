@@ -56,6 +56,7 @@ def render_tables_tab(tab=None):
     initial_models = LLMService.list_models_for_provider(initial_provider)
     if not initial_models:
         initial_models = [settings.default_ollama_model or "llama3.2"]
+    initial_model = settings.last_model if settings.last_model in initial_models else initial_models[0]
 
     with gr.Column():
         gr.Markdown("### 📊 View & Export (Pixeltable DataTables & Markdown Reports)")
@@ -110,7 +111,19 @@ def render_tables_tab(tab=None):
                 allow_custom_value=True,
                 scale=3
             )
-            limit_slider = gr.Slider(minimum=5, maximum=100, value=25, step=5, label="Max Rows to Fetch", scale=2)
+            provider_dropdown = gr.Dropdown(
+                label="LLM Provider",
+                choices=["Ollama", "Gemini"],
+                value=initial_provider,
+                scale=2
+            )
+            model_dropdown = gr.Dropdown(
+                label="Model",
+                choices=initial_models,
+                value=initial_model,
+                allow_custom_value=True,
+                scale=3
+            )
             lightweight_toggle = gr.Checkbox(label="⚡ Lightweight Preview", value=True, scale=1)
 
         with gr.Row():
@@ -141,9 +154,10 @@ def render_tables_tab(tab=None):
                 label="Display Mode",
                 show_label=False,
                 interactive=True,
-                scale=3
+                scale=2
             )
-            with gr.Row(scale=2):
+            limit_slider = gr.Slider(minimum=5, maximum=100, value=25, step=5, label="Max Rows to Fetch", scale=2)
+            with gr.Row(scale=1):
                 select_all_cols_btn = gr.Button("✓ Select All", size="sm", variant="secondary")
                 deselect_all_cols_btn = gr.Button("✕ Deselect All", size="sm", variant="secondary")
 
@@ -243,21 +257,6 @@ def render_tables_tab(tab=None):
                     step=1,
                     label="Max Records to Process",
                     scale=2
-                )
-
-            with gr.Row():
-                export_provider_dropdown = gr.Dropdown(
-                    label="AI Provider",
-                    choices=LLMService.PROVIDERS,
-                    value=initial_provider,
-                    scale=2
-                )
-                export_model_dropdown = gr.Dropdown(
-                    label="Model Identifier",
-                    choices=initial_models,
-                    value=settings.last_model or initial_models[0],
-                    allow_custom_value=True,
-                    scale=3
                 )
 
             available_columns_info = gr.Markdown(
@@ -385,11 +384,9 @@ def render_tables_tab(tab=None):
         res = TablesController.handle_domain_change(domain)
         return gr.update(choices=res["choices"], value=res["value"])
 
-    def on_export_provider_change(provider):
-        models = LLMService.list_models_for_provider(provider)
-        if not models:
-            models = ["gemini-3.7-flash"] if provider == "Gemini" else ["llama3.2"]
-        return gr.update(choices=models, value=models[0])
+    def on_provider_change(selected_provider):
+        res = TablesController.handle_provider_change(selected_provider)
+        return gr.update(choices=res["choices"], value=res["value"])
 
     def load_preset(preset_key):
         preset = MarkdownExporter.PRESETS.get(preset_key)
@@ -628,10 +625,10 @@ def render_tables_tab(tab=None):
         outputs=[media_inspector_group]
     )
 
-    export_provider_dropdown.change(
-        fn=on_export_provider_change,
-        inputs=[export_provider_dropdown],
-        outputs=[export_model_dropdown]
+    provider_dropdown.change(
+        fn=on_provider_change,
+        inputs=[provider_dropdown],
+        outputs=[model_dropdown]
     )
 
     preset_newspaper_btn.click(
@@ -669,8 +666,8 @@ def render_tables_tab(tab=None):
         inputs=[
             domain_dropdown,
             table_dropdown,
-            export_provider_dropdown,
-            export_model_dropdown,
+            provider_dropdown,
+            model_dropdown,
             export_rows_slider,
             system_prompt_input,
             export_prompt_input,
@@ -766,7 +763,7 @@ def render_tables_tab(tab=None):
     )
 
     if tab is not None:
-        def on_tab_select(current_domain, current_table):
+        def on_tab_select(current_domain, current_table, current_provider, current_model):
             latest_domains = DBManager.list_dirs() or ["default"]
             curr_settings = get_settings()
             dom = curr_settings.last_domain if curr_settings.last_domain in latest_domains else (
@@ -777,14 +774,22 @@ def render_tables_tab(tab=None):
             tbl = curr_settings.last_table if curr_settings.last_table in latest_tables else (
                 current_table if current_table in latest_tables else latest_tables[0]
             )
+
+            prov = curr_settings.last_provider or current_provider or "Ollama"
+            models = LLMService.list_models_for_provider(prov)
+            mod = curr_settings.last_model if curr_settings.last_model in models else (
+                current_model if current_model in models else (models[0] if models else "llama3.2")
+            )
             
             return (
                 gr.update(choices=latest_domains, value=dom),
-                gr.update(choices=latest_tables, value=tbl)
+                gr.update(choices=latest_tables, value=tbl),
+                gr.update(value=prov),
+                gr.update(choices=models, value=mod)
             )
 
         tab.select(
             fn=on_tab_select,
-            inputs=[domain_dropdown, table_dropdown],
-            outputs=[domain_dropdown, table_dropdown]
+            inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown],
+            outputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown]
         )

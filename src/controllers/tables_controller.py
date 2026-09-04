@@ -88,6 +88,21 @@ class TablesController:
         }
 
     @staticmethod
+    def handle_provider_change(selected_provider: str) -> Dict[str, Any]:
+        """Discover models for provider and resolve last/default choice."""
+        models = LLMService.list_models_for_provider(selected_provider)
+        curr = get_settings()
+        if selected_provider == "Gemini":
+            chosen = curr.default_gemini_model if curr.default_gemini_model in models else (models[0] if models else "gemini-3.7-flash")
+        else:
+            chosen = curr.default_ollama_model if curr.default_ollama_model in models else (models[0] if models else "llama3.2")
+        update_last_entry(last_provider=selected_provider, last_model=chosen)
+        return {
+            "choices": models,
+            "value": chosen
+        }
+
+    @staticmethod
     def build_highlighted_spans(text: str, entities: List[Tuple[str, str]]) -> List[Tuple[str, Optional[str]]]:
         """
         Given raw text and a list of (entity_text, category_label) tuples,

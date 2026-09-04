@@ -117,6 +117,11 @@ flowchart TD
     - Markdown-only system prompt enforcement preventing heavy raw HTML/inline SVG generation, reducing sidecar latency from 30+ seconds to 1–2 seconds.
     - Automatic record data context fallback when prompt templates omit explicit placeholders.
   - Verified with 38 unit tests (`38 Passed, 0 Failed, 0 Errors`).
+- [x] **Top Selector Bar Mirroring & Controller Harmonization**
+  - Mirrored top selector bar in View & Export tab to match Data Enhancement (`[ Domain / Directory ] [ Table Name ] [ LLM Provider ] [ Model ] [ ⚡ Lightweight Preview ]`).
+  - Added `TablesController.handle_provider_change` for dynamic model discovery and persistence.
+  - Relocated preview row limit slider to View Mode toolbar and removed duplicate dropdowns from export section.
+  - Verified with 60 unit tests (`60 Passed, 0 Failed, 0 Errors`).
 
 ### Phase 4: Multimodal Vision & Entity Classification Engines (Planned)
 - [ ] **Hugging Face & YOLO Vision Classification Engines**

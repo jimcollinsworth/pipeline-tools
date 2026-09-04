@@ -115,6 +115,22 @@ class TestControllers(unittest.TestCase):
             dom_res = TablesController.handle_domain_change(self.TEST_DOMAIN)
             self.assertIn("tables_ctrl_test", dom_res["choices"])
 
+    def test_tables_controller_provider_change(self):
+        """[Controller] Verify TablesController discovers models on provider change and persists selection."""
+        # 1. Ollama provider change
+        ollama_res = TablesController.handle_provider_change("Ollama")
+        self.assertIsInstance(ollama_res, dict)
+        self.assertIn("choices", ollama_res)
+        self.assertIn("value", ollama_res)
+        self.assertTrue(len(ollama_res["choices"]) > 0)
+
+        # 2. Gemini provider change
+        gemini_res = TablesController.handle_provider_change("Gemini")
+        self.assertIsInstance(gemini_res, dict)
+        self.assertIn("choices", gemini_res)
+        self.assertIn("value", gemini_res)
+        self.assertTrue(len(gemini_res["choices"]) > 0)
+
     def test_tables_controller_row_inspection(self):
         """[Controller] Verify TablesController inspects row data, formats details, and detects media types."""
         fake_df = [

@@ -375,4 +375,38 @@ class TestControllers(unittest.TestCase):
             self.assertEqual(res["status"], "warning")
             self.assertIn("halted", res["message"].lower())
 
+    def test_sample_test_cancellation(self):
+        """[Controller] Verify run_sample_test halts immediately when cancelled via controller."""
+        if PIXELTABLE_AVAILABLE:
+            DBManager.get_or_create_table(self.TEST_DOMAIN, "cancel_sample_test")
+            dummy_files = [
+                {"name": f"sample_{i}.txt", "abs_path": f"C:/fake_sample_{i}.txt", "modality": "documents", "extension": ".txt"}
+                for i in range(5)
+            ]
+            DBManager.ingest_files(self.TEST_DOMAIN, "cancel_sample_test", dummy_files)
+
+            call_count = 0
+
+            def mock_generate(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 2:
+                    PlaygroundController.cancel_execution()
+                return "sample output"
+
+            with patch("src.prompts.executor.LLMService.generate", side_effect=mock_generate):
+                results = PromptExecutor.run_sample_test(
+                    model="llama3.2",
+                    prompt_template="Test {file_name}",
+                    system_prompt="",
+                    table_dir=self.TEST_DOMAIN,
+                    table_name="cancel_sample_test",
+                    provider="Ollama",
+                    sample_count=5
+                )
+
+            # Should have processed 2 rows before cancellation broke out of the 5-row loop
+            self.assertEqual(call_count, 2)
+            self.assertEqual(len(results), 2)
+
 

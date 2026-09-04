@@ -54,7 +54,7 @@ class TablesController:
 
         stats_text = (
             f"✅ **Table `{res.get('domain', clean_dir)}.{res.get('table', clean_tbl)}`** ({mode_label}) — "
-            f"Displaying {len(data)} of {total} total rows.\nColumns: `{', '.join(cols)}`"
+            f"Displaying {len(data)} of {total} total rows."
         )
         cols_pills = ", ".join([f"`{{{c}}}`" for c in cols if c != "media_preview"]) if cols else "*None*"
         cols_text = f"💡 **Available Column Placeholders:** {cols_pills} | Standard: `{{domain}}`, `{{table}}`, `{{total_rows}}`, `{{table_context}}`"

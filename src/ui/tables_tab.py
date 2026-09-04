@@ -135,25 +135,26 @@ def render_tables_tab(tab=None):
 
         # View Mode & Column Visibility Controls
         with gr.Row():
-            with gr.Column(scale=5):
-                view_mode_radio = gr.Radio(
-                    choices=["📊 Table Grid", "📄 Single Document"],
-                    value="📊 Table Grid",
-                    label="Display Mode",
-                    interactive=True
-                )
-            with gr.Column(scale=3):
-                with gr.Row():
-                    select_all_cols_btn = gr.Button("✓ Select All", size="sm", variant="secondary")
-                    deselect_all_cols_btn = gr.Button("✕ Deselect All", size="sm", variant="secondary")
-
-        with gr.Row():
-            column_selector = gr.CheckboxGroup(
-                choices=[],
-                value=[],
-                label="Visible Columns (Click to Toggle in Table & Document)",
-                interactive=True
+            view_mode_radio = gr.Radio(
+                choices=["📊 Table Grid", "📄 Single Document"],
+                value="📊 Table Grid",
+                label="Display Mode",
+                show_label=False,
+                interactive=True,
+                scale=3
             )
+            with gr.Row(scale=2):
+                select_all_cols_btn = gr.Button("✓ Select All", size="sm", variant="secondary")
+                deselect_all_cols_btn = gr.Button("✕ Deselect All", size="sm", variant="secondary")
+
+        column_selector = gr.CheckboxGroup(
+            choices=[],
+            value=[],
+            label="Visible Columns",
+            show_label=False,
+            elem_classes=["compact-pill-bar"],
+            interactive=True
+        )
 
         # 1. Multi-Row Table Grid View
         with gr.Column(visible=True) as table_grid_container:

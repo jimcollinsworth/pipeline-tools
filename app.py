@@ -233,6 +233,52 @@ input[type="checkbox"], input[type="radio"] {
     font-weight: 600 !important;
 }
 
+/* Compact Column Selection Pill Bar */
+.compact-pill-bar {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+.compact-pill-bar > div, .compact-pill-bar fieldset, .compact-pill-bar .wrap {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 3px 5px !important;
+    padding: 0 !important;
+    border: none !important;
+}
+.compact-pill-bar label {
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 2px 7px !important;
+    font-size: 0.78rem !important;
+    font-family: var(--font-mono), monospace !important;
+    border-radius: 4px !important;
+    background: #ffffff !important;
+    border: 1px solid #d4d0c8 !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    line-height: 1.25 !important;
+    min-height: unset !important;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.03) !important;
+}
+.compact-pill-bar label:hover {
+    background: #f4f1ea !important;
+    border-color: #b8b3a8 !important;
+}
+.compact-pill-bar label:has(input:checked) {
+    background: #eff6ff !important;
+    border-color: #93c5fd !important;
+    color: #1e40af !important;
+}
+.compact-pill-bar label:has(input:checked) span {
+    color: #1e40af !important;
+    font-weight: 600 !important;
+}
+.compact-pill-bar label input[type="checkbox"] {
+    margin-right: 3px !important;
+    width: 12px !important;
+    height: 12px !important;
+}
+
 /* Clean High-Contrast Data Tables */
 .gr-dataframe, table {
     border: 1px solid #d4d0c8 !important;

@@ -488,3 +488,28 @@ This journal records verbatim developer instructions, architectural directives, 
    - Avoided fragile DOM JavaScript hooks into `gr.Dataframe` headers.
    - Implemented clickable interactive column pills (`gr.CheckboxGroup`) directly above the table/document to hide/show columns in both views.
 
+---
+
+## 📅 2026-09-04: LLM Quota Fail-Fast Auto-Abort, Batch Cancellation & UI Stability
+
+**Context:** Diagnosing and resolving an issue where hitting a provider quota / rate limit (e.g. `429 RESOURCE_EXHAUSTED` in Gemini API) caused batch loops to repeatedly fail on every row without stopping, aborting, timing out, or allowing cancellation, causing high-frequency UI flashing/jumping.
+
+**Verbatim Developer Directives:**
+> `i hit a resource issue with the llm and it loops with the same error on every row, didn't stop or timeout, didn't see any way to cancel. also the screen was flashing and jumping around due to the messages.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Typed LLM Exceptions & Error Classification (`src/core/exceptions.py`)**:
+   - Standardized exception hierarchy: `LLMQuotaExceededError`, `LLMAuthError`, `LLMServiceUnavailableError`, `LLMExecutionCancelledError`.
+   - `GeminiClient` and `OllamaClient` detect HTTP 429, `RESOURCE_EXHAUSTED`, `API_KEY_INVALID`, and network refusal, raising typed errors immediately.
+2. **Fail-Fast Auto-Abort on Fatal Provider Errors**:
+   - In `PromptExecutor.run_sample_test`, `PromptExecutor.apply_prompt_to_table`, and `MarkdownExporter.generate_sidecar_exports`:
+   - Catching `LLMQuotaExceededError` or `LLMAuthError` immediately halts batch iteration on the very first failure rather than hammering the API across hundreds of subsequent rows.
+   - Saves partial results where available and reports clear, actionable guidance.
+3. **Batch Cancellation Token & Stop Controls**:
+   - Added `PromptExecutor.cancel_execution()` and `is_cancelled()` checks between row iterations.
+   - Added `🛑 Stop` and `🛑 Stop Execution` buttons in the Data Enhancement UI to interrupt running sample tests and table batches cleanly.
+4. **UI Stability & Layout Anti-Flashing**:
+   - Eliminated high-frequency `gr.Error` toast notifications that caused viewport jumping.
+   - Render structured, calm warning statuses in the batch status panel and data preview table.
+
+

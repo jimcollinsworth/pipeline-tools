@@ -177,6 +177,11 @@ class PlaygroundController:
             }
 
     @staticmethod
+    def cancel_execution() -> None:
+        """Signal prompt executor to halt running batch operations."""
+        PromptExecutor.cancel_execution()
+
+    @staticmethod
     def commit_batch_flow(
         domain: str,
         table_name: str,
@@ -234,17 +239,32 @@ class PlaygroundController:
         )
 
         if res.get("status") == "success":
+            cols = res.get("columns", [target_column])
             status_msg = (
                 f"### ✅ Batch Execution Successful!\n"
                 f"- **Table:** `{clean_dir}.{clean_tbl}`\n"
                 f"- **Rows Enriched:** {res.get('rows_processed', 0)}\n"
-                f"- **Columns Created / Updated:** `{', '.join(res.get('columns_created', [target_column]))}`\n"
+                f"- **Columns Created / Updated:** `{', '.join(cols)}`\n"
                 f"- **Model / Provider:** `{provider}` ({model})"
             )
             # Fetch fresh preview
             preview = PlaygroundController.load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
             return {
                 "status": "success",
+                "message": status_msg,
+                "preview": preview
+            }
+        elif res.get("status") == "warning":
+            cols = res.get("columns", [target_column])
+            status_msg = (
+                f"### ⚠️ Batch Execution Halted (Partial Results Saved)\n"
+                f"- **Notice:** {res.get('message', '')}\n"
+                f"- **Rows Enriched:** {res.get('rows_processed', 0)}\n"
+                f"- **Columns:** `{', '.join(cols)}`"
+            )
+            preview = PlaygroundController.load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
+            return {
+                "status": "warning",
                 "message": status_msg,
                 "preview": preview
             }

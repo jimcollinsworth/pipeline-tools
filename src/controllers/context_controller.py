@@ -21,7 +21,7 @@ class ContextController:
     def get_domains() -> list[str]:
         """Fetch available database domains/directories."""
         try:
-            return DBManager.list_domains()
+            return DBManager.list_dirs() or ["default"]
         except Exception:
             return ["default"]
 

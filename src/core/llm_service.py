@@ -2,6 +2,13 @@ from typing import Optional, List, Dict, Any, Tuple
 from src.core.config import Settings, get_settings
 from src.core.ollama_client import OllamaClient
 from src.core.gemini_client import GeminiClient
+from src.core.exceptions import (
+    LLMError,
+    LLMQuotaExceededError,
+    LLMAuthError,
+    LLMServiceUnavailableError,
+    LLMExecutionCancelledError,
+)
 
 
 class LLMService:

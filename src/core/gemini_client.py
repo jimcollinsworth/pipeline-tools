@@ -1,6 +1,11 @@
 import os
 import logging
 from typing import Optional, List, Tuple, Dict, Any
+from src.core.exceptions import (
+    LLMQuotaExceededError,
+    LLMAuthError,
+    LLMServiceUnavailableError,
+)
 
 # Suppress SDK-level informational warnings (e.g. AFC recommendations)
 logging.getLogger("google_genai").setLevel(logging.ERROR)
@@ -272,5 +277,13 @@ class GeminiClient:
                 return response.text.strip()
             return "{}" if json_mode else "[Empty response from Gemini]"
         except Exception as e:
-            raise RuntimeError(f"Gemini generation failed: {type(e).__name__}: {str(e)}")
+            err_str = str(e)
+            err_lower = err_str.lower()
+            if "resource_exhausted" in err_lower or "429" in err_str or "quota" in err_lower or "rate limit" in err_lower:
+                raise LLMQuotaExceededError(f"Gemini quota/rate limit exceeded (429 RESOURCE_EXHAUSTED): {err_str}") from e
+            elif "api_key_invalid" in err_lower or "permission_denied" in err_lower or "api key not valid" in err_lower or "401" in err_str or "403" in err_str:
+                raise LLMAuthError(f"Gemini authentication failed: {err_str}") from e
+            elif "unavailable" in err_lower or "503" in err_str or "connection" in err_lower:
+                raise LLMServiceUnavailableError(f"Gemini service unavailable: {err_str}") from e
+            raise RuntimeError(f"Gemini generation failed: {type(e).__name__}: {err_str}") from e
 

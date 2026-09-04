@@ -112,3 +112,16 @@ class TestContextProcessing(unittest.TestCase):
         # 5. Invalid save rejection
         err_status, err_info = ContextController.handle_save_context("", "", "")
         self.assertIn("Select both Domain and Table", err_status)
+
+    def test_context_controller_domain_and_table_discovery(self):
+        """[Controller] Verify ContextController discovers active database domains and tables."""
+        from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
+        if PIXELTABLE_AVAILABLE:
+            DBManager.create_or_get_table(self.TEST_DOMAIN, self.TEST_TABLE)
+            try:
+                domains = ContextController.get_domains()
+                self.assertIn(self.TEST_DOMAIN, domains)
+                tables = ContextController.get_tables(self.TEST_DOMAIN)
+                self.assertIn(self.TEST_TABLE, tables)
+            finally:
+                DBManager.drop_dir(self.TEST_DOMAIN, force=True)

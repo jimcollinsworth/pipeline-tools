@@ -191,6 +191,7 @@ def render_playground_tab(tab=None):
                     scale=2
                 )
                 test_sample_btn = gr.Button("🚀 Run Test on Sample Rows", variant="primary", scale=2)
+                cancel_sample_btn = gr.Button("🛑 Stop", variant="stop", scale=1)
 
         # 7. Sample Test Results Preview (Full Width)
         gr.Markdown("#### 🧪 Sample Test Results Preview")
@@ -236,6 +237,7 @@ def render_playground_tab(tab=None):
                 scale=1
             )
             commit_batch_btn = gr.Button("⚡ Execute on Table & Save Columns", variant="primary", scale=2)
+            cancel_batch_btn = gr.Button("🛑 Stop Execution", variant="stop", scale=1)
 
         with gr.Group(elem_classes=["status-panel"]):
             batch_status_markdown = gr.Markdown("#### Batch Status: *Idle*")
@@ -360,8 +362,8 @@ def render_playground_tab(tab=None):
             return gr.update(headers=headers, datatype=["str"] * len(headers), value=rows)
         except Exception as e:
             err_msg = f"{type(e).__name__}: {str(e)}"
-            gr.Error(f"Sample test failed: {err_msg}")
-            return gr.update(headers=["Error"], value=[[err_msg]])
+            gr.Warning(f"Sample test halted: {err_msg}")
+            return gr.update(headers=["Notice", "Details"], datatype=["str", "str"], value=[["⚠️ Sample Test Halted", err_msg]])
 
     def on_commit_batch(domain, table_name, provider, model, system_prompt, prompt_template,
                         output_mode, target_col, mode, limit_num, enable_vision, is_lightweight,
@@ -422,14 +424,27 @@ def render_playground_tab(tab=None):
                 gr.Info(f"Batch completed: {res.get('rows_processed', 0)} rows updated!")
                 info_text, df_update, cols_text = load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
                 return status_msg, info_text, df_update, cols_text
+            elif res.get("status") == "warning":
+                cols_created = res.get("columns", [clean_col])
+                cols_msg = f"Columns Created / Updated: `{', '.join(cols_created)}`"
+                status_msg = (
+                    f"### ⚠️ Batch Execution Halted (Partial Results Saved)\n"
+                    f"- **Notice:** {res.get('message', '')}\n"
+                    f"- **Table:** `{clean_dir}.{clean_tbl}`\n"
+                    f"- **Rows Enriched:** {res.get('rows_processed', 0)}\n"
+                    f"- **{cols_msg}**\n"
+                )
+                gr.Warning(f"Batch halted: {res.get('message', '')}")
+                info_text, df_update, cols_text = load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
+                return status_msg, info_text, df_update, cols_text
             else:
                 err_msg = res.get("message", "Unknown error during batch execution")
-                gr.Error(f"Batch execution failed: {err_msg}")
-                return f"### ❌ Batch Execution Failed\n```\n{err_msg}\n```", gr.update(), gr.update(), gr.update()
+                gr.Warning(f"Batch halted: {err_msg}")
+                return f"### ❌ Batch Execution Halted\n```\n{err_msg}\n```", gr.update(), gr.update(), gr.update()
 
         except Exception as e:
             err_msg = f"{type(e).__name__}: {str(e)}"
-            gr.Error(f"Batch execution exception: {err_msg}")
+            gr.Warning(f"Batch execution exception: {err_msg}")
             return f"### ❌ Batch Execution Error\n```\n{err_msg}\n```", gr.update(), gr.update(), gr.update()
 
     # Wire event listeners
@@ -519,10 +534,25 @@ def render_playground_tab(tab=None):
         outputs=[system_prompt_input, prompt_template_input, output_mode_radio]
     )
 
+    def on_cancel_execution():
+        PlaygroundController.cancel_execution()
+        gr.Info("Cancellation requested. Halting after current row completes...")
+        return "### 🛑 Batch Status: Cancellation Requested\n> Halting execution after current row completes..."
+
+    cancel_sample_btn.click(
+        fn=on_cancel_execution,
+        outputs=[batch_status_markdown]
+    )
+
     commit_batch_btn.click(
         fn=on_commit_batch,
         inputs=[domain_dropdown, table_dropdown, provider_dropdown, model_dropdown, system_prompt_input, prompt_template_input, output_mode_radio, target_column_input, write_mode_radio, limit_rows_input, enable_vision_cb, preview_mode_toggle],
         outputs=[batch_status_markdown, table_info_markdown, current_table_preview, available_columns_info]
+    )
+
+    cancel_batch_btn.click(
+        fn=on_cancel_execution,
+        outputs=[batch_status_markdown]
     )
 
     def on_undo_batch(domain, table_name, is_lightweight):

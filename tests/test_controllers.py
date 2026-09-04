@@ -6,12 +6,22 @@ Verifies business logic, input validation, state transitions, and error handling
 without requiring Gradio web server initialization.
 """
 
+import os
 import unittest
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 from src.controllers.ingest_controller import IngestController
 from src.controllers.playground_controller import PlaygroundController
 from src.controllers.tables_controller import TablesController
 from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
+from src.prompts.executor import PromptExecutor
+from src.core.exceptions import (
+    LLMQuotaExceededError,
+    LLMAuthError,
+    LLMServiceUnavailableError,
+)
+from src.core.gemini_client import GeminiClient
+from src.core.ollama_client import OllamaClient
 
 class TestControllers(unittest.TestCase):
     """Automated unit test suite for Pipeline Tools controller layer."""
@@ -272,4 +282,97 @@ class TestControllers(unittest.TestCase):
                     os.unlink(tmp_csv)
                 except Exception:
                     pass
+
+    def test_gemini_client_error_classification(self):
+        """[Controller] Verify GeminiClient maps 429 and auth errors to typed exceptions."""
+        client = GeminiClient(api_key="fake-key")
+
+        # 1. 429 RESOURCE_EXHAUSTED
+        with patch.object(client, "get_client") as mock_get:
+            mock_genai_client = MagicMock()
+            mock_genai_client.models.generate_content.side_effect = Exception("429 RESOURCE_EXHAUSTED: quota exceeded")
+            mock_get.return_value = mock_genai_client
+
+            with self.assertRaises(LLMQuotaExceededError):
+                client.generate(model="gemini-3.6-flash", prompt="test")
+
+        # 2. API Key Invalid
+        with patch.object(client, "get_client") as mock_get:
+            mock_genai_client = MagicMock()
+            mock_genai_client.models.generate_content.side_effect = Exception("API_KEY_INVALID: bad key")
+            mock_get.return_value = mock_genai_client
+
+            with self.assertRaises(LLMAuthError):
+                client.generate(model="gemini-3.6-flash", prompt="test")
+
+    def test_quota_fail_fast_abort_in_sample_test(self):
+        """[Controller] Verify PromptExecutor halts on quota error on row 1 without evaluating row 2+."""
+        if PIXELTABLE_AVAILABLE:
+            DBManager.get_or_create_table(self.TEST_DOMAIN, "quota_abort_test")
+            # Ingest 3 dummy records
+            dummy_files = [
+                {"name": f"doc_{i}.txt", "abs_path": f"C:/fake_{i}.txt", "modality": "documents", "extension": ".txt"}
+                for i in range(3)
+            ]
+            DBManager.ingest_files(self.TEST_DOMAIN, "quota_abort_test", dummy_files)
+
+            call_count = 0
+
+            def mock_generate(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                raise LLMQuotaExceededError("429 RESOURCE_EXHAUSTED")
+
+            with patch("src.prompts.executor.LLMService.generate", side_effect=mock_generate):
+                with self.assertRaises(LLMQuotaExceededError):
+                    PromptExecutor.run_sample_test(
+                        model="gemini-3.6-flash",
+                        prompt_template="Summarize {file_name}",
+                        system_prompt="",
+                        table_dir=self.TEST_DOMAIN,
+                        table_name="quota_abort_test",
+                        provider="Gemini",
+                        sample_count=3
+                    )
+
+            # Crucial verification: generate should have been called EXACTLY ONCE, not 3 times!
+            self.assertEqual(call_count, 1)
+
+    def test_batch_cancellation_flow(self):
+        """[Controller] Verify PromptExecutor cancellation token halts batch processing early."""
+        if PIXELTABLE_AVAILABLE:
+            DBManager.get_or_create_table(self.TEST_DOMAIN, "cancel_batch_test")
+            dummy_files = [
+                {"name": f"img_{i}.png", "abs_path": f"C:/fake_{i}.png", "modality": "images", "extension": ".png"}
+                for i in range(4)
+            ]
+            DBManager.ingest_files(self.TEST_DOMAIN, "cancel_batch_test", dummy_files)
+
+            call_count = 0
+
+            def mock_generate_with_cancel(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 2:
+                    PromptExecutor.cancel_execution()
+                return '{"summary": "test scene"}'
+
+            with patch("src.prompts.executor.LLMService.generate", side_effect=mock_generate_with_cancel):
+                # Force fallback row loop to test iteration cancellation
+                with patch("src.prompts.executor.pxt_generate_json", side_effect=Exception("force fallback")):
+                    res = PromptExecutor.apply_prompt_to_table(
+                        model="llama3.2",
+                        prompt_template="Analyze {file_name}",
+                        system_prompt="",
+                        table_dir=self.TEST_DOMAIN,
+                        table_name="cancel_batch_test",
+                        provider="Ollama",
+                        auto_split=True
+                    )
+
+            # Should have processed 2 rows before cancellation stopped it
+            self.assertEqual(call_count, 2)
+            self.assertEqual(res["status"], "warning")
+            self.assertIn("halted", res["message"].lower())
+
 

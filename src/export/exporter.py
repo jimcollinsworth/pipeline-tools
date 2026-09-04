@@ -23,6 +23,11 @@ from typing import Dict, Any, Optional, List, Generator, Tuple
 from src.core.config import get_settings
 from src.db.manager import DBManager
 from src.core.llm_service import LLMService
+from src.core.exceptions import (
+    LLMQuotaExceededError,
+    LLMAuthError,
+    LLMServiceUnavailableError,
+)
 
 
 class MarkdownExporter:
@@ -436,8 +441,21 @@ class MarkdownExporter:
                     prompt=row_prompt,
                     system=effective_sys
                 )
+            except (LLMQuotaExceededError, LLMAuthError, LLMServiceUnavailableError) as fatal_err:
+                yield {
+                    "status": "error",
+                    "message": f"Sidecar batch export aborted at row {idx}/{total_rows}: {str(fatal_err)}"
+                }
+                return
             except Exception as e:
-                llm_output = f"> Warning: LLM generation failed for `{file_name}`: {str(e)}"
+                err_str = str(e)
+                if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str:
+                    yield {
+                        "status": "error",
+                        "message": f"Sidecar batch export halted at row {idx}/{total_rows} due to quota exhaustion (429): {err_str}"
+                    }
+                    return
+                llm_output = f"> Warning: LLM generation failed for `{file_name}`: {err_str}"
 
             # Format sidecar content
             # Ensure the specific image/media is embedded if it's an image

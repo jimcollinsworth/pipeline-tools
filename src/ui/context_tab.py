@@ -169,17 +169,35 @@ def render_context_tab(tab=None):
         status_md.value = init_status
         file_info_md.value = init_file_info
 
-    # If tab is passed, sync tables on tab select
+    # If tab is passed, sync tables and load context on tab select
     if tab:
         def on_tab_select(current_domain, current_table):
             domains = ContextController.get_domains()
-            c_dom = current_domain if current_domain in domains else (domains[0] if domains else "default")
+            curr_settings = get_settings()
+            c_dom = curr_settings.last_domain if curr_settings.last_domain in domains else (
+                current_domain if current_domain in domains else (domains[0] if domains else "default")
+            )
             tables = ContextController.get_tables(c_dom)
-            c_tbl = current_table if current_table in tables else (tables[0] if tables else "")
-            return gr.update(choices=domains, value=c_dom), gr.update(choices=tables, value=c_tbl)
+            c_tbl = curr_settings.last_table if curr_settings.last_table in tables else (
+                current_table if current_table in tables else (tables[0] if tables else "")
+            )
+            if c_dom and c_tbl:
+                content, status, file_info = ContextController.handle_load_context(c_dom, c_tbl)
+            else:
+                content = ""
+                status = f"ℹ️ Domain '{c_dom}' selected. No tables found." if c_dom else "⚠️ Please select a Domain and Table."
+                file_info = "*No table selected*"
+
+            return (
+                gr.update(choices=domains, value=c_dom),
+                gr.update(choices=tables, value=c_tbl),
+                content,
+                status,
+                file_info
+            )
 
         tab.select(
             fn=on_tab_select,
             inputs=[domain_dropdown, table_dropdown],
-            outputs=[domain_dropdown, table_dropdown]
+            outputs=[domain_dropdown, table_dropdown, context_editor, status_md, file_info_md]
         )

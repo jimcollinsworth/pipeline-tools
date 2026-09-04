@@ -2,6 +2,11 @@ import urllib.request
 import urllib.error
 import json
 from typing import List, Dict, Any, Tuple, Optional
+from src.core.exceptions import (
+    LLMQuotaExceededError,
+    LLMAuthError,
+    LLMServiceUnavailableError,
+)
 
 class OllamaClient:
     def __init__(self, host: str = "http://localhost:11434"):
@@ -78,33 +83,46 @@ class OllamaClient:
             headers={"Content-Type": "application/json"},
             method="POST"
         )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
 
-            total_ns = data.get("total_duration", 0)
-            eval_ns = data.get("eval_duration", 0)
-            prompt_ns = data.get("prompt_eval_duration", 0)
-            load_ns = data.get("load_duration", 0)
-            eval_count = data.get("eval_count", 0)
-            prompt_count = data.get("prompt_eval_count", 0)
+                total_ns = data.get("total_duration", 0)
+                eval_ns = data.get("eval_duration", 0)
+                prompt_ns = data.get("prompt_eval_duration", 0)
+                load_ns = data.get("load_duration", 0)
+                eval_count = data.get("eval_count", 0)
+                prompt_count = data.get("prompt_eval_count", 0)
 
-            eval_tps = round(eval_count / (eval_ns / 1e9), 1) if eval_ns > 0 else 0.0
-            prompt_tps = round(prompt_count / (prompt_ns / 1e9), 1) if prompt_ns > 0 else 0.0
-            total_sec = round(total_ns / 1e9, 2)
-            eval_sec = round(eval_ns / 1e9, 2)
-            prompt_sec = round(prompt_ns / 1e9, 2)
+                eval_tps = round(eval_count / (eval_ns / 1e9), 1) if eval_ns > 0 else 0.0
+                prompt_tps = round(prompt_count / (prompt_ns / 1e9), 1) if prompt_ns > 0 else 0.0
+                total_sec = round(total_ns / 1e9, 2)
+                eval_sec = round(eval_ns / 1e9, 2)
+                prompt_sec = round(prompt_ns / 1e9, 2)
 
-            self.last_telemetry = {
-                "provider": "Ollama",
-                "model": model,
-                "total_sec": total_sec,
-                "eval_sec": eval_sec,
-                "eval_tokens": eval_count,
-                "eval_tps": eval_tps,
-                "prompt_sec": prompt_sec,
-                "prompt_tokens": prompt_count,
-                "prompt_tps": prompt_tps,
-                "load_sec": round(load_ns / 1e9, 2),
-                "summary": f"⏱️ {total_sec}s ({eval_tps} tok/s) | Ingest: {prompt_count} tok in {prompt_sec}s | Generated: {eval_count} tok | Model: {model}"
-            }
-            return data.get("response", "")
+                self.last_telemetry = {
+                    "provider": "Ollama",
+                    "model": model,
+                    "total_sec": total_sec,
+                    "eval_sec": eval_sec,
+                    "eval_tokens": eval_count,
+                    "eval_tps": eval_tps,
+                    "prompt_sec": prompt_sec,
+                    "prompt_tokens": prompt_count,
+                    "prompt_tps": prompt_tps,
+                    "load_sec": round(load_ns / 1e9, 2),
+                    "summary": f"⏱️ {total_sec}s ({eval_tps} tok/s) | Ingest: {prompt_count} tok in {prompt_sec}s | Generated: {eval_count} tok | Model: {model}"
+                }
+                return data.get("response", "")
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                raise LLMQuotaExceededError(f"Ollama rate limit exceeded (HTTP 429): {e.reason}") from e
+            elif e.code in (401, 403):
+                raise LLMAuthError(f"Ollama authentication error (HTTP {e.code}): {e.reason}") from e
+            elif e.code in (502, 503, 504):
+                raise LLMServiceUnavailableError(f"Ollama server unavailable (HTTP {e.code}): {e.reason}") from e
+            raise RuntimeError(f"Ollama request failed with HTTP {e.code}: {e.reason}") from e
+        except urllib.error.URLError as e:
+            raise LLMServiceUnavailableError(f"Cannot connect to Ollama at {self.host}: {e.reason}") from e
+        except Exception as e:
+            raise RuntimeError(f"Ollama generation failed: {str(e)}") from e

@@ -139,40 +139,22 @@ flowchart TD
   - Implement mobile-friendly viewport breakpoints (`@media (max-width: 768px)`).
   - Single-column stacked layouts, touch-friendly tap targets ($\ge 44\text{px}$), and adaptive table views (horizontal scroll cards / compact summary cards) for phone and tablet screens.
 
-### Phase 5: Dynamic Ingestion Context, Skills Integration, Document Reader & Newspaper UX (Planned)
-- [ ] **Context Processing, Dynamic Learning & Entity Cross-Referencing (`RES-12`, `docs/context-processing.md`)**
-  - **The LLM Wiki Architecture (Compounding Knowledge vs Ephemeral RAG)**:
-    - Shift from rediscovering facts from scratch on each query to compiling a persistent, evolving Markdown wiki per domain/table.
-    - **Tri-Layer Pattern**:
-      1. *Raw Sources (Immutable)*: Original PDFs, images, text, and CSVs in Pixeltable tables.
-      2. *The LLM Wiki (Persistent Memory)*: Git-tracked Markdown files (`{domain}_{table}_context.md`, `index.md`, topic dossiers, `log.md`) maintaining canonical entities, aliases, bidirectional links (`[doc](filepath)`), and lessons learned.
-      3. *Schema & Governance (Directives)*: Table-level system prompts and `.agents/skills/` enforcing citation rules, canonical naming, and link integrity.
-    - **Core Lifecycle Operations**:
-      - *Ingest / Enhance*: Extract facts, link back to raw sources, resolve entity aliases, and flag contradictions with prior records.
-      - *Query*: Direct fast synthesis against compiled wiki pages rather than chunked vector searches.
-      - *Lint / Reconcile*: Audit wiki for orphaned concepts, broken links, and unresolved contradictions.
-  - **Evolving Cross-Row Memory**: Continuous learning during ingestion, enhancement, and export. Rules and governance are drawn from table system prompts or skills, while LLM outputs (new entities, summaries, tags) accumulate into context for subsequent iterations.
-  - **Persistent Context File (`{domain}_{table}_context.md`)**: Context is loaded and saved to a Git-tracked Markdown file per operation (e.g. batch enhancement of 2,000 rows), enabling human review, editing, and continuous learning over time.
-  - **Distinct Context Sections**: Structural separation between System Prompt / Governance, Active Skills / Tools, Canonical Entity Register, Global Dataset Summary, and Lessons Learned / Actions Performed.
-  - **Entity Normalization & Deduplication**: Maintain registers of People, Places, Organizations, and Things with canonical IDs and alias mappings.
-  - **EBA Cross-Referencing & Index Output**: Entities maintain bidirectional links to referencing source documents (`[title](path)`). Dedicated export engine produces comprehensive indexed cross-reference dossiers (`index.md`).
-  - **Row-Level Prompting Standard**: Mandatory pairing of row-level system prompt and user prompt during column processing.
+### Phase 5: Dynamic Ingestion Context, Skills Integration, Document Reader & Newspaper UX (In Progress)
+- [x] **Context Processing, Dynamic Learning & Context Management Tab (`RES-12`, `docs/context-processing.md`)**
+  - Implemented standalone **🧠 Memory & Context Management** workbench tab with bidirectional domain/table linking.
+  - Standardized Markdown context storage (`contexts/{domain}_{table}_context.md`) with 5 core sections: Governance, Skills, Entity Register, Dataset Summary, and Lessons Learned.
+  - 1-Click Starter Templates, Governance Presets, and Clean Markdown Index Exporter.
+- [x] **Document UX & Table vs. Single Document View Toggle (`RES-14`, `docs/document-ux.md`)**
+  - Option 1 Segmented View Mode Toggle (`[ 📊 Table Grid ]` / `[ 📄 Single Document ]`) in View & Export.
+  - Document Reader card with row paging toolbar (`◀ Previous`, `Record X of Y`, `Next ▶`), untruncated text, entity highlighting (`gr.HighlightedText`), and active media players.
+- [x] **Direct Column Visibility Pill Bar (`RES-15`, `docs/user-interface.md`)**
+  - Clickable interactive column pill bar (`gr.CheckboxGroup`) with `Select All` and `Deselect All` buttons to dynamically project visible columns across both table and document views.
+- [x] **LLM Quota Fail-Fast Auto-Abort, Batch Cancellation & UI Stability**
+  - Standardized exception hierarchy (`LLMQuotaExceededError`, `LLMAuthError`, `LLMServiceUnavailableError`).
+  - Auto-abort batch processing immediately on HTTP 429 / `RESOURCE_EXHAUSTED` / authentication failures without looping over remaining rows.
+  - Stop buttons (`🛑 Stop` and `🛑 Stop Execution`) to cancel sample test and table batch loops cleanly with partial result saving.
+  - Prevented high-frequency UI flashing and jumping by replacing repetitive error toasts with stable status markdown.
 - [ ] **Project Skills Integration & Prompt `/` Slash Commands (`RES-13`)**
-  - **In-Prompt Slash Command Discovery**: Type `/` in prompt input textareas to trigger intelligent auto-completion of skills discovered from `.agents/skills/`.
-  - **Dynamic Prompt Decoration**: Automatically parse and inject `SKILL.md` rules, tool definitions, and domain instructions directly into active prompt templates.
-  - **Pixeltable Tool Registry**: Map project skills to declarative Pixeltable User Defined Functions (`@pxt.udf`) and tool calling pipelines for seamless row-level evaluation.
-- [ ] **Document UX & Table vs. Single Document View Toggle (`RES-14`, `docs/document-ux.md`)**
-  - **Option 1: Unified Display Toggle (`[ 📊 Table Grid ]` / `[ 📄 Single Document ]`)**:
-    - Instant mode toggle placed directly above dataset views across Data Enhancement and View & Export.
-    - **Table Grid Mode**: Full-width multi-row spreadsheet view (`gr.Dataframe`) for multi-record scanning and row selection.
-    - **Single Document Mode**: Focused full-width single-record document card with row paging toolbar (`◀ Previous`, `Record X of Y`, `Next ▶`), untruncated text, entity highlighting (`gr.HighlightedText`), and active media players.
-    - **Simplicity Invariant**: Keep in-app preview formatting clean and lightweight using native Gradio components without fragile custom HTML/CSS; rich editorial layouts remain reserved for final document exports.
-  - **Dual Export Strategies & Per-Row Sidecars (`_meta.md`)**: Unified multi-record synthesis reports and individual per-record Markdown sidecars with automatic media embedding (`![title](filepath)`) and clean YAML frontmatter.
-- [ ] **Direct, Visual & Touch-Based Column/Field Selection (`RES-15`, `docs/user-interface.md`)**
-  - **Interactive Column Visibility Pill Bar**: Clickable interactive chips (`[✓ file_name]  [✓ content]  [✓ summary]  [✗ file_size]`) directly above the table/document to hide/show columns in both views.
-  - **Bulk Column Toggles**: 1-click `Select All` and `Deselect All` buttons for rapid column subsetting.
-  - **LLM-Assisted Column Referencing**: Automatically detect and highlight active table columns within prompt templates, providing 1-click chip insertion (`{column_name}`).
-  - **Pixeltable Projection & Temporary Views**: Utilize Pixeltable's declarative view engine (`pxt.create_view`) and zero-memory column projection filters to render custom visible column subsets on demand without table duplication.
 - [ ] **Structured Column Name Prefixes & Visual Schema Grouping (`RES-19`)**
   - **Primary Prefix Convention**:
     - `I_` (or `i_`): **Imported / Source Columns** (e.g. `I_file_name`, `I_file_path`, `I_modality`, `I_file_size`, `I_content`, `I_created_at`, `I_rel_path`). Generated by the directory scanner and file parser during table creation.

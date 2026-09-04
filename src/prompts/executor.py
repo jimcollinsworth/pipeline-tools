@@ -29,6 +29,12 @@ import json
 from typing import List, Dict, Any, Optional, Tuple
 from src.core.config import get_settings, sanitize_identifier
 from src.core.llm_service import LLMService
+from src.core.exceptions import (
+    LLMQuotaExceededError,
+    LLMAuthError,
+    LLMServiceUnavailableError,
+    LLMExecutionCancelledError,
+)
 
 try:
     import pixeltable as pxt
@@ -200,6 +206,23 @@ def build_prompt_expr(template: str, table: Any) -> Any:
 
 
 class PromptExecutor:
+    _cancel_requested: bool = False
+
+    @classmethod
+    def cancel_execution(cls) -> None:
+        """Set cancellation flag to halt ongoing batch loops on the next row."""
+        cls._cancel_requested = True
+
+    @classmethod
+    def reset_cancellation(cls) -> None:
+        """Reset cancellation flag before starting a new run."""
+        cls._cancel_requested = False
+
+    @classmethod
+    def is_cancelled(cls) -> bool:
+        """Check whether cancellation was requested."""
+        return cls._cancel_requested
+
     @staticmethod
     def format_prompt(template: str, row: Dict[str, Any]) -> str:
         """Replace {column_name} variables in prompt template with row values."""
@@ -217,6 +240,7 @@ class PromptExecutor:
                         enable_vision: bool = False, dir_name: Optional[str] = None,
                         progress_callback: Optional[Any] = None) -> List[Dict[str, Any]]:
         """Run prompt test against 1 to N sample rows from table with multimodal and JSON auto-split support."""
+        cls.reset_cancellation()
         effective_dir = dir_name or table_dir or "default"
         full_table_path = DBManager.resolve_table_path(effective_dir, table_name or "raw_assets")
         table = pxt.get_table(full_table_path)
@@ -232,6 +256,9 @@ class PromptExecutor:
         results = []
 
         for idx, row in enumerate(records):
+            if cls.is_cancelled():
+                break
+
             file_name = row.get("file_name", f"Row {idx + 1}")
             if progress_callback:
                 progress_callback(idx + 1, total, f"[{provider}] Evaluating sample {idx + 1}/{total}: {file_name}")
@@ -241,14 +268,27 @@ class PromptExecutor:
             media_path = get_row_media_path(row, enable_vision=enable_vision)
 
             # Call unified LLM service with multimodal & JSON mode
-            output = LLMService.generate(
-                provider=provider,
-                model=model,
-                prompt=prompt,
-                system=system_prompt,
-                media_path=media_path,
-                json_mode=auto_split
-            )
+            try:
+                output = LLMService.generate(
+                    provider=provider,
+                    model=model,
+                    prompt=prompt,
+                    system=system_prompt,
+                    media_path=media_path,
+                    json_mode=auto_split
+                )
+            except (LLMQuotaExceededError, LLMAuthError, LLMServiceUnavailableError) as fatal_err:
+                # Fatal rate-limit, quota exhaustion, or auth error: break immediately!
+                if not results:
+                    raise fatal_err
+                break
+            except Exception as e:
+                err_str = str(e)
+                if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str:
+                    if not results:
+                        raise LLMQuotaExceededError(err_str)
+                    break
+                output = f"[Generation error: {err_str}]"
 
             # Extract latency & throughput telemetry
             last_telem = LLMService.get_last_telemetry()
@@ -330,6 +370,8 @@ class PromptExecutor:
         effective_mode = write_mode or mode or "replace"
         effective_auto_split = auto_split_json if auto_split_json is not None else auto_split
 
+        cls.reset_cancellation()
+
         full_table_path = DBManager.resolve_table_path(effective_dir, effective_tbl)
         table = pxt.get_table(full_table_path)
         total_rows = table.count()
@@ -405,18 +447,34 @@ class PromptExecutor:
                 total = len(records)
                 all_parsed_rows = []
                 cols_type_map: Dict[str, Any] = {}
+                abort_reason = None
 
                 for idx, row in enumerate(records):
+                    if cls.is_cancelled():
+                        abort_reason = "Execution cancelled by user."
+                        break
+
                     file_name = row.get("file_name", f"Row {idx + 1}")
                     if progress_callback:
                         progress_callback(idx + 1, total, f"[{provider}] Generating JSON {idx + 1}/{total}: {file_name}")
 
                     prompt = cls.format_prompt(prompt_template, row)
                     media_p = get_row_media_path(row, enable_vision=enable_vision)
-                    res = LLMService.generate(
-                        provider=provider, model=model, prompt=prompt,
-                        system=system_prompt, media_path=media_p, json_mode=True
-                    )
+                    try:
+                        res = LLMService.generate(
+                            provider=provider, model=model, prompt=prompt,
+                            system=system_prompt, media_path=media_p, json_mode=True
+                        )
+                    except (LLMQuotaExceededError, LLMAuthError, LLMServiceUnavailableError) as fatal_err:
+                        abort_reason = str(fatal_err)
+                        break
+                    except Exception as row_err:
+                        err_str = str(row_err)
+                        if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str:
+                            abort_reason = f"Quota exceeded (429): {err_str}"
+                            break
+                        res = f'{{"error": "{err_str}"}}'
+
                     parsed = extract_json_payload(res) or {"llm_output": res}
                     all_parsed_rows.append((row["id"], parsed))
                     for k, v in parsed.items():
@@ -437,6 +495,28 @@ class PromptExecutor:
                         table.update(update_dict, where=(table.id == row_id))
                         updated_count += 1
                 total_rows = updated_count
+
+                if abort_reason and updated_count == 0:
+                    return {
+                        "status": "error",
+                        "message": f"Execution halted: {abort_reason}",
+                        "rows_processed": 0,
+                        "columns": []
+                    }
+                elif abort_reason and updated_count > 0:
+                    cols_summary = ", ".join(f"`{c}`" for c in sorted(created_columns))
+                    DBManager.record_operation(
+                        dir_name=effective_dir,
+                        table_name=effective_tbl,
+                        op_data={"action": "add_columns", "columns": list(created_columns), "rows_updated": total_rows}
+                    )
+                    return {
+                        "status": "warning",
+                        "message": f"Batch halted after {updated_count}/{total} rows: {abort_reason}. Saved {len(created_columns)} columns: {cols_summary}",
+                        "count": total_rows,
+                        "rows_processed": total_rows,
+                        "columns": list(created_columns)
+                    }
 
             cols_summary = ", ".join(f"`{c}`" for c in sorted(created_columns))
             DBManager.record_operation(
@@ -495,21 +575,59 @@ class PromptExecutor:
                     table.add_column(**{safe_col: pxt.String})
 
                 updated_count = 0
+                abort_reason = None
                 for idx, row in enumerate(records):
+                    if cls.is_cancelled():
+                        abort_reason = "Execution cancelled by user."
+                        break
+
                     file_name = row.get("file_name", f"Row {idx + 1}")
                     if progress_callback:
                         progress_callback(idx + 1, total, f"[{provider}] Processing row {idx + 1}/{total}: {file_name}")
                     prompt = cls.format_prompt(prompt_template, row)
                     media_p = get_row_media_path(row, enable_vision=enable_vision)
-                    res = LLMService.generate(
-                        provider=provider, model=model, prompt=prompt,
-                        system=system_prompt, media_path=media_p, json_mode=False
-                    )
+                    try:
+                        res = LLMService.generate(
+                            provider=provider, model=model, prompt=prompt,
+                            system=system_prompt, media_path=media_p, json_mode=False
+                        )
+                    except (LLMQuotaExceededError, LLMAuthError, LLMServiceUnavailableError) as fatal_err:
+                        abort_reason = str(fatal_err)
+                        break
+                    except Exception as row_err:
+                        err_str = str(row_err)
+                        if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str:
+                            abort_reason = f"Quota exceeded (429): {err_str}"
+                            break
+                        res = f"[Error: {err_str}]"
+
                     existing_val = str(row.get(safe_col, "")) if row.get(safe_col) is not None else ""
                     new_val = f"{existing_val}\n\n{res}" if (effective_mode == "append" and existing_val) else res
                     table.update({safe_col: new_val}, where=(table.id == row["id"]))
                     updated_count += 1
                 total_rows = updated_count
+
+                if abort_reason and updated_count == 0:
+                    return {
+                        "status": "error",
+                        "message": f"Execution halted: {abort_reason}",
+                        "rows_processed": 0,
+                        "column": safe_col
+                    }
+                elif abort_reason and updated_count > 0:
+                    DBManager.record_operation(
+                        dir_name=effective_dir,
+                        table_name=effective_tbl,
+                        op_data={"action": "single_column", "column": safe_col, "rows_updated": total_rows}
+                    )
+                    note = f" (Column name formatted as '{safe_col}')" if safe_col != target_column else ""
+                    return {
+                        "status": "warning",
+                        "message": f"Batch halted after {updated_count}/{total} rows: {abort_reason}. Saved {updated_count} rows to column '{safe_col}'{note}.",
+                        "count": total_rows,
+                        "rows_processed": total_rows,
+                        "column": safe_col
+                    }
 
             note = f" (Column name formatted as '{safe_col}')" if safe_col != target_column else ""
             DBManager.record_operation(

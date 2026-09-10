@@ -1,3 +1,14 @@
+---
+title: Pipeline Tools
+emoji: 🚀
+colorFrom: blue
+colorTo: gray
+sdk: gradio
+sdk_version: 6.26.0
+app_file: app.py
+pinned: false
+---
+
 # Pipeline Tools v1.1: Multimodal Ingestion, Prompt Workbench & Export Engine
 
 A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and **Gradio**. Ingest directories of documents, images, audio, and video; test and iterate on LLM extraction/summarization prompts on sample rows; execute scalable batch runs with automatic dependency caching; and export enriched metadata to per-row sidecars (`_meta.md`), CSVs, and synthesized Markdown reports.

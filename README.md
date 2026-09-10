@@ -137,10 +137,12 @@ Open your browser at `http://127.0.0.1:7860`.
   - Hugging Face model hub & Ultralytics YOLO vision classification engines (e.g. WikiArt 27-movement classifier).
   - Mobile / tablet responsive UI design (`@media (max-width: 768px)`).
 - [ ] **Phase 5: Dynamic Ingestion Context, Skills Integration & Document Reader**
-  - Stateful dynamic context accumulation across multi-row ingestion (`domain-table-ingestion-context.md`).
-  - Project skills integration with in-prompt `/` slash command discovery from `.agents/skills/`.
-  - Single-record rich Markdown Document Reader with collapsible sections, theme selectors, and embedded Mermaid diagrams.
-  - Touch-friendly visual column pill toggles and LLM-assisted prompt chip insertion.
+  - [x] Embedded PostgreSQL lock self-healing (`DBManager.heal_postgres_locks`) and stale socket/PID recovery.
+  - [x] Stateful dynamic context accumulation across multi-row ingestion & knowledge export (`RES-12`).
+  - [x] Project skills integration with in-prompt `/` slash command discovery from `.agents/skills/` (`RES-13`).
+  - [ ] Single-record rich Markdown Document Reader with collapsible sections, theme selectors, and embedded Mermaid diagrams (`RES-14`).
+  - [ ] Touch-friendly visual column pill toggles and LLM-assisted prompt chip insertion (`RES-15`).
+  - Expanded automated test suite to 44 tests (`44 Passed, 0 Failed, 0 Errors`).
 
 ---
 

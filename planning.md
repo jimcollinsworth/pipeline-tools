@@ -120,21 +120,22 @@ flowchart TD
   - Architecture options for remote mobile/tablet client access to Pipeline Tools.
   - Mitigate embedded PostgreSQL mobile limitation by deploying the Gradio + Pixeltable server to cloud/container hosts with persistent volumes (or remote managed Postgres) while serving a progressive web UI to mobile clients.
   - Cloud deployment options: Hugging Face Spaces with persistent storage, Docker container on AWS/GCP/Fly.io, or desktop LAN host with secure tunnel.
-- [ ] **Responsive Mobile & Tablet UI Design**
+- [ ] **Responsive Mobile & Tablet UI Design (`RES-10`)**
   - Implement mobile-friendly viewport breakpoints (`@media (max-width: 768px)`).
   - Single-column stacked layouts, touch-friendly tap targets ($\ge 44\text{px}$), and adaptive table views (horizontal scroll cards / compact summary cards) for phone and tablet screens.
+  - **Automated Viewport Verification**: Integrated global `responsive-snapshots` skill (`tools/screenshots.py` pattern from `jimcollinsworth.github.io`) capturing 8 viewports (Phone, Tablet, Laptop, Desktop) in light/dark mode to verify UI responsiveness and generate walkthrough artifacts.
 
-### Phase 5: Dynamic Ingestion Context, Skills Integration, Document Reader & Newspaper UX (Planned)
-- [ ] **Dynamic Ingestion Context & State Accumulation (`RES-12`)**
-  - **Dynamic Cross-Row Memory**: Inject accumulated context into multi-row batch ingestion and prompt pipelines so the system 'learns' as it ingests each row.
-  - **Deduplication & Entity Normalization**: Leverage previous row entity spellings, discovered taxonomies, and cross-document relationships to resolve entity ambiguities and maintain uniform naming.
-  - **Learned Knowledge Export**: Upon batch completion, write the final accumulated dataset context to `exports/{domain}-{table}-ingestion-context.md` containing global summaries, entity registers, and discovered themes.
-  - **Context Structure Standards**: Evaluate structured Markdown knowledge registers, JSON-LD / schema.org triples, and hierarchical memory banks.
-  - **Pixeltable Integration**: Leverage Pixeltable table metadata attributes and persistent state views to version and retain learned context alongside dataset lineage.
-- [ ] **Project Skills Integration & Prompt `/` Slash Commands (`RES-13`)**
-  - **In-Prompt Slash Command Discovery**: Type `/` in prompt input textareas to trigger intelligent auto-completion of skills discovered from `.agents/skills/`.
-  - **Dynamic Prompt Decoration**: Automatically parse and inject `SKILL.md` rules, tool definitions, and domain instructions directly into active prompt templates.
-  - **Pixeltable Tool Registry**: Map project skills to declarative Pixeltable User Defined Functions (`@pxt.udf`) and tool calling pipelines for seamless row-level evaluation.
+
+### Phase 5: Dynamic Ingestion Context, Skills Integration, Document Reader & Newspaper UX (In Progress)
+- [x] **Dynamic Ingestion Context & State Accumulation (`RES-12`)**
+  - **Dynamic Cross-Row Memory**: Injected accumulated context into multi-row batch ingestion and prompt pipelines so the system 'learns' as it ingests each row.
+  - **Deduplication & Entity Normalization**: Leveraged previous row entity spellings, discovered taxonomies, and cross-document relationships to resolve entity ambiguities and maintain uniform naming (`IngestionContext.normalize_entity`).
+  - **Learned Knowledge Export**: Upon batch completion, automatically writes the final accumulated dataset context to `exports/{domain}-{table}-ingestion-context.md` containing global summaries, entity registers, and discovered themes with YAML frontmatter and JSON-LD schema.
+  - **Pixeltable Integration**: Integrated context metadata and export file lineage directly into `DBManager.record_operation` and batch return structures.
+- [x] **Project Skills Integration & Prompt `/` Slash Commands (`RES-13`)**
+  - **In-Prompt Slash Command Discovery**: Scans and parses `/` slash commands (e.g., `/pixeltable`, `/postgresql`, `/gradio`, `/hf-gradio`) in prompt templates and system prompts.
+  - **Dynamic Prompt Decoration**: Discovers skills from `.agents/skills/` via `SkillsRegistry`, automatically parsing `SKILL.md` rules and injecting domain instructions directly into active LLM prompts.
+  - **Automated Verification**: Added comprehensive unit tests in `tests/test_app.py` verifying skills discovery, slash command extraction, and instruction injection.
 - [x] **Document UX & Newspaper / Magazine Layout Engine (`RES-14`)**
   - **Single-Record Document Reader**: Dedicated rich Markdown reader view displaying one record at a time with clean visual styling, custom border colors, header-level collapsible/expandable accordions, styled rollup lists, embedded Mermaid diagrams, interactive charts, and full-resolution media.
   - **Interactive Navigation**: Instant Previous / Next record navigation buttons with hotkeys for rapid qualitative inspection.
@@ -216,16 +217,19 @@ flowchart TD
 | RES-04 | JSON Auto-Splitting in Table Insertion | Complete | Extract JSON payloads across markdown fences/raw brackets and dynamically create Pixeltable columns via infer_pixeltable_type. |
 | RES-05 | UI Layout & CSS Stability | Complete | Enforced max-width 95% and tabitem full-width rules to prevent Gradio tab shifting; updated launch config to Gradio 6.0 standards. |
 | RES-06 | Tool Calling & MCP Integration | Open | Single LLM call per row with tool calling support for vision and audio functions. Evaluate MCP integration for efficiency. |
-| RES-07 | Playwright vs. Chrome DevTools Testing | Open | Evaluated interactive Chrome DevTools MCP vs headless Playwright for web E2E testing. Deferred Playwright until automated browser regression suite is needed. |
+| RES-07 | Playwright vs. Chrome DevTools Testing | Complete | Adopted Playwright for responsive headless Chromium end-to-end browser integration testing with zero console error enforcement, ephemeral socket isolation, and value input/output verification. |
 | RES-08 | Hugging Face & YOLO Vision Model Architecture | Open | Planned integration of Hugging Face Hub / Ultralytics vision classifiers (e.g. WikiArt 27-movement classifier) with output auto-splitting into Pixeltable table columns. |
-| RES-09 | Mobile / Tablet Architecture & Cloud Serving | Open | Overcome embedded PostgreSQL mobile restriction by hosting Gradio + Pixeltable on cloud containers / remote server with persistent volume, serving responsive PWA to mobile devices. |
+| RES-09 | Mobile / Tablet Architecture & Cloud Serving | Open | Overcome embedded PostgreSQL mobile restriction by hosting Gradio + Pixeltable on cloud containers / remote server with persistent volume (tracked in Issue #2: Hugging Face Spaces & website embed). |
 | RES-10 | Responsive Mobile / Tablet Design | Open | Adapt Gradio layout with mobile CSS breakpoints, stacked columns, touch-friendly button targets (>=44px), and compact card table views. |
 | RES-11 | Pixeltable Lineage & Simple 'Undo' Architecture | Open | Define mutating operation versioning in Pixeltable, design 1-click 'Undo Last Operation' button (column drop / version rollback), and table revision timeline. |
-| RES-12 | Dynamic Ingestion Context & State Accumulation | Open | Stateful cross-row context accumulator during batch ingestion to enable entity deduplication and synthetic knowledge export (`domain-table-ingestion-context.md`). |
-| RES-13 | Project Skills Integration & Prompt `/` Commands | Open | Dynamic discovery of `.agents/skills/` definitions triggered by `/` prompt slash commands with automatic instruction injection and Pixeltable UDF mapping. |
-| RES-14 | Document UX & Newspaper / Magazine Layouts | Open | Single-record rich Markdown reader with collapsible sections, theme selectors, embedded media/Mermaid, and editorial newspaper-style multi-record feeds. |
+| RES-12 | Dynamic Ingestion Context & State Accumulation | Complete | Stateful cross-row context accumulator during batch ingestion to enable entity deduplication and synthetic knowledge export (`domain-table-ingestion-context.md`). |
+| RES-13 | Project Skills Integration & Prompt `/` Commands | Complete | Dynamic discovery of `.agents/skills/` definitions triggered by `/` prompt slash commands with automatic instruction injection and Pixeltable UDF mapping. |
+| RES-14 | Document UX & Newspaper / Magazine Layouts | Complete | Single-record rich Markdown reader with collapsible sections, theme selectors, embedded media/Mermaid, and editorial newspaper-style multi-record feeds. |
 | RES-15 | Visual Touch-Based Column Selection & Views | Open | Direct visual pill column toggling, LLM-assisted prompt chip insertion, and Pixeltable declarative filtered view projections. |
 | RES-16 | Cross-Platform Packaging & Distribution (Pip / Standalone / uvx) | Open | Evaluate PyPI/`uv tool`, PyInstaller desktop standalone, Docker containerization, and Tauri wrapper to bundle Python + embedded PostgreSQL cleanly across OSes. |
 | RES-17 | Remote Hosting, Mobile/Tablet Companion & Local-Connect Tunnel | Open | Overcome embedded PostgreSQL mobile limitation via Antigravity-style desktop local-connect (Tailscale / Cloudflare Tunnel / Gradio Share); tablet/phone acts as review dashboard and direct camera/media ingestion source. |
 | RES-18 | App Publication, Community Launch & Developer Blog Strategy | Open | Multi-channel launch plan: closed beta test user cohort, PyPI/`pip` packaging with `uvx` support, Show HN submission, X/Twitter demo thread, and comprehensive technical deep-dive blog post. |
 | RES-19 | Column Name Prefixes & Visual Schema Grouping | Open | Standardize on column prefixes (I_ imported, C_ calculated/LLM, U_ user input) with UI badge tabs, case sensitivity handling, and template placeholder auto-aliasing. |
+| RES-20 | GitHub Actions CI & Automated Server-Side Testing | Complete | Automated CI pipeline (`.github/workflows/test.yml`) executing uv toolchain, Playwright Chromium, and 51-test suite on all branch pushes and PRs. |
+| RES-21 | Real-time Dynamic Ingestion Context Visualization | Open | Live context inspector and state stream in Data Enhancement tab showing dynamic context evolution row-by-row (tracked in GitHub Issue #3). |
+

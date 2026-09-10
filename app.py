@@ -1,5 +1,10 @@
 import os
 import sys
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
 import string
 import signal
 import atexit
@@ -282,7 +287,7 @@ document.addEventListener("DOMContentLoaded", () => {
 """
 
 def create_app():
-    with gr.Blocks(title="Pipeline Tools v1.1", fill_width=True, head=custom_head) as demo:
+    with gr.Blocks(title="Pipeline Tools v1.1", fill_width=True) as demo:
         gr.Markdown(
             """
             <div class="app-header">
@@ -352,7 +357,8 @@ if __name__ == "__main__":
             show_error=True,
             allowed_paths=allowed_system_paths,
             theme=clean_theme,
-            css=custom_css
+            css=custom_css,
+            head=custom_head
         )
     except KeyboardInterrupt:
         clean_exit()

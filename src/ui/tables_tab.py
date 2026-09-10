@@ -31,7 +31,7 @@ import gradio as gr
 import pandas as pd
 from typing import List
 from pathlib import Path
-from src.core.config import get_settings, update_last_entry
+from src.core.config import get_settings, update_last_entry, get_domain_system_prompt
 from src.db.manager import DBManager
 from src.core.llm_service import LLMService
 from src.export.exporter import MarkdownExporter
@@ -171,12 +171,12 @@ def render_tables_tab(tab=None):
                 "💡 **Available Column Placeholders:** *Load a table above to see available columns.*"
             )
 
-            system_prompt_input = gr.Textbox(
-                label="System Prompt",
-                value=MarkdownExporter.PRESETS["Entity & Keyword Intelligence"]["system_prompt"],
-                lines=2,
-                placeholder="Enter system instructions or leave empty for default concise response..."
-            )
+            def format_tables_prompt_info(domain_name: str) -> str:
+                prompt_text = get_domain_system_prompt(domain_name)
+                snippet = (prompt_text[:120] + "...") if len(prompt_text) > 120 else prompt_text
+                return f"💡 **Active System Prompt (Domain: `{domain_name}`):** *\"{snippet}\"* — *(Inherited from Settings & Models tab)*"
+
+            domain_prompt_info = gr.Markdown(format_tables_prompt_info(initial_domain))
 
             export_prompt_input = gr.Textbox(
                 label="User Synthesis Prompt Template",
@@ -210,9 +210,10 @@ def render_tables_tab(tab=None):
         return res["stats_text"], gr.update(headers=res["columns"], datatype=res["datatypes"], value=res["data"]), res["placeholders_text"]
 
     def on_domain_change(domain):
-        """Update table dropdown choices when domain selection changes."""
+        """Update table dropdown choices and active system prompt info when domain selection changes."""
         res = TablesController.handle_domain_change(domain)
-        return gr.update(choices=res["choices"], value=res["value"])
+        dom = domain.strip() if domain else "default"
+        return gr.update(choices=res["choices"], value=res["value"]), format_tables_prompt_info(dom)
 
     def on_export_provider_change(provider):
         models = LLMService.list_models_for_provider(provider)
@@ -223,9 +224,9 @@ def render_tables_tab(tab=None):
     def load_preset(preset_key):
         preset = MarkdownExporter.PRESETS.get(preset_key)
         if not preset:
-            return gr.update(), gr.update(), gr.update()
+            return gr.update(), gr.update()
         strat = "🗂️ Per-Row Sidecars (_meta.md)" if preset.get("mode") == "sidecar" else "📄 Single Document Synthesis"
-        return preset["system_prompt"], preset["prompt_template"], strat
+        return preset["prompt_template"], strat
 
     def on_select_table_row(evt: gr.SelectData, current_df, domain, table_name):
         """Populate and display the Media Inspector drawer when a table row is clicked without re-querying the database."""
@@ -245,9 +246,10 @@ def render_tables_tab(tab=None):
 
     def on_generate_export(
         domain, table_name, provider, model,
-        max_rows, system_prompt, prompt_template, export_strategy, custom_filename,
+        max_rows, prompt_template, export_strategy, custom_filename,
         progress=gr.Progress(track_tqdm=False)
     ):
+        system_prompt = get_domain_system_prompt(domain)
         if not domain or not table_name:
             gr.Warning("Please select a domain and table first.")
             yield "### ⚠️ Missing Target Table\nPlease select a Domain and Table above.", "", None
@@ -337,7 +339,7 @@ def render_tables_tab(tab=None):
     domain_dropdown.change(
         fn=on_domain_change,
         inputs=[domain_dropdown],
-        outputs=[table_dropdown]
+        outputs=[table_dropdown, domain_prompt_info]
     )
 
     # Rule 2: Child dropdown (table_dropdown) sequentially loads the table data once.
@@ -382,31 +384,31 @@ def render_tables_tab(tab=None):
     preset_newspaper_btn.click(
         fn=lambda: load_preset("Newspaper Story & Embedded Photo"),
         inputs=[],
-        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
+        outputs=[export_prompt_input, export_strategy_radio]
     )
 
     preset_entity_btn.click(
         fn=lambda: load_preset("Entity & Keyword Intelligence"),
         inputs=[],
-        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
+        outputs=[export_prompt_input, export_strategy_radio]
     )
 
     preset_visual_btn.click(
         fn=lambda: load_preset("Visual & Multimodal Scene Analysis"),
         inputs=[],
-        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
+        outputs=[export_prompt_input, export_strategy_radio]
     )
 
     preset_summary_btn.click(
         fn=lambda: load_preset("Thematic Summary & Executive Brief"),
         inputs=[],
-        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
+        outputs=[export_prompt_input, export_strategy_radio]
     )
 
     preset_catalog_btn.click(
         fn=lambda: load_preset("Structured Media Catalog Dossier"),
         inputs=[],
-        outputs=[system_prompt_input, export_prompt_input, export_strategy_radio]
+        outputs=[export_prompt_input, export_strategy_radio]
     )
 
     generate_export_btn.click(
@@ -417,7 +419,6 @@ def render_tables_tab(tab=None):
             export_provider_dropdown,
             export_model_dropdown,
             export_rows_slider,
-            system_prompt_input,
             export_prompt_input,
             export_strategy_radio,
             custom_filename_input
@@ -525,11 +526,12 @@ def render_tables_tab(tab=None):
             
             return (
                 gr.update(choices=latest_domains, value=dom),
-                gr.update(choices=latest_tables, value=tbl)
+                gr.update(choices=latest_tables, value=tbl),
+                format_tables_prompt_info(dom)
             )
 
         tab.select(
             fn=on_tab_select,
             inputs=[domain_dropdown, table_dropdown],
-            outputs=[domain_dropdown, table_dropdown]
+            outputs=[domain_dropdown, table_dropdown, domain_prompt_info]
         )

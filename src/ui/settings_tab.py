@@ -1,11 +1,16 @@
 import gradio as gr
 import pandas as pd
-from src.core.config import get_settings, save_settings, Settings
+from src.core.config import get_settings, save_settings, Settings, get_domain_system_prompt, set_domain_system_prompt
 from src.core.ollama_client import OllamaClient
 from src.core.gemini_client import GeminiClient
+from src.db.manager import DBManager
 
 def render_settings_tab(tab=None):
     settings = get_settings()
+    domains = DBManager.list_dirs() or ["default"]
+    if "default" not in domains:
+        domains.insert(0, "default")
+    initial_domain = settings.last_domain if settings.last_domain in domains else domains[0]
 
     with gr.Column():
         gr.Markdown("### ⚙️ Engine Settings & Multi-Provider LLM Configuration")
@@ -110,6 +115,31 @@ def render_settings_tab(tab=None):
                     allow_custom_value=True
                 )
 
+        gr.Markdown("---")
+        with gr.Group(elem_classes=["status-panel"]):
+            gr.Markdown("#### 🧠 Domain System Prompt Configuration")
+            gr.Markdown(
+                "Configure and maintain active system instructions and personas on a per-domain basis. "
+                "Data Enhancement and Export operations in any domain automatically inherit its configured system prompt."
+            )
+            with gr.Row():
+                domain_prompt_selector = gr.Dropdown(
+                    label="Domain / Directory",
+                    choices=domains,
+                    value=initial_domain,
+                    allow_custom_value=True,
+                    scale=2
+                )
+                save_domain_prompt_btn = gr.Button("💾 Save Domain Prompt", variant="primary", scale=1)
+
+            domain_system_prompt_input = gr.Textbox(
+                label="Active Domain System Prompt",
+                value=get_domain_system_prompt(initial_domain),
+                lines=4,
+                placeholder="Enter domain system instructions..."
+            )
+            domain_prompt_status = gr.Markdown("")
+
     # Event handlers
     def test_and_fetch_ollama(host):
         client = OllamaClient(host=host)
@@ -158,9 +188,34 @@ def render_settings_tab(tab=None):
             gr.Error(msg)
             return msg, gr.update(), gr.update()
 
+    def on_domain_prompt_change(selected_domain):
+        dom = selected_domain.strip() if selected_domain and selected_domain.strip() else "default"
+        return get_domain_system_prompt(dom), ""
 
-    def on_save_settings(host, def_ollama, gemini_key, def_gemini, def_provider, pt_dir, exp_dir):
+    domain_prompt_selector.change(
+        fn=on_domain_prompt_change,
+        inputs=[domain_prompt_selector],
+        outputs=[domain_system_prompt_input, domain_prompt_status]
+    )
+
+    def on_save_domain_prompt(domain, prompt):
+        dom = domain.strip() if domain and domain.strip() else "default"
+        set_domain_system_prompt(dom, prompt)
+        gr.Info(f"System prompt saved for domain '{dom}'!")
+        return f"✅ **System prompt saved for domain `{dom}`!**"
+
+    save_domain_prompt_btn.click(
+        fn=on_save_domain_prompt,
+        inputs=[domain_prompt_selector, domain_system_prompt_input],
+        outputs=[domain_prompt_status]
+    )
+
+    def on_save_settings(host, def_ollama, gemini_key, def_gemini, def_provider, pt_dir, exp_dir, dom_sel, dom_prompt):
         curr = get_settings()
+        dom = dom_sel.strip() if dom_sel and dom_sel.strip() else "default"
+        curr_prompts = dict(curr.domain_system_prompts or {})
+        if dom_prompt and dom_prompt.strip():
+            curr_prompts[dom] = dom_prompt.strip()
         updated = Settings(
             ollama_host=host.strip(),
             default_ollama_model=def_ollama.strip() if def_ollama else "llama3.2",
@@ -172,8 +227,9 @@ def render_settings_tab(tab=None):
             last_provider=def_provider,
             last_domain=curr.last_domain,
             last_table=curr.last_table,
-            last_system_prompt=curr.last_system_prompt,
-            last_user_prompt=curr.last_user_prompt
+            last_system_prompt=dom_prompt.strip() if dom_prompt and dom_prompt.strip() else curr.last_system_prompt,
+            last_user_prompt=curr.last_user_prompt,
+            domain_system_prompts=curr_prompts
         )
         save_settings(updated)
         gr.Info("Settings saved successfully!")
@@ -200,7 +256,23 @@ def render_settings_tab(tab=None):
             default_gemini_dropdown,
             default_provider_radio,
             pixeltable_dir_input,
-            export_dir_input
+            export_dir_input,
+            domain_prompt_selector,
+            domain_system_prompt_input
         ],
         outputs=[save_status_box]
     )
+
+    if tab is not None:
+        def on_settings_tab_select(current_dom):
+            latest_dirs = DBManager.list_dirs() or ["default"]
+            if "default" not in latest_dirs:
+                latest_dirs.insert(0, "default")
+            selected = current_dom if current_dom in latest_dirs else latest_dirs[0]
+            return gr.update(choices=latest_dirs, value=selected), get_domain_system_prompt(selected)
+
+        tab.select(
+            fn=on_settings_tab_select,
+            inputs=[domain_prompt_selector],
+            outputs=[domain_prompt_selector, domain_system_prompt_input]
+        )

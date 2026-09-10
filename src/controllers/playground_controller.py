@@ -7,7 +7,7 @@ column auto-splitting, and 1-click lineage undo in the Data Enhancement tab.
 
 import os
 from typing import List, Dict, Any, Optional, Callable, Tuple
-from src.core.config import get_settings, update_last_entry
+from src.core.config import get_settings, update_last_entry, get_domain_system_prompt
 from src.core.llm_service import LLMService
 from src.db.manager import DBManager
 from src.prompts.executor import PromptExecutor
@@ -50,8 +50,8 @@ class PlaygroundController:
         }
 
     @staticmethod
-    def load_table_preview(domain: str, table_name: str, lightweight: bool = True, limit: int = 10) -> Dict[str, Any]:
-        """Fetch table preview, format stats markdown, and generate column placeholders."""
+    def load_table_preview(domain: str, table_name: str, lightweight: bool = True, limit: int = 10, target_sample_count: int = 2) -> Dict[str, Any]:
+        """Fetch table preview, format stats markdown, and generate column placeholders with target row highlights."""
         if not domain or not table_name:
             return {
                 "status": "error",
@@ -76,22 +76,31 @@ class PlaygroundController:
                 "placeholders_text": "💡 **Available Column Placeholders:** *Error loading table.*"
             }
 
-        cols = res.get("columns", [])
-        datatypes = res.get("datatypes", ["str"] * len(cols))
-        data = res.get("data", [])
-        total = res.get("total_rows", len(data))
+        raw_cols = res.get("columns", [])
+        raw_data = res.get("data", [])
+        datatypes = res.get("datatypes", ["str"] * len(raw_cols))
+        total = res.get("total_rows", len(raw_data))
         mode_label = "⚡ Lightweight" if lightweight else "🔍 Full Media"
 
-        info_text = f"✅ **Table `{res.get('domain', clean_dir)}.{res.get('table', clean_tbl)}`** ({mode_label}) — Total Rows: **{total}** (showing first {len(data)})"
-        cols_pills = ", ".join([f"`{{{c}}}`" for c in cols if c != "media_preview"]) if cols else "*None*"
+        # Add Row Target column to clearly show rows targeted for testing
+        cols = ["Target"] + raw_cols
+        enriched_datatypes = ["str"] + datatypes
+        enriched_data = []
+        for idx, row in enumerate(raw_data):
+            target_badge = f"🎯 Test Row {idx + 1}" if idx < target_sample_count else "—"
+            enriched_data.append([target_badge] + list(row))
+
+        info_text = f"✅ **Table `{res.get('domain', clean_dir)}.{res.get('table', clean_tbl)}`** ({mode_label}) — Total Rows: **{total}** (showing first {len(raw_data)}, top {min(target_sample_count, len(raw_data))} targeted for sample testing)"
+        cols_pills = ", ".join([f"`{{{c}}}`" for c in raw_cols if c != "media_preview"]) if raw_cols else "*None*"
         cols_text = f"💡 **Available Column Placeholders:** {cols_pills} | Standard: `{{file_name}}`, `{{content}}`, `{{rel_path}}`, `{{modality}}`, `{{file_size}}`"
 
         return {
             "status": "success",
             "stats_text": info_text,
             "columns": cols,
-            "datatypes": datatypes,
-            "data": data,
+            "raw_columns": raw_cols,
+            "datatypes": enriched_datatypes,
+            "data": enriched_data,
             "placeholders_text": cols_text,
             "total_rows": total
         }
@@ -102,8 +111,8 @@ class PlaygroundController:
         table_name: str,
         provider: str,
         model: str,
-        system_prompt: str,
-        prompt_template: str,
+        system_prompt: Optional[str] = None,
+        prompt_template: str = "",
         sample_count: int = 1,
         output_mode: str = "⚡ Auto-Split JSON Keys into Columns",
         progress_callback: Optional[Callable[[float, str], None]] = None
@@ -127,50 +136,70 @@ class PlaygroundController:
 
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
+        resolved_sys_prompt = system_prompt.strip() if system_prompt and system_prompt.strip() else get_domain_system_prompt(clean_dir)
+        is_auto_split = (output_mode == "⚡ Auto-Split JSON Keys into Columns")
+
         update_last_entry(
             last_domain=clean_dir,
             last_table=clean_tbl,
             last_provider=provider,
             last_model=model,
-            last_system_prompt=system_prompt,
-            last_prompt_template=prompt_template
+            last_system_prompt=resolved_sys_prompt,
+            last_user_prompt=prompt_template
         )
 
-        res = PromptExecutor.test_sample_prompt(
-            dir_name=clean_dir,
-            table_name=clean_tbl,
-            prompt_template=prompt_template,
-            system_prompt=system_prompt,
-            provider=provider,
-            model=model,
-            limit=int(sample_count),
-            progress_callback=progress_callback
-        )
+        try:
+            results = PromptExecutor.run_sample_test(
+                model=model,
+                prompt_template=prompt_template,
+                system_prompt=resolved_sys_prompt,
+                table_dir=clean_dir,
+                table_name=clean_tbl,
+                provider=provider,
+                sample_count=int(sample_count),
+                auto_split=is_auto_split,
+                progress_callback=progress_callback
+            )
 
-        if res.get("status") == "success":
-            results = res.get("results", [])
-            headers = ["Row ID", "File Name", "Source Snippet", "Rendered Prompt", "Model Output"]
-            rows = []
-            for r in results:
-                rows.append([
-                    str(r.get("row_id", "")),
-                    str(r.get("file_name", "")),
-                    str(r.get("source_snippet", "")),
-                    str(r.get("rendered_prompt", "")),
-                    str(r.get("llm_output", ""))
-                ])
+            if is_auto_split:
+                all_keys = []
+                for r in results:
+                    for k in r.get("extracted_columns", []):
+                        if k not in all_keys:
+                            all_keys.append(k)
+
+                if all_keys:
+                    headers = ["Status", "Row ID", "File Name"] + all_keys
+                    rows = []
+                    for r in results:
+                        parsed = r.get("parsed_json", {})
+                        row_vals = ["🧪 Test Preview", str(r.get("row_id", "")), str(r.get("file_name", ""))] + [str(parsed.get(k, "")) for k in all_keys]
+                        rows.append(row_vals)
+                    return {
+                        "status": "success",
+                        "headers": headers,
+                        "data": rows,
+                        "count": len(rows),
+                        "keys": all_keys
+                    }
+
+            headers = ["Status", "Row ID", "File Name", "Source Snippet", "Rendered Prompt", "Model Output"]
+            rows = [
+                ["🧪 Test Preview", str(r.get("row_id", "")), str(r.get("file_name", "")), str(r.get("source_content", "")), str(r.get("prompt_rendered", "")), str(r.get("llm_output", r.get("model_output", "")))]
+                for r in results
+            ]
             return {
                 "status": "success",
                 "headers": headers,
                 "data": rows,
                 "count": len(rows)
             }
-        else:
+        except Exception as e:
             return {
                 "status": "error",
-                "message": res.get("message", "Error running prompt test"),
+                "message": str(e),
                 "headers": ["Error"],
-                "data": [[res.get("message", "Error running prompt test")]]
+                "data": [[str(e)]]
             }
 
     @staticmethod
@@ -179,10 +208,10 @@ class PlaygroundController:
         table_name: str,
         provider: str,
         model: str,
-        system_prompt: str,
-        prompt_template: str,
-        output_mode: str,
-        target_column: str,
+        system_prompt: Optional[str] = None,
+        prompt_template: str = "",
+        output_mode: str = "⚡ Auto-Split JSON Keys into Columns",
+        target_column: str = "llm_summary",
         write_mode: str = "replace",
         limit_rows: int = 0,
         is_lightweight: bool = True,
@@ -198,50 +227,79 @@ class PlaygroundController:
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
         is_auto_split = (output_mode == "⚡ Auto-Split JSON Keys into Columns")
+        clean_col = target_column.strip() if target_column and target_column.strip() else "llm_summary"
 
-        if not is_auto_split and not target_column.strip():
+        if not is_auto_split and not clean_col:
             return {
                 "status": "error",
                 "message": "⚠️ Please specify a Target Column Name."
             }
+
+        resolved_sys_prompt = system_prompt.strip() if system_prompt and system_prompt.strip() else get_domain_system_prompt(clean_dir)
 
         update_last_entry(
             last_domain=clean_dir,
             last_table=clean_tbl,
             last_provider=provider,
             last_model=model,
-            last_system_prompt=system_prompt,
-            last_prompt_template=prompt_template
+            last_system_prompt=resolved_sys_prompt,
+            last_user_prompt=prompt_template
         )
 
+        limit_val = int(limit_rows) if limit_rows and int(limit_rows) > 0 else None
+
         res = PromptExecutor.apply_prompt_to_table(
-            dir_name=clean_dir,
-            table_name=clean_tbl,
+            model=model.strip(),
             prompt_template=prompt_template,
-            system_prompt=system_prompt,
-            target_column=target_column.strip() if not is_auto_split else "json_extract",
+            system_prompt=resolved_sys_prompt,
+            table_dir=clean_dir,
+            table_name=clean_tbl,
+            target_column=clean_col,
             provider=provider,
-            model=model,
-            write_mode=write_mode,
-            limit=int(limit_rows),
-            auto_split_json=is_auto_split,
+            auto_split=is_auto_split,
+            mode=write_mode,
+            limit=limit_val,
             progress_callback=progress_callback
         )
 
         if res.get("status") == "success":
+            cols_created = res.get("columns", [clean_col])
+            rows_done = res.get("rows_processed", 0)
             status_msg = (
                 f"### ✅ Batch Execution Successful!\n"
                 f"- **Table:** `{clean_dir}.{clean_tbl}`\n"
-                f"- **Rows Enriched:** {res.get('rows_processed', 0)}\n"
-                f"- **Columns Created / Updated:** `{', '.join(res.get('columns_created', [target_column]))}`\n"
+                f"- **Rows Enriched:** {rows_done}\n"
+                f"- **Columns Created / Updated:** `{', '.join(cols_created)}`\n"
                 f"- **Model / Provider:** `{provider}` ({model})"
             )
-            # Fetch fresh preview
-            preview = PlaygroundController.load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
+            # Fetch updated table data with newly created columns highlighted
+            raw_preview = DBManager.get_table_data(clean_dir, clean_tbl, limit=25, lightweight=is_lightweight)
+            raw_cols = raw_preview.get("columns", [])
+            raw_data = raw_preview.get("data", [])
+
+            # Prioritize newly created columns so they appear immediately after row identifier columns
+            lead_cols = [c for c in ["id", "file_name"] if c in raw_cols]
+            created_in_raw = [c for c in cols_created if c in raw_cols and c not in lead_cols]
+            other_cols = [c for c in raw_cols if c not in lead_cols and c not in created_in_raw]
+            ordered_cols = lead_cols + created_in_raw + other_cols
+
+            # Reorder row cells to match ordered_cols
+            col_indices = [raw_cols.index(c) for c in ordered_cols]
+            out_headers = ["Status"] + ordered_cols
+
+            out_rows = []
+            for idx, r in enumerate(raw_data):
+                reordered_row = [r[i] for i in col_indices]
+                status_tag = f"💾 Saved ({idx + 1})" if idx < rows_done else "— (Unchanged)"
+                out_rows.append([status_tag] + reordered_row)
+
             return {
                 "status": "success",
                 "message": status_msg,
-                "preview": preview
+                "output_headers": out_headers,
+                "output_data": out_rows,
+                "columns_created": cols_created,
+                "rows_processed": rows_done
             }
         else:
             return {

@@ -136,3 +136,22 @@ Guidelines to reduce common LLM coding pitfalls, biasing toward caution and simp
   - **NEVER** create additional arbitrary documentation files (such as `walkthrough.md`, `specs.md`, etc.) without explicit user authorization. You may propose new documentation files, but never create them unprompted.
 - **Explain Changes**:
   - Explain why and what you have done whenever changes are made to any file in 1-2 simple, concise sentences.
+
+---
+
+## 🌿 7. Git Branching, Release Versioning & Main Branch Gates
+
+- **Mandatory Branching Workflow**:
+  - Direct commits to `main` are **strictly forbidden**.
+  - All feature implementations, UI changes, and experiments must be developed on `feature/<name>` (or `feat/<name>`) branches.
+  - All bug fixes must be developed on `fix/<name>` (or `bugfix/<name>`) branches.
+- **Explicit Main Branch Push / Merge Gate**:
+  - Pushing to `main` or merging a feature/bug branch into `main` **always requires explicit user authorization**.
+  - Agents may push feature/bug branches to origin for CI verification or PR creation, but must never update `main` without confirmation.
+- **Release Versioning Policy**:
+  - Version numbers in `pyproject.toml` follow Semantic Versioning (`MAJOR.MINOR.PATCH`).
+  - **Patch version** increments with each completed development session / commit cycle (e.g., `1.1.0` -> `1.1.1`).
+  - **Minor / Major versions** increment only upon explicit user request or milestone completion.
+- **Automated CI Requirement**:
+  - All commits pushed to GitHub are automatically validated via GitHub Actions CI (`.github/workflows/test.yml`), which builds the environment and executes the full test suite (`uv run python -m tests`).
+

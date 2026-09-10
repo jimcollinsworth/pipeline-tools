@@ -2,7 +2,7 @@
 title: "Developer Journal & Key Architectural Directives"
 description: "Chronological record of key developer directives, mentoring instructions, retraining notes, architectural decisions, and generalized software engineering lessons."
 created_at: 2026-08-31
-last_updated: 2026-08-31
+last_updated: 2026-09-05
 author: "Jim Collinsworth"
 tags: ["mentoring", "architecture", "testing", "directives", "tdd", "pixeltable", "postgres"]
 ---
@@ -312,5 +312,133 @@ This journal records verbatim developer instructions, architectural directives, 
 4. **Automated Verification**:
    - Full test suite verified: **38 Passed, 0 Failed, 0 Errors**.
 
+---
 
+## 📅 2026-09-05: Embedded PostgreSQL Lock Self-Healing, Dynamic Context Accumulation (RES-12), and Project Skills Discovery (RES-13)
 
+**Context:** The test suite encountered an embedded PostgreSQL lock failure on Windows (`postmaster.pid` surviving an interrupted run with no active process). User requested embedded PostgreSQL lock self-healing, followed by RES-12 and RES-13 in sequence with unit tests, and a comprehensive status report dispatched/archived for Jim Collinsworth.
+
+**Verbatim Instruction:**
+> `add the lock self healing. res-12 and res-13 in sequence with new tests as needed,  and send that status report to me at jimcollinsworth@gmail.com /boost /building-data-apps /gradio /pixeltable /skill-repair`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Embedded PostgreSQL Lock Self-Healing (`DBManager.heal_postgres_locks`)**:
+   - Sweeps and terminates orphaned `postgres.exe` background workers.
+   - Safely removes stale `postmaster.pid` and Unix socket files (`.s.PGSQL.*`).
+   - Fixes Windows file sharing violations on `pgdata/log` and interrupted WAL recovery state by running `pg_resetwal -f -D <pgdata>`, allowing instant sub-50ms engine startup without timeouts.
+   - Integrated as pre-flight self-healing in `tests/__main__.py` and `tests/test_app.py`.
+2. **RES-12: Dynamic Ingestion Context & State Accumulation (`src/core/ingestion_context.py`)**:
+   - `IngestionContext` tracks entity registries, canonical alias normalization, pluralization, theme discovery, and cross-row memory.
+   - Refined `normalize_entity` to eliminate naive 4-letter prefix matching that conflated distinct terms (e.g. `Data` vs `Database`, `Apple` vs `Applesauce`), replacing with technical alias maps (`postgres` -> `PostgreSQL`, `pxt` -> `Pixeltable`) and pluralization rules.
+   - Generates and exports structured synthetic knowledge dossiers to `exports/{domain}-{table}-ingestion-context.md` with clean YAML frontmatter and JSON-LD structured schemas upon batch completion.
+   - Integrated into `DBManager.ingest_files` and `PromptExecutor.apply_prompt_to_table`.
+3. **RES-13: Project & User Skills Integration with Prompt `/` Slash Commands (`src/core/skills.py`)**:
+   - `SkillsRegistry` dynamically scans `.agents/skills/` (`gradio`, `hf-gradio`, `pixeltable`, `postgresql`) AND user-level skills (`~/.gemini/config/skills/`, including `building-data-apps`, `skill-repair`, `data-autocleaning`, etc.), plus built-in directives like `/boost`.
+   - Hardened slash command discovery regex with boundary checks (`(?<![a-zA-Z0-9_\-:/])(/[a-zA-Z0-9_\-]+)(?=\s|[.,;:!?]|$)`) to prevent matching URL path segments (e.g. `https://domain.com/docs`) and cleanly strip commands followed by punctuation.
+   - Parses `/command` tokens from user and system prompts, dynamically decorating prompts with domain rules from `SKILL.md`.
+   - Integrated into `PromptExecutor.run_sample_test` and `apply_prompt_to_table`.
+4. **Targeted PostgreSQL Process Scoping & Safe WAL Recovery (`src/db/manager.py`)**:
+   - Scoped `heal_postgres_locks()` process termination to check cmdline against Pixeltable/target pgdata paths, protecting independent system PostgreSQL services.
+   - Constrained `pg_resetwal -f` execution so it only runs when recovering from an ungraceful crash or stale lock, never on healthy clusters.
+5. **Test Suite Expansion & Verification**:
+   - Added 6 dedicated tests in `tests/test_app.py` covering lock self-healing, state accumulation, slash command expansion, prefix safety (`Data` vs `Database`), multi-directory discovery with `/boost`, and URL-safe command stripping.
+   - Automated test suite passed completely: **44 Passed, 0 Failed, 0 Errors**.
+6. **Status Report for Jim Collinsworth**:
+   - Comprehensive briefing generated and archived in `exports/status_report_jimcollinsworth.md` and `exports/status_report_jimcollinsworth.eml`.
+
+---
+
+## 📅 2026-09-10: Data Enhancement UI Cleanup, Centralized Domain System Prompts, and Unified Two-Table Model
+
+**Context:** General UI cleanup to maximize visibility of tabular data and prompt studio, centralize system prompt management per domain in Settings & Models, and eliminate table proliferation by consolidating test and batch outputs into a single Output Table.
+
+**Verbatim Instruction:**
+> `Let's work on the general UI cleanup, especially around the data enhancement screen. I want to maximize the use and the view of the tabular information and the prompt because that's the data that the user actually sees and is important. Let's move system prompt from all the individual pages and just have that on the model page so there'll be one system prompt per domain.`
+> `I think somehow we can reduce the number of tables by one. Instead of having input table, test output, and then real output tables, let's just have input table, which highlights the rows we want to use, and output table, which highlights the rows which were created and will be used. Run through output just got sent to the same table as output.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Centralized Per-Domain System Prompts (`src/core/config.py` & `src/ui/settings_tab.py`)**:
+   - Stored in `Settings.domain_system_prompts: Dict[str, str]` with `get_domain_system_prompt(domain)` and `set_domain_system_prompt(domain, prompt)` helpers and backward-compatible fallback to `"default"`.
+   - Added dedicated Domain System Prompt Configuration editor in Settings & Models tab with dynamic domain selection and instant persistence.
+   - Removed individual system prompt textboxes from Data Enhancement and View & Export pages; both tabs now display informative domain badges and automatically inherit their active domain's system prompt.
+2. **Unified Two-Table Workbench (`src/ui/playground_tab.py`)**:
+   - Replaced 3-table proliferation with exactly two prominent tables:
+     - **Input Table (Source Data)**: Visualizes source data with sample testing target row badges (`🎯 Test Row N`), preserving row-click Media Inspector drawer for rich media previews.
+     - **Output Table (Consolidated Results)**: Single destination for both dry-run test outputs (`🧪 Sample Test Preview`) and persistent batch enriched columns (`💾 Batch Execution Committed`).
+3. **Maximized Tabular and Prompt Visibility**:
+   - Reorganized Data Enhancement layout into a compact top control strip (Domain, Table, Provider, Model, Output Mode, Row Limits, and Run/Commit/Undo actions).
+   - Expanded User Prompt Studio to full container width with 5 lines height, clickable column placeholder chips, and instant preset buttons.
+   - Positioned Input and Output tables in generous side-by-side comparison panels (380px height).
+4. **Review & Deep Hardening Fixes**:
+   - **Instant Initial Table Rendering**: Populated `input_table` with `initial_preview` at component construction time so the table immediately displays source data on launch instead of rendering an empty dataframe.
+   - **Cross-Domain Table Sync**: Hardened `on_domain_change` in Data Enhancement to refresh both input and output tables directly, preventing stale data when switching between domains that share identical table names (e.g. `raw_assets`).
+   - **Output Column Prioritization**: Reordered output table columns so generated columns (`columns_created`) appear immediately after identifiers (`id`, `file_name`) rather than buried at the end of the schema.
+   - **Accurate Row Status Badges**: Tagged only rows actually enriched (`idx < rows_done`) with `💾 Saved (N)` and un-processed rows with `— (Unchanged)`.
+   - **Output Row Inspection**: Attached Media Inspector drawer to `output_table.select` for seamless inspection of generated results.
+   - **View & Export Banner Alignment**: Updated `tables_tab.py` to display active domain system prompt and snippet, synchronizing with domain changes and tab navigation.
+5. **Automated Verification**:
+    - Added unit tests for domain system prompts and controller flow handling in `tests/test_app.py` and `tests/test_controllers.py` (including column prioritization and row status tagging).
+    - Verified complete test suite: **47 Passed, 0 Failed, 0 Errors** (`uv run python -m tests`).
+
+---
+
+## 📅 2026-09-10: Cross-Project Responsive Snapshoter Skill (`responsive-snapshots`)
+
+**Context:** Researching and adopting the multi-resolution, multi-orientation snapshot utility from `d:\projects\jimcollinsworth.github.io\tools\screenshots.py` to enable automated responsive design verification, documentation walkthroughs, and visual QA across web applications.
+
+**Verbatim Instruction:**
+> `/building-data-apps /learn check the jimcollimsworth.githubio.io project for their screen resolution and orientation snapshoter, we want same ability on this project too, figure out how to share code eventually can then use it to generate walkthroughs and do design and reporting`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Multi-Viewport Matrix**:
+   - Captures across 4 device tiers in both Portrait and Landscape (8 viewports total): Phone (390x844 / 844x390), Tablet (820x1180 / 1180x820), Laptop (768x1366 / 1366x768), and Large Desktop/TV (1080x1920 / 1920x1080).
+   - Generates an interactive HTML preview gallery (`preview.html`) grouping screenshots into a responsive grid.
+2. **Global Antigravity Skill with Zero-Dependency Execution**:
+   - Packaged as a shared global skill in `~/.gemini/config/skills/responsive-snapshots/` with driver script `snapshoter.py`.
+   - Executable in any workspace via `uv run --with playwright python "$HOME\.gemini\config\skills\responsive-snapshots\scripts\snapshoter.py" --url http://127.0.0.1:7860`.
+   - Prevents polluting core application dependencies in `pyproject.toml` with heavy browser binaries.
+3. **Cross-Project Code Sharing Strategy**:
+   - Phase 1: Shared global skill in `~/.gemini/config/skills/` accessible to all agent sessions.
+   - Phase 2: Standalone CLI utility packaged in `jimcollinsworth/agent_skills` runnable via `uvx`.
+4. **Use Cases for Pipeline Tools**:
+   - Visual regression testing for Gradio 6.0 tab layouts.
+   - Mobile and tablet responsive layout verification (`RES-10`).
+   - Automated visual asset generation for developer blog case studies (`RES-18`) and GitHub issue reports (`github-reporter`).
+
+---
+
+## 📅 2026-09-10: End-to-End Integration Testing, GitHub Actions CI, Git Branching Governance & Versioning
+
+**Context:** Implementing end-to-end browser integration tests verifying value inputs and outputs in views and export files (learning from `jimcollinsworth.github.io`), establishing strict Git branching and main branch approval gates, setting up automated GitHub Actions CI, and instituting commit-driven release versioning.
+
+**Verbatim Instruction:**
+> `Yes please Add end-to-end integration tests that confirm value inputs and value outputs in final generated files and views and learns from lessons in the jimcollinsworth github.io project`
+> `And we should be using bug and feature branches on this work with explicit approval for pushing to the main branch. Rules should be encoded in agent rules files.`
+> `Release numbers will increment according to commits and development sessions and explicit major releases. Automated test suite will run on GitHub server whenever code is checked`
+> `/btw want to make the dynamic nature of the context more apparent during dta enhancement, let's see it change in real time or at least key activity at least for testing add as future issue.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **End-to-End Integration Test Suite (`tests/test_browser_e2e.py`)**:
+   - Modeled after lessons from `jimcollinsworth.github.io`: runs headless Chromium via Playwright, monitors console errors and unhandled exceptions (`pageerror`), and tests responsive viewports (mobile portrait 390x844 and desktop 1920x1080).
+   - **Value Inputs & Value Outputs in Views**: Enters prompt template values, interacts with Data Enhancement workbench, executes sample test run, and verifies that generated output columns and text values populate the Output Table.
+   - **Value Outputs in Generated Files**: Executes markdown export synthesis and inspects the generated output file on disk in `exports/` to verify that source record values and synthesis output text match exactly.
+   - **Central System Prompt Persistence**: Configures domain system prompt on Settings & Models tab and verifies cross-session persistence in `config.json`.
+2. **Ephemeral Port Allocation & Socket Discovery**:
+   - Discovers open sockets dynamically via `socket.socket().bind(('127.0.0.1', 0))` and launches Gradio on the assigned ephemeral port. Completely avoids port collisions with the default development server on port 7860.
+3. **Svelte/Gradio Tab Selector Resilience**:
+   - Discovered that unselected Gradio tab buttons have `role=None` until selected (only the active tab has `role="tab"`). Standardized tab locators using `.tab-nav button:has-text(...)` with `wait_for(state="attached")` and `scroll_into_view_if_needed()`.
+4. **In-Flight Database Engine Preservation**:
+   - Removed destructive in-flight `heal_postgres_locks()` calls from `setUpClass` in `TestBrowserE2E` so running PostgreSQL engines and active SQLAlchemy/psycopg connection pools from prior test classes are preserved without connection timeouts.
+5. **Git Branching & Main Branch Approval Gates (`AGENTS.md` Section 7)**:
+   - Direct commits to `main` are strictly forbidden.
+   - All feature work must use `feature/<name>` (or `feat/<name>`) branches, and bug fixes must use `fix/<name>`.
+   - Pushing to `main` or merging into `main` **always requires explicit user authorization**.
+6. **Commit/Session Release Versioning**:
+   - Incremented package version in `pyproject.toml` from `1.1.0` to `1.1.1`.
+   - Added optional test dependency group `[project.optional-dependencies] test = ["playwright>=1.40.0", "pytest>=8.0.0"]`.
+7. **Automated GitHub Actions CI (`.github/workflows/test.yml`)**:
+   - Runs on Ubuntu with Python 3.12, `setup-uv`, installs Playwright Chromium with system dependencies, and executes `uv run python -m tests`.
+8. **Automated GitHub Issue Reporting (`github-reporter`)**:
+   - Created **Issue #3**: *"Feature: Real-time Dynamic Ingestion Context Visualization in Data Enhancement"* via `antigravity-jc-bot [bot]`.
+9. **Verification**:
+   - Full test suite verified: **51 Passed, 0 Failed, 0 Errors** in 28 seconds (`uv run python -m tests`).

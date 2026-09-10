@@ -46,6 +46,7 @@ class TestPipelineTools(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Clean and prepare isolated test environment prior to test execution."""
+        DBManager.heal_postgres_locks()
         if PIXELTABLE_AVAILABLE:
             try:
                 DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
@@ -66,6 +67,19 @@ class TestPipelineTools(unittest.TestCase):
         settings = get_settings()
         self.assertIsInstance(settings, Settings)
         self.assertTrue(len(settings.ollama_host) > 0)
+
+    def test_domain_system_prompts(self):
+        """[Config] Verify per-domain system prompts can be set, retrieved, and fallback to default."""
+        from src.core.config import get_domain_system_prompt, set_domain_system_prompt
+        default_prompt = get_domain_system_prompt("default")
+        self.assertTrue(len(default_prompt) > 0)
+
+        fallback_prompt = get_domain_system_prompt("non_existent_domain_xyz")
+        self.assertEqual(fallback_prompt, default_prompt)
+
+        custom_prompt = "You are a specialized legal document analyzer."
+        set_domain_system_prompt("legal_domain", custom_prompt)
+        self.assertEqual(get_domain_system_prompt("legal_domain"), custom_prompt)
 
     def test_modality_classification(self):
         """[Scanner] Verify file extensions are correctly classified into modalities (docs, images, audio, video)."""
@@ -530,6 +544,23 @@ class TestPipelineTools(unittest.TestCase):
             self.assertIn("file_name", res.get("columns", []))
             self.assertEqual(res.get("total_rows"), 0)
 
+    def test_ui_components_construction(self):
+        """[UI] Verify all UI tabs (Settings, Playground, Tables) construct cleanly within Gradio Blocks."""
+        import gradio as gr
+        from src.ui.settings_tab import render_settings_tab
+        from src.ui.playground_tab import render_playground_tab
+        from src.ui.tables_tab import render_tables_tab
+
+        with gr.Blocks() as demo:
+            with gr.TabItem("⚙️ Settings"):
+                render_settings_tab()
+            with gr.TabItem("🧪 Data Enhancement"):
+                render_playground_tab()
+            with gr.TabItem("📊 View & Export"):
+                render_tables_tab()
+
+        self.assertIsNotNone(demo)
+
     def test_undo_last_operation(self):
         """[Database] Verify 1-click Undo drops newly added LLM columns and reverts table schema."""
         if PIXELTABLE_AVAILABLE:
@@ -580,6 +611,151 @@ class TestPipelineTools(unittest.TestCase):
             res_dom = DBManager.delete_domain_with_details(dom)
             self.assertEqual(res_dom.get("status"), "success")
             self.assertNotIn(dom, DBManager.list_dirs())
+
+    def test_embedded_postgres_lock_self_healing(self):
+        """[Database] Verify DBManager.heal_postgres_locks safely cleans up stale postmaster.pid and orphaned locks."""
+        import tempfile
+        # 1. Verify normal call returns valid dict
+        res = DBManager.heal_postgres_locks(force_purge_orphans=False)
+        self.assertIn("status", res)
+        self.assertIn("orphaned_pids_killed", res)
+        self.assertIn("stale_pids_removed", res)
+
+        # 2. Test self-healing against simulated stale PID in temporary directory
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_pid_file = tmp_path / "postmaster.pid"
+            # Write non-existent PID (e.g. 999999)
+            fake_pid_file.write_text("999999\n/dummy/path\n123456\n5432\n", encoding="utf-8")
+            self.assertTrue(fake_pid_file.exists())
+
+            heal_res = DBManager.heal_postgres_locks(pgdata_dir=tmp_path, force_purge_orphans=False)
+            self.assertEqual(heal_res.get("status"), "healed")
+            self.assertFalse(fake_pid_file.exists(), "Stale postmaster.pid was not removed by self-healing")
+
+    def test_res12_ingestion_context_state_accumulation(self):
+        """[RES-12] Verify IngestionContext tracks cross-row entities, normalizes spellings, and exports Markdown register."""
+        from src.core.ingestion_context import IngestionContext
+        import tempfile
+
+        ctx = IngestionContext(domain="test_ctx", table="records")
+        
+        # Test entity normalization with variant spellings
+        e1 = ctx.normalize_entity("PostgreSQL", category="database")
+        e2 = ctx.normalize_entity("postgresql", category="database")
+        e3 = ctx.normalize_entity("Postgres", category="database")
+        self.assertEqual(e1, "PostgreSQL")
+        self.assertEqual(e2, "PostgreSQL")
+        self.assertEqual(e3, "PostgreSQL")
+        self.assertEqual(ctx.entities["PostgreSQL"]["mentions"], 3)
+
+        # Test recording row
+        ctx.record_row(
+            file_name="report_q1.pdf",
+            modality="docs",
+            file_type=".pdf",
+            content_snippet="Q1 Financial and Infrastructure Overview",
+            extracted_entities=["PostgreSQL", "Pixeltable"],
+            extracted_tags=["finance", "infrastructure"],
+            summary="Financial metrics and database infrastructure summary."
+        )
+        self.assertEqual(len(ctx.row_summaries), 1)
+        self.assertIn("docs", ctx.taxonomies.get("modalities", []))
+
+        # Test prompt fragment formatting
+        frag = ctx.format_context_prompt_fragment()
+        self.assertIn("PostgreSQL", frag)
+        self.assertIn("Accumulated Ingestion Context", frag)
+
+        # Test markdown export with frontmatter & JSON-LD
+        with tempfile.TemporaryDirectory() as tmp_export:
+            export_file = ctx.export_to_markdown(export_dir=tmp_export)
+            self.assertTrue(export_file.exists())
+            text = export_file.read_text(encoding="utf-8")
+            self.assertIn("Ingestion Context Knowledge Register", text)
+            self.assertIn("schema.org", text)
+            self.assertIn("PostgreSQL", text)
+
+    def test_res13_skills_discovery_and_prompt_slash_expansion(self):
+        """[RES-13] Verify SkillsRegistry discovers project skills and expands prompt slash commands with SKILL.md guidelines."""
+        from src.core.skills import SkillsRegistry
+
+        # Test discovery
+        skills = SkillsRegistry.discover_skills()
+        self.assertTrue(len(skills) > 0)
+        self.assertTrue(any(k in skills for k in ["postgresql", "/postgresql", "pixeltable", "/pixeltable"]))
+
+        # Test list_skills and slash commands
+        cmds = SkillsRegistry.get_slash_commands()
+        self.assertTrue(any("/postgresql" in c for c in cmds))
+
+        # Test prompt decoration & slash command expansion
+        raw_prompt = "Design a reliable database schema for document processing /postgresql"
+        raw_system = "You are an expert system architect."
+        
+        expanded_prompt, expanded_system, applied = SkillsRegistry.expand_prompt_with_skills(
+            prompt_template=raw_prompt,
+            system_prompt=raw_system
+        )
+        self.assertNotIn("/postgresql", expanded_prompt)
+        self.assertIn("PostgreSQL", expanded_system)
+        self.assertIn("postgresql", applied)
+
+    def test_entity_normalization_does_not_overmatch_prefixes(self):
+        """[RES-12] Verify entity normalization preserves distinct terms with shared 4-letter prefixes."""
+        from src.core.ingestion_context import IngestionContext
+
+        ctx = IngestionContext(domain="test_ctx", table="prefix_safety")
+        # Distinct terms starting with 'Data'
+        e1 = ctx.normalize_entity("Data", category="concept")
+        e2 = ctx.normalize_entity("Database", category="concept")
+        e3 = ctx.normalize_entity("Dataset", category="concept")
+        self.assertEqual(e1, "Data")
+        self.assertEqual(e2, "Database")
+        self.assertEqual(e3, "Dataset")
+        self.assertIn("Data", ctx.entities)
+        self.assertIn("Database", ctx.entities)
+        self.assertIn("Dataset", ctx.entities)
+
+        # Plural forms should normalize together
+        doc_single = ctx.normalize_entity("Document", category="entity")
+        doc_plural = ctx.normalize_entity("Documents", category="entity")
+        self.assertEqual(doc_single, "Document")
+        self.assertEqual(doc_plural, "Document")
+        self.assertEqual(ctx.entities["Document"]["mentions"], 2)
+
+    def test_multi_directory_skills_discovery_and_builtins(self):
+        """[RES-13] Verify SkillsRegistry discovers built-in /boost directive and multi-directory skills."""
+        from src.core.skills import SkillsRegistry
+
+        skills = SkillsRegistry.discover_skills()
+        # Verify /boost builtin is present
+        self.assertIn("/boost", skills)
+        self.assertIn("boost", skills)
+        boost_def = skills["/boost"]
+        self.assertIn("Reasoning Directive", boost_def.instructions)
+
+        # Verify candidate search directories include project and user paths
+        dirs = SkillsRegistry.get_search_directories()
+        self.assertTrue(len(dirs) >= 1)
+
+    def test_slash_command_url_safety_and_punctuation_stripping(self):
+        """[RES-13] Verify slash command parser ignores URL path segments and cleanly strips commands followed by punctuation."""
+        from src.core.skills import SkillsRegistry
+
+        # 1. URL safety: /docs in https://example.com/docs must not be treated as a slash command
+        text_with_url = "Read https://pixeltable.com/docs and review with /pixeltable"
+        commands = SkillsRegistry.find_slash_commands(text_with_url)
+        self.assertIn("/pixeltable", commands)
+        self.assertNotIn("/docs", commands)
+
+        # 2. Punctuation stripping: /pixeltable, followed by comma must be cleanly stripped
+        prompt = "Using /pixeltable, summarize the table."
+        cleaned_user, expanded_sys, applied = SkillsRegistry.expand_prompt_with_skills(prompt, "System prompt")
+        self.assertNotIn("/pixeltable", cleaned_user)
+        self.assertIn("Using , summarize the table.", cleaned_user.replace("Using  ,", "Using ,"))
+        self.assertIn("pixeltable", applied)
+
 
 
 
@@ -646,6 +822,9 @@ def run_tests():
     print("\n" + header, flush=True)
     print("  PIPELINE TOOLS AUTOMATED TEST SUITE", flush=True)
     print(header + "\n", flush=True)
+
+    # Pre-flight embedded PostgreSQL lock self-healing
+    DBManager.heal_postgres_locks()
     
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
@@ -653,6 +832,13 @@ def run_tests():
     try:
         from tests.test_controllers import TestControllers
         suite.addTests(loader.loadTestsFromTestCase(TestControllers))
+    except Exception:
+        pass
+
+    try:
+        from tests.test_browser_e2e import TestBrowserE2E, PLAYWRIGHT_AVAILABLE
+        if PLAYWRIGHT_AVAILABLE:
+            suite.addTests(loader.loadTestsFromTestCase(TestBrowserE2E))
     except Exception:
         pass
 

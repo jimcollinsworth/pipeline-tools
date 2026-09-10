@@ -222,4 +222,5 @@ config.json
 .env
 .pixeltable_data/
 exports/
+screenshots/
 .commit_msg

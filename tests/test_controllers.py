@@ -7,6 +7,7 @@ without requiring Gradio web server initialization.
 """
 
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from src.controllers.ingest_controller import IngestController
 from src.controllers.playground_controller import PlaygroundController
@@ -92,6 +93,74 @@ class TestControllers(unittest.TestCase):
             self.assertEqual(preview["status"], "success")
             self.assertIn("file_name", preview["columns"])
             self.assertIn("Available Column Placeholders", preview["placeholders_text"])
+
+    def test_playground_controller_sample_and_batch_flow(self):
+        """[Controller] Verify PlaygroundController handles sample test and batch flows with domain system prompts."""
+        err_res = PlaygroundController.test_sample_flow("", "", "Ollama", "llama3.2")
+        self.assertEqual(err_res["status"], "error")
+
+        batch_err = PlaygroundController.commit_batch_flow("", "", "Ollama", "llama3.2")
+        self.assertEqual(batch_err["status"], "error")
+
+        mock_sample_results = [
+            {
+                "row_id": "1",
+                "file_name": "doc1.txt",
+                "source_content": "Sample content",
+                "prompt_rendered": "Prompt: doc1.txt",
+                "model_output": '{"summary": "Test summary", "tags": "ai, test"}',
+                "parsed_json": {"summary": "Test summary", "tags": "ai, test"},
+                "extracted_columns": ["summary", "tags"]
+            }
+        ]
+
+        with patch("src.controllers.playground_controller.PromptExecutor.run_sample_test", return_value=mock_sample_results) as mock_run:
+            res = PlaygroundController.test_sample_flow(
+                domain="default",
+                table_name="test_tbl",
+                provider="Ollama",
+                model="llama3.2",
+                system_prompt="",
+                prompt_template="Analyze {file_name}",
+                sample_count=1,
+                output_mode="⚡ Auto-Split JSON Keys into Columns"
+            )
+            self.assertEqual(res["status"], "success")
+            self.assertIn("summary", res["headers"])
+            self.assertIn("tags", res["headers"])
+            self.assertEqual(res["data"][0][0], "🧪 Test Preview")
+            self.assertTrue(len(mock_run.call_args.kwargs["system_prompt"]) > 0)
+
+        # Verify commit_batch_flow column prioritization and row status tagging
+        mock_batch_res = {
+            "status": "success",
+            "columns": ["summary", "tags"],
+            "rows_processed": 1
+        }
+        mock_raw_data = {
+            "columns": ["id", "file_name", "file_path", "summary", "tags"],
+            "data": [
+                ["1", "doc1.txt", "path/to/doc1.txt", "Doc summary", "tag1, tag2"],
+                ["2", "doc2.txt", "path/to/doc2.txt", "", ""]
+            ]
+        }
+        with patch("src.controllers.playground_controller.PromptExecutor.apply_prompt_to_table", return_value=mock_batch_res), \
+             patch("src.controllers.playground_controller.DBManager.get_table_data", return_value=mock_raw_data):
+            batch_res = PlaygroundController.commit_batch_flow(
+                domain="default",
+                table_name="test_tbl",
+                provider="Ollama",
+                model="llama3.2",
+                prompt_template="Analyze {file_name}",
+                output_mode="⚡ Auto-Split JSON Keys into Columns",
+                limit_rows=1
+            )
+            self.assertEqual(batch_res["status"], "success")
+            # Verify created columns are prioritized right after id and file_name
+            self.assertEqual(batch_res["output_headers"][:5], ["Status", "id", "file_name", "summary", "tags"])
+            # Verify processed row is tagged 💾 Saved and unprocessed row is tagged — (Unchanged)
+            self.assertEqual(batch_res["output_data"][0][0], "💾 Saved (1)")
+            self.assertEqual(batch_res["output_data"][1][0], "— (Unchanged)")
 
     def test_tables_controller_load_table_and_domain_change(self):
         """[Controller] Verify TablesController loads table data and formats stats summary."""

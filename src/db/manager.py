@@ -64,6 +64,198 @@ class DBManager:
     _operation_history: Dict[str, List[Dict[str, Any]]] = {}
 
     @classmethod
+    def heal_postgres_locks(cls, pgdata_dir: Optional[Any] = None, force_purge_orphans: bool = True, force_wal_reset: bool = False) -> Dict[str, Any]:
+        """
+        Embedded PostgreSQL lock self-healing engine (Windows & POSIX).
+        
+        Adheres to PostgreSQL best practices for embedded environments:
+        1. Validates whether the PID in postmaster.pid corresponds to an active, legitimate process.
+        2. Safely terminates orphaned/dangling postgres processes holding directory or file locks
+           targeting Pixeltable or specified pgdata directories (protecting unrelated system Postgres servers).
+        3. Removes stale postmaster.pid, lock files (.lockfile), and socket files (.s.PGSQL.*).
+        4. Cleans up ungraceful shutdown state via pg_resetwal only when recovering from a crash.
+        5. Clears cached PostgresServer references in pixeltable_pgserver and resets Pixeltable's Env.
+        """
+        import time
+        try:
+            import psutil
+        except ImportError:
+            psutil = None
+
+        if pgdata_dir is not None:
+            target_dirs = [Path(pgdata_dir).resolve()]
+        else:
+            target_dirs = []
+            env_pgdata = os.environ.get("PIXELTABLE_PGDATA")
+            if env_pgdata:
+                target_dirs.append(Path(env_pgdata).resolve())
+            default_pgdata = Path.home() / ".pixeltable" / "pgdata"
+            if default_pgdata not in target_dirs:
+                target_dirs.append(default_pgdata)
+
+        target_dir_strs = [str(d).lower() for d in target_dirs]
+
+        results = {
+            "status": "healthy",
+            "healed_dirs": [],
+            "orphaned_pids_killed": [],
+            "stale_pids_removed": []
+        }
+
+        # Collect any PIDs explicitly recorded in target postmaster.pid files
+        known_target_pids = set()
+        for pgdata in target_dirs:
+            pid_file = pgdata / "postmaster.pid"
+            if pid_file.exists():
+                try:
+                    lines = pid_file.read_text(encoding="utf-8", errors="ignore").strip().splitlines()
+                    if lines and lines[0].strip().isdigit():
+                        known_target_pids.add(int(lines[0].strip()))
+                except Exception:
+                    pass
+
+        # Step 1: Sweep and terminate dangling postgres processes belonging to Pixeltable or target pgdata
+        if psutil is not None and force_purge_orphans:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if "postgres" in pname:
+                        pid = proc.pid
+                        cmdline_parts = proc.info.get('cmdline') or []
+                        cmdline_str = " ".join(cmdline_parts).lower()
+                        # Safe check: only target processes that belong to Pixeltable or target pgdata
+                        is_target_proc = (
+                            pid in known_target_pids or
+                            ".pixeltable" in cmdline_str or
+                            any(td in cmdline_str for td in target_dir_strs)
+                        )
+                        if is_target_proc and pid != os.getpid() and pid not in results["orphaned_pids_killed"]:
+                            logger.info(f"Self-healed: Terminating dangling Pixeltable postgres process {pid}")
+                            try:
+                                proc.terminate()
+                                try:
+                                    proc.wait(timeout=2)
+                                except psutil.TimeoutExpired:
+                                    proc.kill()
+                                results["orphaned_pids_killed"].append(pid)
+                            except Exception as e:
+                                logger.warning(f"Failed to terminate postgres process {pid}: {e}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+        # Step 2: Check and clean postmaster.pid, socket files, and stale log in target pgdata directories
+        for pgdata in target_dirs:
+            if not pgdata.exists():
+                continue
+
+            # Remove stale log file if present to eliminate sharing violation on restart
+            log_file = pgdata / "log"
+            if log_file.exists():
+                try:
+                    log_file.unlink(missing_ok=True)
+                    logger.info(f"Self-healed: Removed stale log file {log_file}")
+                except Exception as e:
+                    logger.warning(f"Could not remove log file {log_file}: {e}")
+
+            pid_file = pgdata / "postmaster.pid"
+            had_stale_lock = False
+            if pid_file.exists():
+                stale = False
+                found_pid = None
+                try:
+                    raw = pid_file.read_text(encoding="utf-8", errors="ignore").strip()
+                    lines = raw.splitlines()
+                    if lines:
+                        found_pid = int(lines[0].strip())
+                        is_alive = False
+                        if psutil is not None:
+                            try:
+                                if psutil.pid_exists(found_pid):
+                                    p = psutil.Process(found_pid)
+                                    if "postgres" in p.name().lower():
+                                        is_alive = p.is_running()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                is_alive = False
+
+                        if not is_alive or force_purge_orphans:
+                            if is_alive and force_purge_orphans and psutil is not None:
+                                try:
+                                    p = psutil.Process(found_pid)
+                                    p.terminate()
+                                    try:
+                                        p.wait(timeout=2)
+                                    except psutil.TimeoutExpired:
+                                        p.kill()
+                                    if found_pid not in results["orphaned_pids_killed"]:
+                                        results["orphaned_pids_killed"].append(found_pid)
+                                except Exception:
+                                    pass
+                            stale = True
+                    else:
+                        stale = True
+                except Exception as e:
+                    logger.warning(f"Error checking postmaster.pid: {e}")
+                    stale = True
+
+                if stale:
+                    had_stale_lock = True
+                    try:
+                        pid_file.unlink(missing_ok=True)
+                        results["stale_pids_removed"].append(str(pid_file))
+                        results["healed_dirs"].append(str(pgdata))
+                        logger.info(f"Self-healed: Removed stale postmaster.pid ({found_pid}) from {pgdata}")
+                    except Exception as e:
+                        logger.warning(f"Could not remove stale {pid_file}: {e}")
+
+            # Also check for stale socket lock or socket files
+            for socket_lock in pgdata.glob(".s.PGSQL.*"):
+                try:
+                    socket_lock.unlink(missing_ok=True)
+                    logger.info(f"Self-healed: Removed stale socket file {socket_lock}")
+                except Exception:
+                    pass
+
+            # Only reset WAL if recovering from a detected stale crash or explicitly requested
+            if (had_stale_lock or force_wal_reset) and (pgdata / "PG_VERSION").exists():
+                try:
+                    import subprocess
+                    from pixeltable_pgserver._commands import POSTGRES_BIN_PATH
+                    exe_candidate = POSTGRES_BIN_PATH / "pg_resetwal.exe"
+                    resetwal_exe = exe_candidate if exe_candidate.exists() else (POSTGRES_BIN_PATH / "pg_resetwal")
+                    if resetwal_exe.exists():
+                        cmd = [str(resetwal_exe), "-f", "-D", str(pgdata)]
+                        sub_res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                        if sub_res.returncode == 0:
+                            logger.info(f"Self-healed: Reset WAL on {pgdata} to resolve interrupted recovery state")
+                            if str(pgdata) not in results["healed_dirs"]:
+                                results["healed_dirs"].append(str(pgdata))
+                except Exception as e:
+                    logger.debug(f"pg_resetwal skipped or failed: {e}")
+
+        # Step 3: Reset pixeltable_pgserver instances cache if loaded
+        try:
+            import pixeltable_pgserver
+            if hasattr(pixeltable_pgserver.PostgresServer, "_instances"):
+                pixeltable_pgserver.PostgresServer._instances.clear()
+        except Exception:
+            pass
+
+        # Step 4: Reset Pixeltable runtime environment so next call reinitializes cleanly
+        try:
+            import pixeltable as pxt
+            from pixeltable.env import Env
+            if hasattr(Env, "_env") and Env._env is not None:
+                Env._env = None
+        except Exception:
+            pass
+
+        time.sleep(0.2)
+
+        if results["orphaned_pids_killed"] or results["stale_pids_removed"]:
+            results["status"] = "healed"
+        return results
+
+    @classmethod
     def record_operation(cls, dir_name: str, table_name: str, op_data: Dict[str, Any]) -> None:
         """
         Record a table mutating operation in the in-memory stack for undo capabilities.
@@ -198,41 +390,47 @@ class DBManager:
         _, safe_tbl, _ = sanitize_identifier(raw_tbl or "raw_assets")
         return f"{safe_dir}.{safe_tbl}"
 
-    @staticmethod
-    def get_or_create_table(dir_name: str, table_name: str):
+    @classmethod
+    def get_or_create_table(cls, dir_name: str, table_name: str):
         """Create or get a unified multimodal table in Pixeltable with sanitization."""
         if not PIXELTABLE_AVAILABLE:
             return None
 
-        full_table_path = DBManager.resolve_table_path(dir_name, table_name)
+        full_table_path = cls.resolve_table_path(dir_name, table_name)
         safe_dir = full_table_path.split(".")[0]
-        
-        pxt.create_dir(safe_dir, if_exists="ignore")
 
-
-        
-        table = pxt.create_table(
-            full_table_path,
-            {
-                "id": uuid7(),
-                "file_name": pxt.String,
-                "file_path": pxt.String,
-                "rel_path": pxt.String,
-                "modality": pxt.String,
-                "file_type": pxt.String,
-                "file_size": pxt.Int,
-                "content": pxt.String,
-                "doc": pxt.Document,
-                "image": pxt.Image,
-                "audio": pxt.Audio,
-                "video": pxt.Video,
-                "metadata": pxt.Json,
-                "created_at": pxt.Timestamp
-            },
-            primary_key=["id"],
-            if_exists="ignore"
-        )
-        return table
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                pxt.create_dir(safe_dir, if_exists="ignore")
+                return pxt.create_table(
+                    full_table_path,
+                    {
+                        "id": uuid7(),
+                        "file_name": pxt.String,
+                        "file_path": pxt.String,
+                        "rel_path": pxt.String,
+                        "modality": pxt.String,
+                        "file_type": pxt.String,
+                        "file_size": pxt.Int,
+                        "content": pxt.String,
+                        "doc": pxt.Document,
+                        "image": pxt.Image,
+                        "audio": pxt.Audio,
+                        "video": pxt.Video,
+                        "metadata": pxt.Json,
+                        "created_at": pxt.Timestamp
+                    },
+                    primary_key=["id"],
+                    if_exists="ignore"
+                )
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(0.15 * (attempt + 1))
+                else:
+                    logger.error(f"get_or_create_table failed on `{full_table_path}`: {e}")
+                    raise
 
     create_or_get_table = get_or_create_table
 
@@ -241,35 +439,47 @@ class DBManager:
         """Drop a Pixeltable table cleanly with logging."""
         if not PIXELTABLE_AVAILABLE:
             return False
-        try:
-            full_path = cls.resolve_table_path(dir_name, table_name)
-            pxt.drop_table(full_path, if_not_exists="ignore")
-            if full_path in cls._operation_history:
-                del cls._operation_history[full_path]
-            logger.info(f"🗑️ Deleted Pixeltable table `{full_path}` and all associated data.")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to drop table `{dir_name}.{table_name}`: {e}", exc_info=True)
-            return False
+        full_path = cls.resolve_table_path(dir_name, table_name)
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                pxt.drop_table(full_path, if_not_exists="ignore")
+                if full_path in cls._operation_history:
+                    del cls._operation_history[full_path]
+                logger.info(f"🗑️ Deleted Pixeltable table `{full_path}` and all associated data.")
+                return True
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(0.15 * (attempt + 1))
+                else:
+                    logger.error(f"Failed to drop table `{full_path}`: {e}")
+                    return False
 
     @classmethod
     def drop_dir(cls, dir_name: str, force: bool = True) -> bool:
         """Drop a Pixeltable directory/domain and its tables with logging."""
         if not PIXELTABLE_AVAILABLE:
             return False
-        try:
-            _, safe_dir, _ = sanitize_identifier(dir_name or "default")
-            tables = cls.list_tables(safe_dir)
-            pxt.drop_dir(safe_dir, force=force, if_not_exists="ignore")
-            for t in tables:
-                p = f"{safe_dir}.{t}"
-                if p in cls._operation_history:
-                    del cls._operation_history[p]
-            logger.info(f"⚠️ Deleted Pixeltable domain `{safe_dir}` and connected tables: {tables}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to drop directory `{dir_name}`: {e}", exc_info=True)
-            return False
+        _, safe_dir, _ = sanitize_identifier(dir_name or "default")
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                tables = cls.list_tables(safe_dir)
+                pxt.drop_dir(safe_dir, force=force, if_not_exists="ignore")
+                for t in tables:
+                    p = f"{safe_dir}.{t}"
+                    if p in cls._operation_history:
+                        del cls._operation_history[p]
+                logger.info(f"⚠️ Deleted Pixeltable domain `{safe_dir}` and connected tables: {tables}")
+                return True
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(0.15 * (attempt + 1))
+                else:
+                    logger.error(f"Failed to drop directory `{dir_name}`: {e}")
+                    return False
 
     @classmethod
     def delete_table_with_details(cls, dir_name: str, table_name: str) -> Dict[str, Any]:
@@ -382,6 +592,10 @@ class DBManager:
             rows_to_insert = []
             total_files = len(files_info)
 
+            # Initialize dynamic ingestion context accumulator (RES-12)
+            from src.core.ingestion_context import IngestionContext
+            ctx = IngestionContext(domain=safe_dir, table=safe_tbl)
+
             for idx, f in enumerate(files_info):
                 abs_path = f.get("abs_path", "")
                 modality = f.get("modality", "other")
@@ -392,6 +606,15 @@ class DBManager:
                     progress_callback(idx + 1, total_files, f"Reading file {idx + 1}/{total_files}: {file_name}")
 
                 content = cls.extract_file_content(abs_path, modality, ext)
+
+                # Record row in dynamic context accumulator
+                ctx.record_row(
+                    file_name=file_name,
+                    modality=modality,
+                    file_type=ext,
+                    content_snippet=content[:200] if content else "",
+                    extracted_tags=[modality, ext.lstrip(".")] if ext else [modality]
+                )
 
                 row = {
                     "file_name": file_name,
@@ -419,6 +642,15 @@ class DBManager:
 
             table.insert(rows_to_insert, on_error="ignore")
             total_count = table.count()
+
+            # Export accumulated context to exports/{domain}-{table}-ingestion-context.md
+            context_file = ctx.export_to_markdown()
+            cls.record_operation(safe_dir, safe_tbl, {
+                "action": "ingest_files",
+                "count": len(rows_to_insert),
+                "context_file": str(context_file),
+                "entities_count": len(ctx.entities)
+            })
             
             note = f" (Name adjusted: '{safe_dir}.{safe_tbl}')" if (safe_dir != dir_name or safe_tbl != table_name) else ""
             return {
@@ -428,7 +660,9 @@ class DBManager:
                 "total_count": total_count,
                 "domain": safe_dir,
                 "table": safe_tbl,
-                "overwritten": bool(overwritten_notice)
+                "overwritten": bool(overwritten_notice),
+                "context_file": str(context_file),
+                "entities_count": len(ctx.entities)
             }
         except Exception as e:
             return {

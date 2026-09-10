@@ -38,6 +38,8 @@ def sanitize_identifier(name: str) -> Tuple[bool, str, str]:
 
     return True, sanitized, ""
 
+DEFAULT_SYSTEM_PROMPT = "You are a helpful AI assistant extracting entities, summaries, and key metadata from documents."
+
 class Settings(BaseModel):
     ollama_host: str = Field(default="http://localhost:11434", description="Ollama Server URL")
     default_ollama_model: str = Field(default="llama3.2", description="Default Ollama model for prompts")
@@ -54,12 +56,16 @@ class Settings(BaseModel):
     last_domain: str = Field(default="default", description="Last used Pixeltable domain")
     last_table: str = Field(default="raw_assets", description="Last used Pixeltable table name")
     last_system_prompt: str = Field(
-        default="You are a helpful AI assistant extracting entities, summaries, and key metadata from documents.",
+        default=DEFAULT_SYSTEM_PROMPT,
         description="Last used system prompt"
     )
     last_user_prompt: str = Field(
         default="Analyze the following document:\nFile: {file_name}\n\nContent:\n{content}\n\nProvide a 2-sentence summary and extract top 3 key entities as JSON.",
         description="Last used user prompt template"
+    )
+    domain_system_prompts: Dict[str, str] = Field(
+        default_factory=lambda: {"default": DEFAULT_SYSTEM_PROMPT},
+        description="System prompts configured per domain"
     )
 
 def load_env_file():
@@ -90,6 +96,12 @@ def load_settings() -> Settings:
         except Exception:
             pass
             
+    # Guarantee per-domain system prompts dictionary initialization
+    if not settings.domain_system_prompts:
+        settings.domain_system_prompts = {"default": settings.last_system_prompt or DEFAULT_SYSTEM_PROMPT}
+    elif "default" not in settings.domain_system_prompts:
+        settings.domain_system_prompts["default"] = settings.last_system_prompt or DEFAULT_SYSTEM_PROMPT
+
     # Environment variable fallbacks
     if not settings.gemini_api_key and os.environ.get("GEMINI_API_KEY"):
         settings.gemini_api_key = os.environ.get("GEMINI_API_KEY")
@@ -102,6 +114,28 @@ def save_settings(settings: Settings) -> Settings:
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(settings.model_dump(), f, indent=2)
     return settings
+
+def get_domain_system_prompt(domain: Optional[str] = None) -> str:
+    """Retrieve the configured system prompt for a specific domain with default fallback."""
+    s = load_settings()
+    dom = domain.strip() if domain and domain.strip() else "default"
+    if s.domain_system_prompts and dom in s.domain_system_prompts and s.domain_system_prompts[dom].strip():
+        return s.domain_system_prompts[dom]
+    if s.domain_system_prompts and "default" in s.domain_system_prompts and s.domain_system_prompts["default"].strip():
+        return s.domain_system_prompts["default"]
+    return s.last_system_prompt or DEFAULT_SYSTEM_PROMPT
+
+def set_domain_system_prompt(domain: Optional[str], prompt: str) -> Settings:
+    """Update and persist the system prompt for a specific domain."""
+    s = load_settings()
+    dom = domain.strip() if domain and domain.strip() else "default"
+    if s.domain_system_prompts is None:
+        s.domain_system_prompts = {}
+    cleaned_prompt = prompt.strip()
+    s.domain_system_prompts[dom] = cleaned_prompt
+    s.last_system_prompt = cleaned_prompt
+    save_settings(s)
+    return s
 
 def update_last_entry(**kwargs) -> Settings:
     s = load_settings()

@@ -120,13 +120,15 @@ def get_row_media_path(row: Dict[str, Any]) -> Optional[str]:
 
 class PromptExecutor:
     @staticmethod
-    def format_prompt(template: str, row: Dict[str, Any]) -> str:
+    def format_prompt(template: str, row: Dict[str, Any], context_fragment: str = "") -> str:
         """Replace {column_name} variables in prompt template with row values."""
         formatted = template
         for k, v in row.items():
             placeholder = f"{{{k}}}"
             val_str = str(v) if v is not None else ""
             formatted = formatted.replace(placeholder, val_str)
+        if "{ingestion_context}" in formatted:
+            formatted = formatted.replace("{ingestion_context}", context_fragment)
         return formatted
 
     @classmethod
@@ -135,6 +137,11 @@ class PromptExecutor:
                         sample_count: int = 3, auto_split: bool = True,
                         progress_callback: Optional[Any] = None) -> List[Dict[str, Any]]:
         """Run prompt test against 1 to N sample rows from table with multimodal and JSON auto-split support."""
+        from src.core.skills import SkillsRegistry
+        prompt_template, system_prompt, _ = SkillsRegistry.expand_prompt_with_skills(
+            prompt_template, system_prompt
+        )
+
         full_table_path = DBManager.resolve_table_path(table_dir, table_name)
         table = pxt.get_table(full_table_path)
         
@@ -199,8 +206,19 @@ class PromptExecutor:
         If auto_split=True: Unpacks JSON keys directly into individual typed Pixeltable columns.
         If auto_split=False: Writes full response into single target_column.
         """
+        from src.core.skills import SkillsRegistry
+        from src.core.ingestion_context import IngestionContext
+
+        # Expand prompt slash commands with discovered skills (RES-13)
+        prompt_template, system_prompt, applied_skills = SkillsRegistry.expand_prompt_with_skills(
+            prompt_template, system_prompt
+        )
+
         full_table_path = DBManager.resolve_table_path(table_dir, table_name)
         table = pxt.get_table(full_table_path)
+
+        # Initialize cross-row dynamic context accumulator (RES-12)
+        ctx = IngestionContext(domain=table_dir, table=table_name)
 
         # Fetch rows (excluding heavy binary columns from RAM)
         available_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
@@ -228,7 +246,8 @@ class PromptExecutor:
                 if progress_callback:
                     progress_callback(idx + 1, total, f"[{provider}] Generating JSON {idx + 1}/{total}: {file_name}")
 
-                prompt = cls.format_prompt(prompt_template, row)
+                context_frag = ctx.format_context_prompt_fragment()
+                prompt = cls.format_prompt(prompt_template, row, context_fragment=context_frag)
                 media_path = get_row_media_path(row)
 
                 res = LLMService.generate(
@@ -243,6 +262,31 @@ class PromptExecutor:
                 parsed = extract_json_payload(res)
                 if not parsed:
                     parsed = {"llm_output": res}
+
+                # Record in dynamic context accumulator (RES-12)
+                raw_ents = parsed.get("entities")
+                extracted_ents = None
+                if isinstance(raw_ents, list):
+                    extracted_ents = [str(e).strip() for e in raw_ents if str(e).strip()]
+                elif isinstance(raw_ents, str) and raw_ents.strip():
+                    extracted_ents = [e.strip() for e in re.split(r"[,;]\s*", raw_ents) if e.strip()]
+
+                raw_tags = parsed.get("tags")
+                extracted_tags = None
+                if isinstance(raw_tags, list):
+                    extracted_tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+                elif isinstance(raw_tags, str) and raw_tags.strip():
+                    extracted_tags = [t.strip() for t in re.split(r"[,;]\s*", raw_tags) if t.strip()]
+
+                summary_val = str(parsed.get("summary") or parsed.get("doc_summary") or res)[:150]
+                ctx.record_row(
+                    file_name=file_name,
+                    modality=str(row.get("modality", "other")),
+                    content_snippet=str(row.get("content", ""))[:150],
+                    summary=summary_val,
+                    extracted_entities=extracted_ents,
+                    extracted_tags=extracted_tags
+                )
 
                 all_parsed_rows.append((row["id"], parsed))
 
@@ -273,17 +317,28 @@ class PromptExecutor:
                     table.update(update_dict, where=(table.id == row_id))
                     updated_count += 1
 
+            # Export learned context knowledge register
+            context_file = ctx.export_to_markdown()
+
             cols_summary = ", ".join(f"`{c}`" for c in cols_type_map.keys())
             DBManager.record_operation(
                 dir_name=table_dir,
                 table_name=table_name,
-                op_data={"action": "add_columns", "columns": list(cols_type_map.keys()), "rows_updated": updated_count}
+                op_data={
+                    "action": "add_columns",
+                    "columns": list(cols_type_map.keys()),
+                    "rows_updated": updated_count,
+                    "context_file": str(context_file),
+                    "applied_skills": applied_skills
+                }
             )
             return {
                 "status": "success",
                 "message": f"Successfully processed {updated_count} rows via [{provider}] '{model}'. Unpacked into {len(cols_type_map)} dynamic columns: {cols_summary}",
                 "count": updated_count,
-                "columns": list(cols_type_map.keys())
+                "columns": list(cols_type_map.keys()),
+                "context_file": str(context_file),
+                "applied_skills": applied_skills
             }
 
         else:
@@ -304,7 +359,8 @@ class PromptExecutor:
                 if progress_callback:
                     progress_callback(idx + 1, total, f"[{provider}] Processing row {idx + 1}/{total}: {file_name}")
 
-                prompt = cls.format_prompt(prompt_template, row)
+                context_frag = ctx.format_context_prompt_fragment()
+                prompt = cls.format_prompt(prompt_template, row, context_fragment=context_frag)
                 media_path = get_row_media_path(row)
 
                 res = LLMService.generate(
@@ -316,6 +372,13 @@ class PromptExecutor:
                     json_mode=False
                 )
 
+                ctx.record_row(
+                    file_name=file_name,
+                    modality=str(row.get("modality", "other")),
+                    content_snippet=str(row.get("content", ""))[:150],
+                    summary=str(res)[:150]
+                )
+
                 existing_val = str(row.get(safe_col, "")) if row.get(safe_col) is not None else ""
                 if mode == "append" and existing_val:
                     new_val = f"{existing_val}\n\n{res}"
@@ -325,17 +388,26 @@ class PromptExecutor:
                 table.update({safe_col: new_val}, where=(table.id == row["id"]))
                 updated_count += 1
 
+            context_file = ctx.export_to_markdown()
             note = f" (Column name formatted as '{safe_col}')" if safe_col != target_column else ""
             DBManager.record_operation(
                 dir_name=table_dir,
                 table_name=table_name,
-                op_data={"action": "single_column", "column": safe_col, "rows_updated": updated_count}
+                op_data={
+                    "action": "single_column",
+                    "column": safe_col,
+                    "rows_updated": updated_count,
+                    "context_file": str(context_file),
+                    "applied_skills": applied_skills
+                }
             )
             return {
                 "status": "success",
                 "message": f"Successfully processed {updated_count} rows using [{provider}] '{model}' and saved to column '{safe_col}'{note} ({mode} mode).",
                 "count": updated_count,
-                "column": safe_col
+                "column": safe_col,
+                "context_file": str(context_file),
+                "applied_skills": applied_skills
             }
 
 

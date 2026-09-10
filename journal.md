@@ -442,3 +442,25 @@ This journal records verbatim developer instructions, architectural directives, 
    - Created **Issue #3**: *"Feature: Real-time Dynamic Ingestion Context Visualization in Data Enhancement"* via `antigravity-jc-bot [bot]`.
 9. **Verification**:
    - Full test suite verified: **51 Passed, 0 Failed, 0 Errors** in 28 seconds (`uv run python -m tests`).
+
+---
+
+## 📅 2026-09-10: Multi-Machine Git Drift Resolution & Cross-Device Synchronization Rules
+
+**Context:** The developer frequently alternates between 3 computers (e.g. mlpc, laptop, desktop) and 2 Antigravity instances. When pushing the verified release branch to `origin/main`, Git detected 20 divergent remote commits from Sept 5–7 that were not fetched into the current machine's local clone. Inspection of those divergent commits revealed 28 test failures and database lock crashes (`41 Passed, 27 Failed, 1 Errors`).
+
+**Verbatim Instruction:**
+> `merge and push. let's get it to hugging face, what's involved and I did respond to her email`
+> `do 1 but document the issue clearly in journal, update rules and processes to minimize chance of conflicts. I do jump between remote sessions on 3 computers and 2 instances. need to always pull, always use feature branches, and other best practices in the situation`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Decision to Fast-Forward / Replace `main` with Verified Baseline**:
+   - The user explicitly authorized Option 1: resetting `main` to `feature/e2e-integration-tests-ci` and force-updating `origin/main`.
+   - This purged the broken interim commits from Sept 5–7 and restored `origin/main` to a verified, passing test baseline: **51 Passed, 0 Failed, 0 Errors**.
+2. **Codification of Multi-Machine Hygiene in `AGENTS.md`**:
+   - **Pre-Flight Remote Fetch**: Every new session across any computer must begin with `git fetch origin` and `git status -uno` before modifying code or proposing plans.
+   - **Branch-Off Latest Remote**: Never branch off stale local branches; always branch off up-to-date `origin/main` (`git checkout -b feature/<name> origin/main`).
+   - **Never Modify `main` Directly**: All development must occur on feature or bugfix branches.
+   - **Session Hand-Off & Push**: Before logging off or switching computers, all working branches must be pushed to `origin` so other machines/instances can immediately resume work without uncommitted or unpushed drift.
+3. **Cross-Device Workflow Alignment**:
+   - Guaranteed that any instance starting up on `mlpc`, laptop, or desktop will fetch clean, green, synchronized branches from GitHub.

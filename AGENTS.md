@@ -155,3 +155,18 @@ Guidelines to reduce common LLM coding pitfalls, biasing toward caution and simp
 - **Automated CI Requirement**:
   - All commits pushed to GitHub are automatically validated via GitHub Actions CI (`.github/workflows/test.yml`), which builds the environment and executes the full test suite (`uv run python -m tests`).
 
+### 🔄 Multi-Machine & Multi-Session Git Hygiene (Cross-Device Policy)
+*The developer frequently moves between 3 computers (e.g., mlpc, laptop, desktop) and 2 Antigravity instances. To prevent silent remote divergence and merge collisions, agents must adhere to strict sync discipline:*
+1. **Mandatory Pre-Flight Remote Fetch**:
+   - **Always run `git fetch origin`** before writing code, proposing plans, or creating branches.
+   - Run `git status -uno` to detect whether local tracking branches are behind `origin/main` or remote feature branches.
+   - If `origin/main` has advanced, always rebase or fast-forward before creating new feature branches: `git checkout -b feature/<name> origin/main`.
+2. **Never Develop Directly on `main`**:
+   - Every modification must be committed on a dedicated `feature/<name>` or `fix/<name>` branch.
+3. **Session Hand-Off & Remote Push**:
+   - At the conclusion of each development session or work chunk, push the feature branch to `origin` (`git push -u origin <branch-name>`).
+   - Never leave unpushed work on local feature branches at session close; another computer or instance needs access to the latest commits.
+4. **Clean Remote Branch Resumption**:
+   - When resuming work on another machine, fetch all branches (`git fetch origin`) and checkout the remote branch (`git checkout <branch-name>; git pull origin <branch-name>`) to ensure uninterrupted continuity.
+
+

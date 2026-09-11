@@ -464,3 +464,28 @@ This journal records verbatim developer instructions, architectural directives, 
    - **Session Hand-Off & Push**: Before logging off or switching computers, all working branches must be pushed to `origin` so other machines/instances can immediately resume work without uncommitted or unpushed drift.
 3. **Cross-Device Workflow Alignment**:
    - Guaranteed that any instance starting up on `mlpc`, laptop, or desktop will fetch clean, green, synchronized branches from GitHub.
+
+---
+
+## 📅 2026-09-10: Architectural Code Review: Test Rigor, Scalability & Pixeltable Capabilities Deep-Dive
+
+**Context:** Conducting an exhaustive architectural review across test suite coverage and speed, runtime efficiency, memory scalability, and Pixeltable feature alignment (computed columns, chunking views, vector embedding indexes, UDFs, FastAPIRouter).
+
+**Verbatim Instruction:**
+> `et's do a deep code review. Assess code, especially tests, efficiency and scalability of code. Recommend coding updates for possible functional changes to help with efficiency or function. Do a deep review of pixeltable specific features and ability to customize and hook, and make sure we are utilizing its best features appropriately, make recommendations for additional changes or functionalities based on pixeltable knowledge. Wrap this all up in a great report published in GitHub. Provide screenshots if you think they will help. Looking forward to the report in the morning.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Test Suite Baseline & Isolation**:
+   - 51 passing tests verified in ~28s (`51 Passed, 0 Failed, 0 Errors`).
+   - Strong test design: bytecode introspection on Gradio callback globals (`LOAD_GLOBAL`), isolated test domains (`test_suite_isolated`), and pre-flight PostgreSQL lock self-healing (`heal_postgres_locks`).
+   - Identified test gaps: lack of multi-threaded concurrent access tests and absence of large-scale dataset benchmarks (>10k rows).
+2. **Memory & Query Scalability Bottlenecks**:
+   - The Column Projection Invariant in `DBManager.get_table_data` successfully prevents OOMs on image/document tables by excluding binary columns and using SQL-level `.slice(0, 500)`.
+   - Identified critical bottleneck in `PromptExecutor.apply_prompt_to_table`: full string `content` is collected into Python heap for all rows at once, and rows are updated sequentially via individual `table.update()` SQL transactions.
+3. **Pixeltable Idiomaticity & Modernization Roadmap**:
+   - **Declarative Computed Columns (`add_computed_column`)**: Replace imperative row-by-row loops with `@pxt.udf` computed columns to unlock automatic incremental updates, fault-tolerant retry (`recompute_columns`), caching, and lineage.
+   - **Native Document Chunking Views (`pxt.create_view` + `document_splitter`)**: Replace monolithic text extraction with token-bounded chunk views linked directly to the parent document table.
+   - **In-Table Vector Embedding Indexes (`add_embedding_index`)**: Provide instant semantic similarity search in the UI without external vector databases.
+   - **Declarative REST Serving (`FastAPIRouter`)**: Expose background insertion routes and query endpoints for cloud container hosting and mobile companion apps.
+4. **Published to GitHub**:
+   - Formatted and published the complete review report as [GitHub Issue #4](https://github.com/jimcollinsworth/pipeline-tools/issues/4) via `antigravity-jc-bot [bot]`.

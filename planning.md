@@ -232,4 +232,5 @@ flowchart TD
 | RES-19 | Column Name Prefixes & Visual Schema Grouping | Open | Standardize on column prefixes (I_ imported, C_ calculated/LLM, U_ user input) with UI badge tabs, case sensitivity handling, and template placeholder auto-aliasing. |
 | RES-20 | GitHub Actions CI & Automated Server-Side Testing | Complete | Automated CI pipeline (`.github/workflows/test.yml`) executing uv toolchain, Playwright Chromium, and 51-test suite on all branch pushes and PRs. |
 | RES-21 | Real-time Dynamic Ingestion Context Visualization | Open | Live context inspector and state stream in Data Enhancement tab showing dynamic context evolution row-by-row (tracked in GitHub Issue #3). |
+| RES-22 | Architectural Code Review & Pixeltable Deep-Dive | Complete | Comprehensive code review of 51-test suite, memory scalability, and Pixeltable declarative computed columns/views/indexes published to GitHub Issue #4. |
 

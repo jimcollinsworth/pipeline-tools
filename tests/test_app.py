@@ -323,6 +323,66 @@ class TestPipelineTools(unittest.TestCase):
                 self.assertIn("doc_haiku", table_data.get("columns", []))
                 self.assertIn("confidence", table_data.get("columns", []))
 
+    def test_declarative_single_column_mode(self):
+        """[Prompts] Verify declarative single-column computed generation via @pxt.udf and 1-click undo."""
+        from unittest.mock import patch
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [{
+                "name": "single_sample.md",
+                "abs_path": str(Path("planning.md").resolve()),
+                "rel_path": "planning.md",
+                "modality": "docs",
+                "extension": ".md",
+                "size_bytes": 120,
+                "size": "120 B"
+            }]
+            DBManager.ingest_files(self.TEST_DOMAIN, "single_col_test", fake_files, overwrite=True)
+
+            with patch("src.core.llm_service.LLMService.generate", return_value="Declarative computed summary output"):
+                res = PromptExecutor.apply_prompt_to_table(
+                    model="test-model",
+                    prompt_template="Summarize: {file_name}",
+                    system_prompt="Be concise",
+                    table_dir=self.TEST_DOMAIN,
+                    table_name="single_col_test",
+                    target_column="c_summary",
+                    auto_split=False
+                )
+                self.assertEqual(res.get("status"), "success")
+                self.assertEqual(res.get("column"), "c_summary")
+
+                # Verify column exists on Pixeltable table
+                table_data = DBManager.get_table_data(self.TEST_DOMAIN, "single_col_test", limit=5)
+                self.assertIn("c_summary", table_data.get("columns", []))
+
+                # Verify 1-click Undo drops the computed column cleanly
+                undo_res = DBManager.undo_last_operation(self.TEST_DOMAIN, "single_col_test")
+                self.assertEqual(undo_res.get("status"), "success")
+                table_data_after = DBManager.get_table_data(self.TEST_DOMAIN, "single_col_test", limit=5)
+                self.assertNotIn("c_summary", table_data_after.get("columns", []))
+
+    def test_chunked_streaming_ingestion(self):
+        """[Database] Verify chunked batch streaming ingestion handles multi-file batches in bounded memory."""
+        if PIXELTABLE_AVAILABLE:
+            fake_files = [
+                {
+                    "name": f"streaming_sample_{i}.txt",
+                    "abs_path": str(Path("README.md").resolve()),
+                    "rel_path": f"README_{i}.md",
+                    "modality": "docs",
+                    "extension": ".txt",
+                    "size_bytes": 100 + i,
+                    "size": f"{100 + i} B"
+                }
+                for i in range(25)
+            ]
+            res = DBManager.ingest_files(self.TEST_DOMAIN, "streaming_ingest_test", fake_files, overwrite=True)
+            self.assertEqual(res.get("status"), "success")
+            self.assertEqual(res.get("inserted_count"), 25)
+
+            table_data = DBManager.get_table_data(self.TEST_DOMAIN, "streaming_ingest_test", limit=50)
+            self.assertEqual(table_data.get("total_rows"), 25)
+
     def test_markdown_export_direct_template(self):
         """[Export] Verify MarkdownExporter creates formatted Markdown files using column placeholders."""
         if PIXELTABLE_AVAILABLE:

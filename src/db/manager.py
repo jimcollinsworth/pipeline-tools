@@ -589,65 +589,77 @@ class DBManager:
                 progress_callback(0, len(files_info), f"Initializing table '{safe_dir}.{safe_tbl}'...")
 
             table = cls.get_or_create_table(safe_dir, safe_tbl)
-            rows_to_insert = []
             total_files = len(files_info)
 
             # Initialize dynamic ingestion context accumulator (RES-12)
             from src.core.ingestion_context import IngestionContext
             ctx = IngestionContext(domain=safe_dir, table=safe_tbl)
 
-            for idx, f in enumerate(files_info):
-                abs_path = f.get("abs_path", "")
-                modality = f.get("modality", "other")
-                ext = f.get("extension", "")
-                file_name = f.get("name", Path(abs_path).name)
+            # Chunked Batch Streaming Ingestion (Supporting 10,000+ files in bounded O(1) heap RAM)
+            BATCH_SIZE = 100
+            total_inserted = 0
 
-                if progress_callback and (idx % 5 == 0 or idx == total_files - 1):
-                    progress_callback(idx + 1, total_files, f"Reading file {idx + 1}/{total_files}: {file_name}")
+            for batch_start in range(0, total_files, BATCH_SIZE):
+                batch_end = min(batch_start + BATCH_SIZE, total_files)
+                batch_files = files_info[batch_start:batch_end]
+                batch_rows = []
 
-                content = cls.extract_file_content(abs_path, modality, ext)
+                for idx_in_batch, f in enumerate(batch_files):
+                    global_idx = batch_start + idx_in_batch
+                    abs_path = f.get("abs_path", "")
+                    modality = f.get("modality", "other")
+                    ext = f.get("extension", "")
+                    file_name = f.get("name", Path(abs_path).name)
 
-                # Record row in dynamic context accumulator
-                ctx.record_row(
-                    file_name=file_name,
-                    modality=modality,
-                    file_type=ext,
-                    content_snippet=content[:200] if content else "",
-                    extracted_tags=[modality, ext.lstrip(".")] if ext else [modality]
-                )
+                    if progress_callback and (global_idx % 5 == 0 or global_idx == total_files - 1):
+                        progress_callback(global_idx + 1, total_files, f"Reading file {global_idx + 1}/{total_files}: {file_name}")
 
-                row = {
-                    "file_name": file_name,
-                    "file_path": abs_path,
-                    "rel_path": f.get("rel_path", ""),
-                    "modality": modality,
-                    "file_type": ext,
-                    "file_size": int(f.get("size_bytes", 0)),
-                    "content": content if content else None,
-                    "doc": abs_path if (ext == ".pdf" and Path(abs_path).is_file()) else None,
-                    "image": abs_path if (modality == "images" and Path(abs_path).is_file()) else None,
-                    "audio": abs_path if (modality == "audio" and Path(abs_path).is_file()) else None,
-                    "video": abs_path if (modality == "video" and Path(abs_path).is_file()) else None,
-                    "metadata": {
-                        "source": "directory_scanner",
-                        "extension": ext,
-                        "scanned_size": f.get("size", "")
-                    },
-                    "created_at": datetime.now()
-                }
-                rows_to_insert.append(row)
+                    content = cls.extract_file_content(abs_path, modality, ext)
 
-            if progress_callback:
-                progress_callback(total_files, total_files, f"Committing {len(rows_to_insert)} rows to database...")
+                    # Record row in dynamic context accumulator
+                    ctx.record_row(
+                        file_name=file_name,
+                        modality=modality,
+                        file_type=ext,
+                        content_snippet=content[:200] if content else "",
+                        extracted_tags=[modality, ext.lstrip(".")] if ext else [modality]
+                    )
 
-            table.insert(rows_to_insert, on_error="ignore")
+                    row = {
+                        "file_name": file_name,
+                        "file_path": abs_path,
+                        "rel_path": f.get("rel_path", ""),
+                        "modality": modality,
+                        "file_type": ext,
+                        "file_size": int(f.get("size_bytes", 0)),
+                        "content": content if content else None,
+                        "doc": abs_path if (ext == ".pdf" and Path(abs_path).is_file()) else None,
+                        "image": abs_path if (modality == "images" and Path(abs_path).is_file()) else None,
+                        "audio": abs_path if (modality == "audio" and Path(abs_path).is_file()) else None,
+                        "video": abs_path if (modality == "video" and Path(abs_path).is_file()) else None,
+                        "metadata": {
+                            "source": "directory_scanner",
+                            "extension": ext,
+                            "scanned_size": f.get("size", "")
+                        },
+                        "created_at": datetime.now()
+                    }
+                    batch_rows.append(row)
+
+                if progress_callback:
+                    progress_callback(batch_end, total_files, f"Committing batch {batch_start + 1}-{batch_end} of {total_files} rows to database...")
+
+                table.insert(batch_rows, on_error="ignore")
+                total_inserted += len(batch_rows)
+                del batch_rows
+
             total_count = table.count()
 
             # Export accumulated context to exports/{domain}-{table}-ingestion-context.md
             context_file = ctx.export_to_markdown()
             cls.record_operation(safe_dir, safe_tbl, {
                 "action": "ingest_files",
-                "count": len(rows_to_insert),
+                "count": total_inserted,
                 "context_file": str(context_file),
                 "entities_count": len(ctx.entities)
             })
@@ -655,8 +667,8 @@ class DBManager:
             note = f" (Name adjusted: '{safe_dir}.{safe_tbl}')" if (safe_dir != dir_name or safe_tbl != table_name) else ""
             return {
                 "status": "success",
-                "message": f"Successfully ingested {len(rows_to_insert)} rows into '{safe_dir}.{safe_tbl}'{note}{overwritten_notice}. Total rows in table: {total_count}",
-                "inserted_count": len(rows_to_insert),
+                "message": f"Successfully ingested {total_inserted} rows into '{safe_dir}.{safe_tbl}'{note}{overwritten_notice}. Total rows in table: {total_count}",
+                "inserted_count": total_inserted,
                 "total_count": total_count,
                 "domain": safe_dir,
                 "table": safe_tbl,

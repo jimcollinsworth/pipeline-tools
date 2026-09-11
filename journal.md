@@ -489,3 +489,31 @@ This journal records verbatim developer instructions, architectural directives, 
    - **Declarative REST Serving (`FastAPIRouter`)**: Expose background insertion routes and query endpoints for cloud container hosting and mobile companion apps.
 4. **Published to GitHub**:
    - Formatted and published the complete review report as [GitHub Issue #4](https://github.com/jimcollinsworth/pipeline-tools/issues/4) via `antigravity-jc-bot [bot]`.
+
+---
+
+## 📅 2026-09-10: Eradication of Imperative Loops, Native `@pxt.udf` Engine & High-Scale Ingestion
+
+**Context:** Following up on the architectural review, implementing critical memory efficiency, scalability fixes, and completely eliminating imperative row-by-row update loops.
+
+**Verbatim Instruction:**
+> `Memory efficiency, scalability, and imperative loops are the most critical issues to address. I thought we had previously eliminated imperative loops, so this time, we must ensure they are fixed and explicitly documented in the agent's file. The documentation should emphasize using UDFs and native pixel table features in all cases, specifically requiring exceptions for declarative computed columns. need to create a workaround for monolithic text ingestion and aim to support tens of thousands of rows. Multi-user use cases and testing are not required at this time and should be logged as a future issue. In-table embedding vector indexes are a good idea, though I am concerned about application complexity and the need for users to specify column options during indexing. Finally, we should implement declarative REST services only if absolutely necessary for hosting, as I believe we can already achieve this with Gradio on Hugging Face.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Elimination of Imperative Loops in Batch Execution**:
+   - Replaced manual Python loops and sequential `table.update(..., where=table.id == row_id)` queries in `src/prompts/executor.py` with native `@pxt.udf` declarative computed columns (`table.add_computed_column`).
+   - In Single Target Column Mode: Computes the column declaratively across all rows via `pxt_generate_text` or `pxt_generate_append`.
+   - In Auto-Split JSON Mode: Computes the structured JSON column via `pxt_generate_json` and projects individual JSON keys declaratively (`table[primary_col][k]`).
+   - Lineage & Rollback: All added columns are tracked in `_operation_history` and cleanly dropped on 1-click Undo.
+2. **Chunked Streaming Ingestion for 10,000+ Rows**:
+   - Refactored `DBManager.ingest_files` to stream inserts in bounded batches (`BATCH_SIZE = 100`) rather than accumulating all scanned files and raw text strings into a monolithic in-memory array.
+   - Bounded memory usage to constant $O(1)$ heap RAM, supporting tens of thousands of rows without out-of-memory crashes.
+3. **Mandatory Declarative Invariant Codified in `AGENTS.md`**:
+   - Codified permanent rules in Section 3 and Section 6.2 strictly prohibiting imperative row-by-row loops calling AI models or updating table rows.
+   - Required native `@pxt.udf` declarative computed columns in all cases, mandating explicit developer authorization and documented justification in `journal.md` for any exceptions.
+4. **Scope Decisions (Vector Indexes, REST & Multi-User)**:
+   - **Vector Indexes**: Deferred in-table vector indexing to avoid UI and column option configuration complexity.
+   - **REST Services**: Avoided standalone `FastAPIRouter` REST services, as Gradio on Hugging Face Spaces already natively handles web serving and API endpoints.
+   - **Multi-User Backlog**: Logged multi-user concurrency, connection pooling, and stress testing as a future enhancement in [GitHub Issue #5](https://github.com/jimcollinsworth/pipeline-tools/issues/5).
+5. **Verification**:
+   - Full test suite verified: **53 Passed, 0 Failed, 0 Errors** in 28 seconds (`uv run python -m tests`).

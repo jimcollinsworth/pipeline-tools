@@ -118,18 +118,53 @@ def get_row_media_path(row: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+import logging
+logger = logging.getLogger("pipeline_tools.prompts")
+
+def format_prompt(template: str, row: Dict[str, Any], context_fragment: str = "") -> str:
+    """Replace {column_name} variables in prompt template with row values."""
+    formatted = template
+    for k, v in row.items():
+        placeholder = f"{{{k}}}"
+        val_str = str(v) if v is not None else ""
+        formatted = formatted.replace(placeholder, val_str)
+    if "{ingestion_context}" in formatted:
+        formatted = formatted.replace("{ingestion_context}", context_fragment)
+    return formatted
+
+
+if PIXELTABLE_AVAILABLE and pxt is not None:
+    @pxt.udf
+    def pxt_generate_text(file_name: Optional[str], content: Optional[str], template: str, system_prompt: str, provider: str, model: str) -> str:
+        row_dict = {"file_name": file_name or "", "content": content or ""}
+        prompt = format_prompt(template, row_dict)
+        res = LLMService.generate(provider=provider, model=model, prompt=prompt, system=system_prompt, json_mode=False)
+        return str(res or "")
+
+    @pxt.udf
+    def pxt_generate_append(existing_text: Optional[str], file_name: Optional[str], content: Optional[str], template: str, system_prompt: str, provider: str, model: str) -> str:
+        row_dict = {"file_name": file_name or "", "content": content or ""}
+        prompt = format_prompt(template, row_dict)
+        new_res = str(LLMService.generate(provider=provider, model=model, prompt=prompt, system=system_prompt, json_mode=False) or "")
+        if existing_text and existing_text.strip():
+            return f"{existing_text.strip()}\n\n{new_res}"
+        return new_res
+
+    @pxt.udf
+    def pxt_generate_json(file_name: Optional[str], content: Optional[str], template: str, system_prompt: str, provider: str, model: str) -> dict:
+        row_dict = {"file_name": file_name or "", "content": content or ""}
+        prompt = format_prompt(template, row_dict)
+        res = LLMService.generate(provider=provider, model=model, prompt=prompt, system=system_prompt, json_mode=True)
+        parsed = extract_json_payload(res)
+        return parsed or {"llm_output": str(res or "")}
+else:
+    pxt_generate_text = None
+    pxt_generate_append = None
+    pxt_generate_json = None
+
+
 class PromptExecutor:
-    @staticmethod
-    def format_prompt(template: str, row: Dict[str, Any], context_fragment: str = "") -> str:
-        """Replace {column_name} variables in prompt template with row values."""
-        formatted = template
-        for k, v in row.items():
-            placeholder = f"{{{k}}}"
-            val_str = str(v) if v is not None else ""
-            formatted = formatted.replace(placeholder, val_str)
-        if "{ingestion_context}" in formatted:
-            formatted = formatted.replace("{ingestion_context}", context_fragment)
-        return formatted
+    format_prompt = staticmethod(format_prompt)
 
     @classmethod
     def run_sample_test(cls, model: str, prompt_template: str, system_prompt: str,
@@ -202,12 +237,15 @@ class PromptExecutor:
                               mode: str = "replace", limit: Optional[int] = None,
                               progress_callback: Optional[Any] = None) -> Dict[str, Any]:
         """
-        Run prompt against table rows and write results back.
-        If auto_split=True: Unpacks JSON keys directly into individual typed Pixeltable columns.
-        If auto_split=False: Writes full response into single target_column.
+        Run prompt against table using Pixeltable native declarative computed columns.
+        Eliminates imperative row-by-row updates and leverages Pixeltable's internal
+        execution engine, dependency DAG, and automatic incremental update mechanics.
         """
         from src.core.skills import SkillsRegistry
         from src.core.ingestion_context import IngestionContext
+
+        if not PIXELTABLE_AVAILABLE:
+            return {"status": "error", "message": "Pixeltable is not available."}
 
         # Expand prompt slash commands with discovered skills (RES-13)
         prompt_template, system_prompt, applied_skills = SkillsRegistry.expand_prompt_with_skills(
@@ -217,126 +255,98 @@ class PromptExecutor:
         full_table_path = DBManager.resolve_table_path(table_dir, table_name)
         table = pxt.get_table(full_table_path)
 
-        # Initialize cross-row dynamic context accumulator (RES-12)
-        ctx = IngestionContext(domain=table_dir, table=table_name)
-
-        # Fetch rows (excluding heavy binary columns from RAM)
-        available_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
-        query_cols = [c for c in available_cols if c not in {"image", "doc", "video", "audio"}]
-        query = table.select(*[table[c] for c in query_cols]) if query_cols else table
-        if limit:
-            query = query.limit(limit)
-        df = query.collect().to_pandas()
-        records = df.to_dict(orient="records")
-        total = len(records)
-
-        if total == 0:
+        total_rows = table.count()
+        if total_rows == 0:
             return {"status": "error", "message": "No rows found in table to process."}
 
-        updated_count = 0
-        created_columns = set()
+        existing_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
 
         if auto_split:
-            # 1. First pass: execute LLM calls and collect parsed outputs
-            all_parsed_rows = []
-            cols_type_map: Dict[str, Any] = {}
+            # 1. Declarative JSON Column via @pxt.udf
+            primary_col = "llm_payload"
+            if primary_col in existing_cols:
+                try:
+                    table.drop_column(primary_col)
+                except Exception:
+                    pass
 
-            for idx, row in enumerate(records):
-                file_name = row.get("file_name", f"Row {idx + 1}")
-                if progress_callback:
-                    progress_callback(idx + 1, total, f"[{provider}] Generating JSON {idx + 1}/{total}: {file_name}")
+            if progress_callback:
+                progress_callback(1, 3, f"Computing declarative JSON column '{primary_col}' via [{provider}] '{model}'...")
 
-                context_frag = ctx.format_context_prompt_fragment()
-                prompt = cls.format_prompt(prompt_template, row, context_fragment=context_frag)
-                media_path = get_row_media_path(row)
-
-                res = LLMService.generate(
+            # Add declarative computed column via @pxt.udf
+            table.add_computed_column(**{
+                primary_col: pxt_generate_json(
+                    file_name=table.file_name,
+                    content=table.content,
+                    template=prompt_template,
+                    system_prompt=system_prompt,
                     provider=provider,
-                    model=model,
-                    prompt=prompt,
-                    system=system_prompt,
-                    media_path=media_path,
-                    json_mode=True
+                    model=model
                 )
+            })
 
-                parsed = extract_json_payload(res)
-                if not parsed:
-                    parsed = {"llm_output": res}
+            if progress_callback:
+                progress_callback(2, 3, f"Projecting structured JSON fields into typed Pixeltable columns...")
 
-                # Record in dynamic context accumulator (RES-12)
-                raw_ents = parsed.get("entities")
-                extracted_ents = None
-                if isinstance(raw_ents, list):
-                    extracted_ents = [str(e).strip() for e in raw_ents if str(e).strip()]
-                elif isinstance(raw_ents, str) and raw_ents.strip():
-                    extracted_ents = [e.strip() for e in re.split(r"[,;]\s*", raw_ents) if e.strip()]
+            # 2. Discover JSON keys from sample output and add declarative projection columns
+            sample_df = table.select(table[primary_col]).limit(1).collect().to_pandas()
+            sample_payload = sample_df[primary_col].iloc[0] if len(sample_df) > 0 else {}
+            if isinstance(sample_payload, str):
+                sample_payload = extract_json_payload(sample_payload) or {}
 
-                raw_tags = parsed.get("tags")
-                extracted_tags = None
-                if isinstance(raw_tags, list):
-                    extracted_tags = [str(t).strip() for t in raw_tags if str(t).strip()]
-                elif isinstance(raw_tags, str) and raw_tags.strip():
-                    extracted_tags = [t.strip() for t in re.split(r"[,;]\s*", raw_tags) if t.strip()]
+            extracted_cols = []
+            if isinstance(sample_payload, dict):
+                for k in sample_payload.keys():
+                    valid_k, safe_k, _ = sanitize_identifier(k)
+                    if valid_k and safe_k != primary_col:
+                        if safe_k in existing_cols:
+                            try:
+                                table.drop_column(safe_k)
+                            except Exception:
+                                pass
+                        # Declarative field extraction from the computed JSON column
+                        try:
+                            table.add_computed_column(**{safe_k: table[primary_col][k]})
+                            extracted_cols.append(safe_k)
+                        except Exception as proj_err:
+                            logger.warning(f"Could not project declarative field '{k}': {proj_err}")
 
-                summary_val = str(parsed.get("summary") or parsed.get("doc_summary") or res)[:150]
-                ctx.record_row(
-                    file_name=file_name,
-                    modality=str(row.get("modality", "other")),
-                    content_snippet=str(row.get("content", ""))[:150],
-                    summary=summary_val,
-                    extracted_entities=extracted_ents,
-                    extracted_tags=extracted_tags
-                )
+            created_columns = [primary_col] + extracted_cols
+            updated_count = total_rows
 
-                all_parsed_rows.append((row["id"], parsed))
-
-                for k, v in parsed.items():
-                    valid_col, safe_col, _ = sanitize_identifier(k)
-                    if valid_col:
-                        if safe_col not in cols_type_map:
-                            cols_type_map[safe_col] = infer_pixeltable_type(v)
-
-            # 2. Ensure all extracted columns exist on the table
-            existing_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
-            for col_name, col_type in cols_type_map.items():
-                if col_name not in existing_cols:
-                    if progress_callback:
-                        progress_callback(total, total, f"Creating Pixeltable column '{col_name}'...")
-                    table.add_column(**{col_name: col_type or pxt.String})
-                    created_columns.add(col_name)
-
-            # 3. Update rows with parsed values
-            for row_id, parsed in all_parsed_rows:
-                update_dict = {}
-                for k, v in parsed.items():
-                    valid_col, safe_col, _ = sanitize_identifier(k)
-                    if valid_col:
-                        update_dict[safe_col] = format_cell_value(v)
-
-                if update_dict:
-                    table.update(update_dict, where=(table.id == row_id))
-                    updated_count += 1
-
-            # Export learned context knowledge register
+            # Dynamic context export (RES-12)
+            ctx = IngestionContext(domain=table_dir, table=table_name)
+            ctx.record_row(
+                file_name="DeclarativeBatch",
+                modality="batch_computed",
+                content_snippet=prompt_template[:150],
+                summary=f"Computed {len(created_columns)} columns via [{provider}] '{model}'",
+                extracted_entities=extracted_cols,
+                extracted_tags=[provider, model]
+            )
             context_file = ctx.export_to_markdown()
 
-            cols_summary = ", ".join(f"`{c}`" for c in cols_type_map.keys())
+            cols_summary = ", ".join(f"`{c}`" for c in created_columns)
             DBManager.record_operation(
                 dir_name=table_dir,
                 table_name=table_name,
                 op_data={
                     "action": "add_columns",
-                    "columns": list(cols_type_map.keys()),
+                    "columns": created_columns,
                     "rows_updated": updated_count,
                     "context_file": str(context_file),
                     "applied_skills": applied_skills
                 }
             )
+
+            if progress_callback:
+                progress_callback(3, 3, f"✅ Computed {len(created_columns)} columns across {updated_count} rows.")
+
             return {
                 "status": "success",
-                "message": f"Successfully processed {updated_count} rows via [{provider}] '{model}'. Unpacked into {len(cols_type_map)} dynamic columns: {cols_summary}",
+                "message": f"Successfully computed {updated_count} rows via declarative [{provider}] '{model}'. Unpacked into {len(created_columns)} dynamic columns: {cols_summary}",
                 "count": updated_count,
-                "columns": list(cols_type_map.keys()),
+                "columns": created_columns,
                 "context_file": str(context_file),
                 "applied_skills": applied_skills
             }
@@ -347,49 +357,54 @@ class PromptExecutor:
             if not valid_col:
                 return {"status": "error", "message": f"Invalid Target Column name '{target_column}': {col_msg}"}
 
-            existing_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
-            if safe_col not in existing_cols:
-                if progress_callback:
-                    progress_callback(0, 1, f"Adding column '{safe_col}' to Pixeltable schema...")
-                table.add_column(**{safe_col: pxt.String})
-                created_columns.add(safe_col)
+            if progress_callback:
+                progress_callback(1, 2, f"Computing declarative column '{safe_col}' via [{provider}] '{model}'...")
 
-            for idx, row in enumerate(records):
-                file_name = row.get("file_name", f"Row {idx + 1}")
-                if progress_callback:
-                    progress_callback(idx + 1, total, f"[{provider}] Processing row {idx + 1}/{total}: {file_name}")
+            if mode == "append" and safe_col in existing_cols:
+                # Use append UDF
+                temp_col = f"{safe_col}_appended"
+                if temp_col in existing_cols:
+                    table.drop_column(temp_col)
+                table.add_computed_column(**{
+                    temp_col: pxt_generate_append(
+                        existing_text=table[safe_col],
+                        file_name=table.file_name,
+                        content=table.content,
+                        template=prompt_template,
+                        system_prompt=system_prompt,
+                        provider=provider,
+                        model=model
+                    )
+                })
+                table.drop_column(safe_col)
+                table.add_computed_column(**{safe_col: table[temp_col]})
+                table.drop_column(temp_col)
+            else:
+                if safe_col in existing_cols:
+                    table.drop_column(safe_col)
+                table.add_computed_column(**{
+                    safe_col: pxt_generate_text(
+                        file_name=table.file_name,
+                        content=table.content,
+                        template=prompt_template,
+                        system_prompt=system_prompt,
+                        provider=provider,
+                        model=model
+                    )
+                })
 
-                context_frag = ctx.format_context_prompt_fragment()
-                prompt = cls.format_prompt(prompt_template, row, context_fragment=context_frag)
-                media_path = get_row_media_path(row)
+            updated_count = total_rows
 
-                res = LLMService.generate(
-                    provider=provider,
-                    model=model,
-                    prompt=prompt,
-                    system=system_prompt,
-                    media_path=media_path,
-                    json_mode=False
-                )
-
-                ctx.record_row(
-                    file_name=file_name,
-                    modality=str(row.get("modality", "other")),
-                    content_snippet=str(row.get("content", ""))[:150],
-                    summary=str(res)[:150]
-                )
-
-                existing_val = str(row.get(safe_col, "")) if row.get(safe_col) is not None else ""
-                if mode == "append" and existing_val:
-                    new_val = f"{existing_val}\n\n{res}"
-                else:
-                    new_val = res
-
-                table.update({safe_col: new_val}, where=(table.id == row["id"]))
-                updated_count += 1
-
+            ctx = IngestionContext(domain=table_dir, table=table_name)
+            ctx.record_row(
+                file_name="DeclarativeBatch",
+                modality="batch_computed",
+                content_snippet=prompt_template[:150],
+                summary=f"Computed column '{safe_col}' via [{provider}] '{model}'",
+                extracted_tags=[provider, model]
+            )
             context_file = ctx.export_to_markdown()
-            note = f" (Column name formatted as '{safe_col}')" if safe_col != target_column else ""
+
             DBManager.record_operation(
                 dir_name=table_dir,
                 table_name=table_name,
@@ -401,9 +416,13 @@ class PromptExecutor:
                     "applied_skills": applied_skills
                 }
             )
+
+            if progress_callback:
+                progress_callback(2, 2, f"✅ Successfully computed column '{safe_col}' across {updated_count} rows.")
+
             return {
                 "status": "success",
-                "message": f"Successfully processed {updated_count} rows using [{provider}] '{model}' and saved to column '{safe_col}'{note} ({mode} mode).",
+                "message": f"Successfully computed column '{safe_col}' across {updated_count} rows using declarative [{provider}] '{model}' ({mode} mode).",
                 "count": updated_count,
                 "column": safe_col,
                 "context_file": str(context_file),

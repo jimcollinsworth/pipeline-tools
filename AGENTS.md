@@ -35,6 +35,13 @@ This document defines core conventions, toolchain rules, architecture patterns, 
   - Multimodal declarative database layer for document/media ingestion, computed columns, and lineage.
   - Tables are grouped under directories/domains (e.g. `default`, `project_alpha`).
   - Sanitize all SQL/Pixeltable table and column identifiers with `sanitize_identifier()`.
+  - **Mandatory Declarative Invariant (Strict Prohibition of Imperative Loops)**:
+    - Imperative loops (`for row in ...:`, `table.update()`) calling AI models or updating table rows sequentially are **strictly forbidden**.
+    - All table transformations, prompt evaluations, entity extractions, and model enrichments must use `@pxt.udf` and native declarative computed columns (`table.add_computed_column`).
+    - **Exception Policy**: Any exception to declarative computed columns requires explicit developer authorization and documented justification in `journal.md`.
+  - **High-Scale Ingestion Memory Invariant (Supporting 10,000+ Rows)**:
+    - Ingestion of files into Pixeltable must use **chunked batch streaming** (batch size $\le 200$) to bound memory usage to $O(1)$.
+    - Never accumulate all scanned files or raw text strings in a monolithic in-memory list before calling `table.insert()`.
 - **Local LLM Engine (`src/core/ollama_client.py` & `src/prompts/executor.py`)**:
   - Ollama REST API for local model discovery, health checks, and batched prompt execution.
 - **Configuration & Persistence (`src/core/config.py`)**:
@@ -103,6 +110,7 @@ Guidelines to reduce common LLM coding pitfalls, biasing toward caution and simp
 - No defensive error handling for impossible scenarios.
 - If you write 200 lines and it could be done in 50, rewrite it.
 - Ask: *"Would a senior engineer say this is overcomplicated?"* If yes, simplify.
+- **Declarative Computed Columns Over Imperative Loops**: Always express data mutations, AI completions, and feature extraction as Pixeltable `@pxt.udf` computed columns. Imperative row-by-row loops require explicit documented authorization.
 
 ### 3. Surgical Changes
 *Touch only what you must. Clean up only your own mess.*

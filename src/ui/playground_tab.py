@@ -183,6 +183,7 @@ def render_playground_tab(tab=None):
         # -------------------------------------------------------------------------
         # Table 1: Input Table (Source Data with Sample Target Highlight)
         with gr.Group():
+            gr.Markdown("#### 📥 Input Table (Source Data)")
             input_table_header = gr.Markdown(initial_in_header)
             input_table = gr.Dataframe(
                 headers=initial_in_headers,

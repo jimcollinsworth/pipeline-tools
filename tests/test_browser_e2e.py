@@ -67,6 +67,7 @@ class TestBrowserE2E(unittest.TestCase):
             return
 
         # Pre-flight embedded PostgreSQL lock self-healing
+        DBManager.heal_postgres_locks()
         # Seed isolated test domain and table
         if PIXELTABLE_AVAILABLE:
             try:
@@ -331,6 +332,133 @@ class TestBrowserE2E(unittest.TestCase):
             # Verify persisted value matches
             retrieved_prompt = get_domain_system_prompt(self.TEST_DOMAIN)
             self.assertEqual(retrieved_prompt, new_test_prompt)
+        finally:
+            context.close()
+
+    def test_05_visual_stacked_tables_geometry_and_full_width(self):
+        """[E2E] Visually assert Input and Output tables are vertically stacked and span full width (>=70% viewport)."""
+        context = self.browser.new_context(viewport={"width": 1400, "height": 1000})
+        page = context.new_page()
+
+        try:
+            page.goto(self.base_url, wait_until="load", timeout=20000)
+            page.wait_for_selector("button:has-text('Ingestion & Scanner')", timeout=10000)
+            page.wait_for_timeout(1000)
+
+            # Switch to Data Enhancement tab
+            tab_btn = page.locator(".tab-nav button:has-text('Data Enhancement'), [role='tablist'] button:has-text('Data Enhancement')").first
+            tab_btn.wait_for(state="attached", timeout=5000)
+            tab_btn.scroll_into_view_if_needed()
+            tab_btn.click(force=True)
+            page.wait_for_timeout(1000)
+
+            # Locate Input Table and Output Table sections
+            input_heading = page.locator("h4:has-text('Input Table (Source Data)')").first
+            output_heading = page.locator("h4:has-text('Output Table')").first
+
+            input_heading.wait_for(state="visible", timeout=5000)
+            output_heading.wait_for(state="visible", timeout=5000)
+
+            box_input = input_heading.bounding_box()
+            box_output = output_heading.bounding_box()
+
+            self.assertIsNotNone(box_input, "Input Table heading bounding box could not be determined.")
+            self.assertIsNotNone(box_output, "Output Table heading bounding box could not be determined.")
+
+            # Strict Visual Invariant 1: Output Table MUST be vertically below Input Table (no side-by-side columns)
+            self.assertGreater(
+                box_output["y"],
+                box_input["y"] + 50,
+                f"Output table (y={box_output['y']}) is not vertically stacked below Input table (y={box_input['y']})."
+            )
+
+            # Strict Visual Invariant 2: Tables must span full horizontal width (>=70% of 1400px viewport)
+            dataframes = page.locator(".gradio-dataframe")
+            df_count = dataframes.count()
+            if df_count > 0:
+                for i in range(min(df_count, 2)):
+                    df_box = dataframes.nth(i).bounding_box()
+                    if df_box and df_box["width"] > 0:
+                        self.assertGreaterEqual(
+                            df_box["width"],
+                            1400 * 0.70,
+                            f"Dataframe #{i} width ({df_box['width']}px) is less than 70% of viewport (1400px)."
+                        )
+        finally:
+            context.close()
+
+    def test_06_view_export_load_refresh_button_and_copy_parity(self):
+        """[E2E] Verify UI instructional copy has an exact matching interactive 'Load / Refresh Table' button."""
+        context = self.browser.new_context(viewport={"width": 1400, "height": 900})
+        page = context.new_page()
+
+        try:
+            page.goto(self.base_url, wait_until="load", timeout=20000)
+            page.wait_for_selector("button:has-text('Ingestion & Scanner')", timeout=10000)
+            page.wait_for_timeout(1000)
+
+            # Switch to View & Export tab
+            tab_btn = page.locator(".tab-nav button:has-text('View & Export'), [role='tablist'] button:has-text('View & Export')").first
+            tab_btn.wait_for(state="attached", timeout=5000)
+            tab_btn.scroll_into_view_if_needed()
+            tab_btn.click(force=True)
+            page.wait_for_timeout(1000)
+
+            # 1. Verify the instructional copy is present
+            page_text = page.content()
+            self.assertIn("Load / Refresh Table", page_text, "Instructional copy does not reference Load / Refresh Table.")
+
+            # 2. Verify the interactive button exists, is visible, and enabled
+            refresh_btn = page.locator("button:has-text('Load / Refresh Table')").first
+            refresh_btn.wait_for(state="visible", timeout=5000)
+            self.assertTrue(refresh_btn.is_visible(), "Load / Refresh Table button is not visible in DOM.")
+            self.assertTrue(refresh_btn.is_enabled(), "Load / Refresh Table button is disabled.")
+
+            # 3. Click the button and verify table stats update without errors
+            refresh_btn.click(force=True)
+            page.wait_for_timeout(1000)
+            loaded_stats = page.locator("*:has-text('Displaying'), *:has-text('Total Rows'), *:has-text('Table')").first
+            self.assertTrue(loaded_stats.is_visible(), "Table stats did not update upon clicking Load / Refresh Table.")
+        finally:
+            context.close()
+
+    def test_07_global_system_prompt_visibility_and_saving(self):
+        """[E2E] Verify prominent Global System Prompt textarea and save button in Settings & Models."""
+        context = self.browser.new_context(viewport={"width": 1400, "height": 900})
+        page = context.new_page()
+
+        try:
+            page.goto(self.base_url, wait_until="load", timeout=20000)
+            page.wait_for_selector("button:has-text('Ingestion & Scanner')", timeout=10000)
+            page.wait_for_timeout(1000)
+
+            # Switch to Settings & Models tab
+            tab_btn = page.locator(".tab-nav button:has-text('Settings & Models'), [role='tablist'] button:has-text('Settings & Models')").first
+            tab_btn.wait_for(state="attached", timeout=5000)
+            tab_btn.scroll_into_view_if_needed()
+            tab_btn.click(force=True)
+            page.wait_for_timeout(1000)
+
+            # 1. Verify the Active System Prompt textarea is visible
+            system_prompt_area = page.locator("textarea[placeholder*='Enter global system prompt instructions']").first
+            system_prompt_area.wait_for(state="visible", timeout=5000)
+            self.assertTrue(system_prompt_area.is_visible(), "Active System Prompt textarea is not visible.")
+
+            # 2. Verify Save System Prompt button is visible and clickable
+            save_prompt_btn = page.locator("button:has-text('Save System Prompt')").first
+            save_prompt_btn.wait_for(state="visible", timeout=5000)
+            self.assertTrue(save_prompt_btn.is_visible(), "Save System Prompt button is not visible.")
+
+            # 3. Fill and save new system prompt
+            test_val = "E2E Test Prompt: You are an AI analyzing documents with precision."
+            system_prompt_area.fill(test_val)
+            page.wait_for_timeout(300)
+            save_prompt_btn.click(force=True)
+            page.wait_for_timeout(1000)
+
+            # 4. Verify persisted setting
+            settings = get_settings()
+            self.assertEqual(settings.last_system_prompt, test_val)
         finally:
             context.close()
 

@@ -636,6 +636,14 @@ class TestPipelineTools(unittest.TestCase):
                 render_tables_tab()
 
         self.assertIsNotNone(demo)
+        
+        # Verify critical affordances exist in the constructed component tree
+        button_labels = [c.value for c in demo.blocks.values() if isinstance(c, gr.Button)]
+        self.assertIn("🔄 Load / Refresh Table", button_labels, "Load / Refresh Table button missing from UI components.")
+        self.assertIn("💾 Save System Prompt", button_labels, "Save System Prompt button missing from UI components.")
+        
+        textbox_labels = [getattr(c, "label", None) for c in demo.blocks.values() if isinstance(c, gr.Textbox)]
+        self.assertIn("Active System Prompt", textbox_labels, "Active System Prompt textbox missing from UI components.")
 
     def test_undo_last_operation(self):
         """[Database] Verify 1-click Undo drops newly added LLM columns and reverts table schema."""

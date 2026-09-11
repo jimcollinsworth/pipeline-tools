@@ -75,6 +75,7 @@ def render_tables_tab(tab=None):
                 allow_custom_value=True,
                 scale=3
             )
+            load_refresh_btn = gr.Button("🔄 Load / Refresh Table", variant="primary", scale=2)
             limit_slider = gr.Slider(minimum=5, maximum=100, value=25, step=5, label="Max Rows to Fetch", scale=2)
             lightweight_toggle = gr.Checkbox(label="⚡ Lightweight Preview", value=True, scale=1)
 
@@ -342,7 +343,13 @@ def render_tables_tab(tab=None):
         outputs=[table_dropdown, domain_prompt_info]
     )
 
-    # Rule 2: Child dropdown (table_dropdown) sequentially loads the table data once.
+    # Rule 2: Explicit Load / Refresh Table button and child dropdown sequentially load table data.
+    load_refresh_btn.click(
+        fn=on_load_table,
+        inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
+        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+    )
+
     table_dropdown.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],

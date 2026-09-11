@@ -856,15 +856,17 @@ class DBManager:
                         reordered.append(c)
                 df = df[reordered]
 
-            # Truncate long text and object columns to 250 chars for fast rendering and minimal WebSocket payload
+            # Truncate long text and format all cells as JSON-serializable strings/primitives
             def _truncate_cell(val, max_len=250):
                 if val is None:
                     return ""
+                if hasattr(val, "isoformat"):
+                    return val.isoformat()
                 s = str(val)
                 return (s[:max_len] + "...") if len(s) > max_len else s
 
             for col in df.columns:
-                if col != "media_preview" and df[col].dtype == "object":
+                if col != "media_preview":
                     df[col] = df[col].apply(_truncate_cell)
 
             cols = list(df.columns)

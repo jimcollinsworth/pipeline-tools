@@ -15,6 +15,29 @@ def render_settings_tab(tab=None):
     with gr.Column():
         gr.Markdown("### ⚙️ Engine Settings & Multi-Provider LLM Configuration")
         
+        # -------------------------------------------------------------------------
+        # Prominent Global System Prompt (Applied to All Models)
+        # -------------------------------------------------------------------------
+        with gr.Group():
+            gr.Markdown("#### 🧠 System Prompt (Applied Across All Models & Prompts)")
+            gr.Markdown(
+                "This user-facing system prompt defines the active persona, extraction instructions, and base formatting "
+                "applied across **all models** (Ollama & Gemini) during Data Enhancement and Export operations."
+            )
+            with gr.Row():
+                global_system_prompt_input = gr.Textbox(
+                    label="Active System Prompt",
+                    value=settings.last_system_prompt or "You are a helpful AI assistant extracting entities, summaries, and key metadata from documents.",
+                    lines=4,
+                    scale=4,
+                    placeholder="Enter global system prompt instructions applied to all models..."
+                )
+            with gr.Row():
+                save_global_prompt_btn = gr.Button("💾 Save System Prompt", variant="primary", scale=1)
+                global_prompt_status = gr.Markdown("", scale=3)
+
+        gr.Markdown("---")
+
         with gr.Row():
             with gr.Column(scale=1):
                 gr.Markdown("#### 🦙 Local Ollama Settings")
@@ -198,6 +221,23 @@ def render_settings_tab(tab=None):
         outputs=[domain_system_prompt_input, domain_prompt_status]
     )
 
+    def on_save_global_prompt(prompt):
+        curr = get_settings()
+        cleaned = prompt.strip() if prompt else ""
+        curr.last_system_prompt = cleaned
+        if curr.domain_system_prompts is None:
+            curr.domain_system_prompts = {}
+        curr.domain_system_prompts["default"] = cleaned
+        save_settings(curr)
+        gr.Info("Global System Prompt saved successfully!")
+        return "✅ **System Prompt saved and applied across all models!**"
+
+    save_global_prompt_btn.click(
+        fn=on_save_global_prompt,
+        inputs=[global_system_prompt_input],
+        outputs=[global_prompt_status]
+    )
+
     def on_save_domain_prompt(domain, prompt):
         dom = domain.strip() if domain and domain.strip() else "default"
         set_domain_system_prompt(dom, prompt)
@@ -210,10 +250,12 @@ def render_settings_tab(tab=None):
         outputs=[domain_prompt_status]
     )
 
-    def on_save_settings(host, def_ollama, gemini_key, def_gemini, def_provider, pt_dir, exp_dir, dom_sel, dom_prompt):
+    def on_save_settings(host, def_ollama, gemini_key, def_gemini, def_provider, pt_dir, exp_dir, global_prompt, dom_sel, dom_prompt):
         curr = get_settings()
         dom = dom_sel.strip() if dom_sel and dom_sel.strip() else "default"
         curr_prompts = dict(curr.domain_system_prompts or {})
+        cleaned_global = global_prompt.strip() if global_prompt else curr.last_system_prompt
+        curr_prompts["default"] = cleaned_global
         if dom_prompt and dom_prompt.strip():
             curr_prompts[dom] = dom_prompt.strip()
         updated = Settings(
@@ -227,7 +269,7 @@ def render_settings_tab(tab=None):
             last_provider=def_provider,
             last_domain=curr.last_domain,
             last_table=curr.last_table,
-            last_system_prompt=dom_prompt.strip() if dom_prompt and dom_prompt.strip() else curr.last_system_prompt,
+            last_system_prompt=cleaned_global,
             last_user_prompt=curr.last_user_prompt,
             domain_system_prompts=curr_prompts
         )
@@ -257,6 +299,7 @@ def render_settings_tab(tab=None):
             default_provider_radio,
             pixeltable_dir_input,
             export_dir_input,
+            global_system_prompt_input,
             domain_prompt_selector,
             domain_system_prompt_input
         ],

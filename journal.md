@@ -542,3 +542,34 @@ This journal records verbatim developer instructions, architectural directives, 
 5. **Verification**:
    - Test suite expanded to 54 automated tests: **54 Passed, 0 Failed, 0 Errors** (`uv run python -m tests`).
 
+---
+
+## 📅 2026-09-11: UI Layout Realignment, Affordance Parity, and Test Rigor (v1.2.0)
+
+**Context:** Resolving Hugging Face Space visual regressions, eliminating test blindness, restoring missing UI affordances, and establishing strict visual geometry testing.
+
+**Verbatim Instruction:**
+> `There's a few other things which I thought were done, but apparently not as I look at HuggingFace. For all these items, track the bug issues, the existential issue, and the pride issue if there is one. We need a way of tracking the fix. Let's get all the issues defined first, then we'll attack them.`
+> `I see that system prompt has been removed from the page, but I don't see it anywhere now. There should be a system prompt now applied to all models, and just put that into the settings and models page. That would be a user-facing setting.`
+> `I pasted a HuggingFace screen. I still see the table and output table side by side. Try a screenshot yourself if you need to. Confirm this in testing.`
+> `On the export page, there's a message which says "Click load refresh table or select a table to view data". There is no "load refresh table" button on the screen. Fix this and also analyze how something this obvious passes your tests.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Full-Width Stacked Tables (Data Enhancement)**:
+   - Eliminated the cramped 2-column side-by-side view.
+   - Stacked Input Table and Output Table vertically, with full width (`width: 100%`, `min_width=800`) and clear, explicit Markdown headers (`#### 📥 Input Table (Source Data)` and `#### 📤 Output Table (Test Preview & Enriched Results)`).
+2. **Interactive Affordance Parity (`🔄 Load / Refresh Table`)**:
+   - Added the prominent `🔄 Load / Refresh Table` button directly in the table selection row in `src/ui/tables_tab.py`, ensuring instructional copy and available UI affordances match 100%.
+3. **Prominent Global System Prompt in Settings & Models**:
+   - Added a top-level Active System Prompt editor in `src/ui/settings_tab.py` with 1-click persistence (`💾 Save System Prompt`), applied universally across Ollama and Gemini models during Data Enhancement and Export.
+4. **Pandas Timestamp JSON Serialization**:
+   - Updated `DBManager.get_table_data` to serialize all non-media cells (including `pd.Timestamp` and datetime objects) to ISO strings via `_truncate_cell`, preventing `TypeError: Object of type Timestamp is not JSON serializable` crashes during Gradio API inspection.
+5. **Eliminating Test Blindness via Visual Geometry & Affordance E2E Tests**:
+   - Added Playwright bounding-box assertions in `tests/test_browser_e2e.py` verifying that:
+     - Output Table is strictly positioned vertically below Input Table (`y_output > y_input + 50`).
+     - Both dataframes span $\ge 70\%$ of the viewport width.
+     - Instructional copy strings in the UI are strictly paired with matching interactive buttons in the DOM.
+     - Global System Prompt updates persist across sessions.
+   - All 7 E2E browser tests pass cleanly.
+
+

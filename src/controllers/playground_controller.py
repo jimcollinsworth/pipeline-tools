@@ -91,7 +91,26 @@ class PlaygroundController:
             enriched_data.append([target_badge] + list(row))
 
         info_text = f"✅ **Table `{res.get('domain', clean_dir)}.{res.get('table', clean_tbl)}`** ({mode_label}) — Total Rows: **{total}** (showing first {len(raw_data)}, top {min(target_sample_count, len(raw_data))} targeted for sample testing)"
-        cols_pills = ", ".join([f"`{{{c}}}`" for c in raw_cols if c != "media_preview"]) if raw_cols else "*None*"
+
+        # Discover additional metadata keys (such as ingested CSV columns)
+        meta_keys = []
+        if "metadata" in raw_cols and len(raw_data) > 0:
+            meta_idx = raw_cols.index("metadata")
+            first_meta = raw_data[0][meta_idx]
+            if isinstance(first_meta, dict):
+                meta_keys = list(first_meta.keys())
+            elif isinstance(first_meta, str) and first_meta.startswith("{"):
+                try:
+                    import json
+                    meta_keys = list(json.loads(first_meta).keys())
+                except Exception:
+                    pass
+
+        visible_cols = [c for c in raw_cols if c not in ("media_preview", "metadata")]
+        pills = [f"`{{{c}}}`" for c in visible_cols]
+        if meta_keys:
+            pills.extend([f"`{{{k}}}`" for k in meta_keys if k not in visible_cols])
+        cols_pills = ", ".join(pills) if pills else "*None*"
         cols_text = f"💡 **Available Column Placeholders:** {cols_pills} | Standard: `{{file_name}}`, `{{content}}`, `{{rel_path}}`, `{{modality}}`, `{{file_size}}`"
 
         return {

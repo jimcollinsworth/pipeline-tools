@@ -9,29 +9,62 @@ from src.controllers.ingest_controller import IngestController
 def render_ingest_tab(tab=None):
     settings = get_settings()
     default_path = settings.default_ingest_dir or str(Path.cwd())
+    initial_file_choices = IngestController.get_file_suggestions()
+    initial_file_val = initial_file_choices[0] if initial_file_choices else ""
 
     with gr.Column(scale=1):
-        gr.Markdown("### 📂 Ingestion & Directory Scanner")
-        
-        with gr.Row():
-            dir_input = gr.Dropdown(
-                label="Source Directory Path (Type or select from tree)",
-                choices=IngestController.get_directory_suggestions(default_path),
-                value=default_path,
-                allow_custom_value=True,
-                filterable=True,
-                scale=4
-            )
-            scan_btn = gr.Button("🔍 Scan Directory", variant="primary", scale=1)
+        gr.Markdown("### 📂 Ingestion & Document Scanner")
 
-        with gr.Row():
-            modality_filters = gr.CheckboxGroup(
-                label="Include Modalities",
-                choices=["docs", "images", "audio", "video", "other"],
-                value=["docs", "images", "audio", "video"],
-                scale=3
-            )
-            recursive_check = gr.Checkbox(label="Recursive Subdirectories", value=True, scale=1)
+        ingest_mode_radio = gr.Radio(
+            choices=["📁 Directory Multi-Asset Scanner", "📄 Single Row-Oriented File (CSV)"],
+            value="📁 Directory Multi-Asset Scanner",
+            label="Ingestion Mode"
+        )
+
+        # Mode 1: Directory Multi-Asset Scanner Controls
+        with gr.Group(visible=True) as directory_controls_group:
+            with gr.Row():
+                dir_input = gr.Dropdown(
+                    label="Source Directory Path (Type or select from tree)",
+                    choices=IngestController.get_directory_suggestions(default_path),
+                    value=default_path,
+                    allow_custom_value=True,
+                    filterable=True,
+                    scale=4
+                )
+                scan_dir_btn = gr.Button("🔍 Scan Directory", variant="primary", scale=1)
+
+            with gr.Row():
+                modality_filters = gr.CheckboxGroup(
+                    label="Include Modalities",
+                    choices=["docs", "images", "audio", "video", "other"],
+                    value=["docs", "images", "audio", "video"],
+                    scale=3
+                )
+                recursive_check = gr.Checkbox(label="Recursive Subdirectories", value=True, scale=1)
+
+        # Mode 2: Single Row-Oriented CSV File Controls
+        with gr.Group(visible=False) as single_file_controls_group:
+            with gr.Row():
+                file_input = gr.Dropdown(
+                    label="Source CSV / TSV File Path (Type or select file)",
+                    choices=initial_file_choices,
+                    value=initial_file_val,
+                    allow_custom_value=True,
+                    filterable=True,
+                    scale=4
+                )
+                scan_file_btn = gr.Button("🔍 Inspect CSV File", variant="primary", scale=1)
+
+            with gr.Row():
+                primary_text_col_dropdown = gr.Dropdown(
+                    label="Primary Text / Content Column",
+                    choices=["(Auto / All Columns)"],
+                    value="(Auto / All Columns)",
+                    allow_custom_value=True,
+                    scale=3,
+                    info="Selected column populates {content}. All other CSV columns remain accessible via {col_name} placeholders."
+                )
 
         summary_markdown = gr.Markdown("#### Scan Summary: *No directory scanned yet.*")
 
@@ -81,16 +114,35 @@ def render_ingest_tab(tab=None):
             )
 
         with gr.Row():
-            ingest_btn = gr.Button("⚡ Ingest Scanned Files into Pixeltable", variant="primary", scale=1)
+            ingest_btn = gr.Button("⚡ Ingest into Pixeltable", variant="primary", scale=1)
 
         with gr.Group(elem_classes=["status-panel"]):
             ingest_status_box = gr.Markdown("#### Ingestion Status: *Ready*")
+
+    def on_mode_change(selected_mode):
+        is_csv = ("single" in selected_mode.lower() or "csv" in selected_mode.lower())
+        summary_text = "#### Scan Summary: *No CSV file inspected yet.*" if is_csv else "#### Scan Summary: *No directory scanned yet.*"
+        default_headers = ["Column 1", "Column 2", "Column 3"] if is_csv else ["Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"]
+        return (
+            gr.update(visible=not is_csv),
+            gr.update(visible=is_csv),
+            summary_text,
+            gr.update(headers=default_headers, value=[]),
+            []
+        )
 
     def on_dir_change(selected_path):
         """Update choices dynamically when user selects or types a path."""
         if not selected_path:
             return gr.update()
         new_choices = IngestController.get_directory_suggestions(selected_path)
+        return gr.update(choices=new_choices)
+
+    def on_file_change(selected_path):
+        """Update file choices dynamically when user selects or types a path."""
+        if not selected_path:
+            return gr.update()
+        new_choices = IngestController.get_file_suggestions(selected_path)
         return gr.update(choices=new_choices)
 
     def on_ingest_domain_change(selected_domain):
@@ -104,7 +156,7 @@ def render_ingest_tab(tab=None):
         selected_tbl = curr_settings.last_table if curr_settings.last_table in tables_list else tables_list[0]
         return gr.update(choices=tables_list, value=selected_tbl)
 
-    def on_scan(path_str, modalities, recursive, progress=gr.Progress(track_tqdm=False)):
+    def on_scan_directory(path_str, modalities, recursive, progress=gr.Progress(track_tqdm=False)):
         def cb(pct, desc):
             progress(pct, desc=desc)
 
@@ -117,20 +169,55 @@ def render_ingest_tab(tab=None):
 
         if res["status"] == "error":
             gr.Error(res["summary"])
-            return res["summary"], [], [], gr.update()
+            return res["summary"], gr.update(headers=["Status"], value=[]), [], gr.update()
 
         if res["status"] == "empty":
             gr.Info(f"No matching files found in {path_str}")
 
         return (
             res["summary"],
-            res["files_table"],
+            gr.update(headers=["Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"], value=res["files_table"]),
             res["scanned_files"],
             gr.update(choices=res["directory_choices"])
         )
 
-    def on_ingest(files_data, domain, table_name, overwrite, progress=gr.Progress(track_tqdm=False)):
-        if not files_data:
+    def on_scan_single_file(file_path, progress=gr.Progress(track_tqdm=False)):
+        def cb(pct, desc):
+            progress(pct, desc=desc)
+
+        res = IngestController.scan_single_file_flow(file_path, progress_callback=cb)
+        if res["status"] == "error":
+            gr.Error(res["summary"])
+            return res["summary"], gr.update(headers=["Status"], value=[]), [], gr.update(), gr.update(choices=["(Auto / All Columns)"], value="(Auto / All Columns)")
+
+        cols = res.get("columns", [])
+        text_col_choices = ["(Auto / All Columns)"] + cols
+
+        # Auto-detect common text column names
+        best_choice = "(Auto / All Columns)"
+        for candidate in ["content", "text", "description", "body", "summary", "notes", "headline", "comment"]:
+            for c in cols:
+                if candidate in c.lower():
+                    best_choice = c
+                    break
+            if best_choice != "(Auto / All Columns)":
+                break
+
+        return (
+            res["summary"],
+            gr.update(headers=res["headers"], value=res["files_table"]),
+            res["scanned_files"],
+            gr.update(choices=res["file_choices"], value=file_path),
+            gr.update(choices=text_col_choices, value=best_choice)
+        )
+
+    def on_ingest(files_data, domain, table_name, overwrite, mode, single_file_path, text_column, progress=gr.Progress(track_tqdm=False)):
+        is_csv = ("single" in mode.lower() or "csv" in mode.lower())
+        if is_csv and not single_file_path and not files_data:
+            gr.Warning("No CSV file selected. Please select and inspect a CSV file first.")
+            return "### ⚠️ No CSV File to Ingest\n> Please select and inspect a CSV file first."
+
+        if not is_csv and not files_data:
             gr.Warning("No scanned files to ingest. Scan a directory first.")
             return "### ⚠️ No Files to Ingest\n> Please scan a directory containing documents/media first."
 
@@ -143,20 +230,35 @@ def render_ingest_tab(tab=None):
             table_name=table_name,
             scanned_files=files_data,
             overwrite=overwrite,
+            mode=mode,
+            single_file_path=single_file_path,
+            text_column=text_column,
             progress_callback=cb
         )
 
         if res["status"] == "success":
-            gr.Info(f"Successfully ingested {len(files_data)} files into {res.get('safe_domain')}.{res.get('safe_table')}!")
+            gr.Info(f"Ingestion successful into {res.get('safe_domain')}.{res.get('safe_table')}!")
         else:
             gr.Error("Ingestion encountered an issue.")
 
         return res["message"]
 
+    ingest_mode_radio.change(
+        fn=on_mode_change,
+        inputs=[ingest_mode_radio],
+        outputs=[directory_controls_group, single_file_controls_group, summary_markdown, files_table, scanned_state]
+    )
+
     dir_input.change(
         fn=on_dir_change,
         inputs=[dir_input],
         outputs=[dir_input]
+    )
+
+    file_input.change(
+        fn=on_file_change,
+        inputs=[file_input],
+        outputs=[file_input]
     )
 
     domain_dropdown.change(
@@ -165,15 +267,21 @@ def render_ingest_tab(tab=None):
         outputs=[table_dropdown]
     )
 
-    scan_btn.click(
-        fn=on_scan,
+    scan_dir_btn.click(
+        fn=on_scan_directory,
         inputs=[dir_input, modality_filters, recursive_check],
         outputs=[summary_markdown, files_table, scanned_state, dir_input]
     )
 
+    scan_file_btn.click(
+        fn=on_scan_single_file,
+        inputs=[file_input],
+        outputs=[summary_markdown, files_table, scanned_state, file_input, primary_text_col_dropdown]
+    )
+
     ingest_btn.click(
         fn=on_ingest,
-        inputs=[scanned_state, domain_dropdown, table_dropdown, overwrite_check],
+        inputs=[scanned_state, domain_dropdown, table_dropdown, overwrite_check, ingest_mode_radio, file_input, primary_text_col_dropdown],
         outputs=[ingest_status_box]
     )
 

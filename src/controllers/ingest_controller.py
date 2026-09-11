@@ -9,11 +9,48 @@ import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
 from src.core.config import get_settings, update_last_entry, sanitize_identifier
-from src.ingest.scanner import scan_directory
+from src.ingest.scanner import scan_directory, scan_single_file
 from src.db.manager import DBManager
 
 class IngestController:
     """Pure controller handling directory scanning and file ingestion workflows."""
+
+    @staticmethod
+    def get_file_suggestions(current_path: Optional[str] = None) -> List[str]:
+        """Generate intelligent path suggestions for single row-oriented file inputs (.csv, .tsv)."""
+        choices = set()
+        cwd = Path.cwd()
+        home = Path.home()
+
+        # Check immediate directory and subdirectories for CSV / TSV files
+        for base in [cwd, home]:
+            try:
+                for f in base.glob("*.csv"):
+                    choices.add(str(f))
+                for f in base.glob("*.tsv"):
+                    choices.add(str(f))
+                for sub in base.iterdir():
+                    if sub.is_dir() and not sub.name.startswith("."):
+                        for f in sub.glob("*.csv"):
+                            choices.add(str(f))
+            except Exception:
+                pass
+
+        if current_path:
+            try:
+                p = Path(current_path.strip())
+                if p.exists():
+                    if p.is_file():
+                        choices.add(str(p))
+                    elif p.is_dir():
+                        for f in p.glob("*.csv"):
+                            choices.add(str(f))
+                        for f in p.glob("*.tsv"):
+                            choices.add(str(f))
+            except Exception:
+                pass
+
+        return sorted(list(choices))
 
     @staticmethod
     def get_directory_suggestions(current_path: Optional[str] = None) -> List[str]:
@@ -126,8 +163,88 @@ class IngestController:
             "status": "success",
             "summary": summary_md,
             "files_table": table_rows,
+            "headers": ["Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"],
             "scanned_files": files,
             "directory_choices": updated_choices
+        }
+
+    @staticmethod
+    def scan_single_file_flow(
+        file_path_str: str,
+        progress_callback: Optional[Callable[[float, str], None]] = None
+    ) -> Dict[str, Any]:
+        """Validate single row-oriented file, extract sample preview rows, and count total records."""
+        if not file_path_str or not file_path_str.strip():
+            return {
+                "status": "error",
+                "summary": "⚠️ **Please provide a valid file path.**",
+                "files_table": [],
+                "headers": ["Status"],
+                "columns": [],
+                "scanned_files": [],
+                "file_choices": IngestController.get_file_suggestions()
+            }
+
+        p = Path(file_path_str.strip())
+        if not p.exists():
+            return {
+                "status": "error",
+                "summary": f"### ❌ File Not Found\n> Path `{file_path_str}` does not exist.",
+                "files_table": [],
+                "headers": ["Status"],
+                "columns": [],
+                "scanned_files": [],
+                "file_choices": IngestController.get_file_suggestions()
+            }
+
+        if p.is_dir():
+            return {
+                "status": "error",
+                "summary": f"### ❌ Path is a Directory\n> Path `{file_path_str}` is a directory, not a single file. Please select a CSV or TSV file, or switch to Directory Scanner mode.",
+                "files_table": [],
+                "headers": ["Status"],
+                "columns": [],
+                "scanned_files": [],
+                "file_choices": IngestController.get_file_suggestions()
+            }
+
+        if progress_callback:
+            progress_callback(0.3, f"Inspecting file structure: {p.name}...")
+
+        scan_res = scan_single_file(str(p))
+        if scan_res.get("status") == "error":
+            return {
+                "status": "error",
+                "summary": f"### ❌ Error Inspecting File\n> {scan_res.get('message')}",
+                "files_table": [],
+                "headers": ["Status"],
+                "columns": [],
+                "scanned_files": [],
+                "file_choices": IngestController.get_file_suggestions(str(p))
+            }
+
+        cols = scan_res.get("columns", [])
+        preview_rows = scan_res.get("preview_rows", [])
+        total = scan_res.get("row_count", 0)
+
+        cols_list = ", ".join(f"`{c}`" for c in cols)
+        summary = (
+            f"### 📄 Single Table File Ready: `{scan_res.get('name')}`\n"
+            f"- **Total Rows to Ingest:** **{total:,}** individual document records\n"
+            f"- **File Size:** {scan_res.get('size')} ({scan_res.get('extension')})\n"
+            f"- **Detected Columns ({len(cols)}):** {cols_list}\n"
+            f"- **Mode:** Each row will be ingested as an individual document in Pixeltable with full `{'{column}'}` prompt support."
+        )
+
+        return {
+            "status": "success",
+            "summary": summary,
+            "files_table": preview_rows,
+            "headers": cols if cols else ["Column 1"],
+            "columns": cols,
+            "row_count": total,
+            "scanned_files": [scan_res],
+            "file_choices": IngestController.get_file_suggestions(str(p))
         }
 
     @staticmethod
@@ -136,16 +253,31 @@ class IngestController:
         table_name: str,
         scanned_files: List[Dict[str, Any]],
         overwrite: bool = False,
+        mode: str = "📁 Directory Multi-Asset Scanner",
+        single_file_path: Optional[str] = None,
+        text_column: Optional[str] = None,
         progress_callback: Optional[Callable[[int, int, str], None]] = None
     ) -> Dict[str, Any]:
-        """Validate input parameters and execute Pixeltable ingestion with sanitized identifiers."""
-        if not scanned_files:
-            return {
-                "status": "error",
-                "message": "⚠️ **No files scanned yet.** Please scan a directory first.",
-                "domain_choices": DBManager.list_dirs() or ["default"],
-                "table_choices": DBManager.list_tables(domain) or ["raw_assets"]
-            }
+        """Validate input parameters and execute Pixeltable ingestion with sanitized identifiers for both modes."""
+        is_csv_mode = ("single" in mode.lower() or "csv" in mode.lower() or "row" in mode.lower())
+
+        if is_csv_mode:
+            target_path = single_file_path or (scanned_files[0].get("abs_path") if scanned_files else None)
+            if not target_path or not Path(target_path).exists():
+                return {
+                    "status": "error",
+                    "message": "⚠️ **No CSV file selected.** Please select and inspect a valid CSV file first.",
+                    "domain_choices": DBManager.list_dirs() or ["default"],
+                    "table_choices": DBManager.list_tables(domain) or ["raw_assets"]
+                }
+        else:
+            if not scanned_files:
+                return {
+                    "status": "error",
+                    "message": "⚠️ **No files scanned yet.** Please scan a directory first.",
+                    "domain_choices": DBManager.list_dirs() or ["default"],
+                    "table_choices": DBManager.list_tables(domain) or ["raw_assets"]
+                }
 
         clean_dir = domain.strip() if domain and domain.strip() else "default"
         clean_tbl = table_name.strip() if table_name and table_name.strip() else "raw_assets"
@@ -156,13 +288,23 @@ class IngestController:
 
         update_last_entry(last_domain=safe_dir, last_table=safe_tbl)
 
-        res = DBManager.ingest_files(
-            dir_name=safe_dir,
-            table_name=safe_tbl,
-            files_info=scanned_files,
-            overwrite=overwrite,
-            progress_callback=progress_callback
-        )
+        if is_csv_mode:
+            res = DBManager.ingest_csv_rows(
+                dir_name=safe_dir,
+                table_name=safe_tbl,
+                csv_path=target_path,
+                text_column=text_column if text_column and text_column != "(Auto / All Columns)" else None,
+                overwrite=overwrite,
+                progress_callback=progress_callback
+            )
+        else:
+            res = DBManager.ingest_files(
+                dir_name=safe_dir,
+                table_name=safe_tbl,
+                files_info=scanned_files,
+                overwrite=overwrite,
+                progress_callback=progress_callback
+            )
 
         all_domains = DBManager.list_dirs()
         if not all_domains:
@@ -181,10 +323,12 @@ class IngestController:
             if dir_sanitized or tbl_sanitized:
                 sanitization_note = f"\n> *Note: Target identifier was sanitized for SQL compatibility: `{clean_dir}.{clean_tbl}` → `{safe_dir}.{safe_tbl}`*"
 
+            rows_inserted = res.get("inserted_count", res.get("rows_inserted", len(scanned_files)))
             status_msg = (
                 f"### ✅ Pixeltable Ingestion Complete!\n"
                 f"- **Target Table:** `{safe_dir}.{safe_tbl}`\n"
-                f"- **Rows Inserted:** {res.get('rows_inserted', len(scanned_files))}\n"
+                f"- **Rows Ingested:** **{rows_inserted:,}**\n"
+                f"- **Total Rows in Table:** **{res.get('total_count', rows_inserted):,}**\n"
                 f"- **Status:** Successfully written to persistent storage.{sanitization_note}"
             )
             return {

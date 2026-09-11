@@ -31,7 +31,7 @@ except ImportError:
 
 from src.core.config import get_settings, Settings, sanitize_identifier
 from src.core.ollama_client import OllamaClient
-from src.ingest.scanner import scan_directory, classify_modality
+from src.ingest.scanner import scan_directory, scan_single_file, classify_modality
 from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
 from src.core.llm_service import LLMService
 from src.prompts.executor import PromptExecutor, extract_json_payload, infer_pixeltable_type
@@ -621,13 +621,16 @@ class TestPipelineTools(unittest.TestCase):
             self.assertEqual(res.get("total_rows"), 0)
 
     def test_ui_components_construction(self):
-        """[UI] Verify all UI tabs (Settings, Playground, Tables) construct cleanly within Gradio Blocks."""
+        """[UI] Verify all UI tabs (Ingest, Settings, Playground, Tables) construct cleanly within Gradio Blocks."""
         import gradio as gr
+        from src.ui.ingest_tab import render_ingest_tab
         from src.ui.settings_tab import render_settings_tab
         from src.ui.playground_tab import render_playground_tab
         from src.ui.tables_tab import render_tables_tab
 
         with gr.Blocks() as demo:
+            with gr.TabItem("📂 Ingest"):
+                render_ingest_tab()
             with gr.TabItem("⚙️ Settings"):
                 render_settings_tab()
             with gr.TabItem("🧪 Data Enhancement"):
@@ -641,9 +644,101 @@ class TestPipelineTools(unittest.TestCase):
         button_labels = [c.value for c in demo.blocks.values() if isinstance(c, gr.Button)]
         self.assertIn("🔄 Load / Refresh Table", button_labels, "Load / Refresh Table button missing from UI components.")
         self.assertIn("💾 Save System Prompt", button_labels, "Save System Prompt button missing from UI components.")
+        self.assertIn("🔍 Inspect CSV File", button_labels, "Inspect CSV File button missing from UI components.")
+        self.assertIn("🔍 Scan Directory", button_labels, "Scan Directory button missing from UI components.")
         
         textbox_labels = [getattr(c, "label", None) for c in demo.blocks.values() if isinstance(c, gr.Textbox)]
         self.assertIn("Active System Prompt", textbox_labels, "Active System Prompt textbox missing from UI components.")
+
+        radio_choices = [getattr(c, "choices", None) for c in demo.blocks.values() if isinstance(c, gr.Radio)]
+        has_mode_radio = any(choices and "📄 Single Row-Oriented File (CSV)" in str(choices) for choices in radio_choices)
+        self.assertTrue(has_mode_radio, "Dual Ingest Mode radio missing from UI.")
+
+    def test_scan_single_file_csv(self):
+        """[Scanner] Verify scan_single_file inspects headers, preview rows, and calculates total row count."""
+        temp_csv = Path(self.TEST_DOMAIN + "_sample.csv")
+        try:
+            temp_csv.write_text(
+                "id,name,category,price,description\n"
+                "1,Item A,Electronics,29.99,High quality wireless mouse\n"
+                "2,Item B,Books,14.50,Hardcover programming guide\n"
+                "3,Item C,Kitchen,45.00,Stainless steel chef knife\n",
+                encoding="utf-8"
+            )
+            res = scan_single_file(str(temp_csv), max_preview_rows=2)
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["name"], temp_csv.name)
+            self.assertEqual(res["row_count"], 3)
+            self.assertEqual(res["columns"], ["id", "name", "category", "price", "description"])
+            self.assertEqual(len(res["preview_rows"]), 2)
+            self.assertEqual(res["preview_rows"][0][1], "Item A")
+        finally:
+            if temp_csv.exists():
+                try:
+                    temp_csv.unlink()
+                except Exception:
+                    pass
+
+    def test_ingest_csv_rows_streaming(self):
+        """[Ingest] Verify DBManager.ingest_csv_rows parses each CSV row into an individual document record."""
+        if PIXELTABLE_AVAILABLE:
+            tbl_name = "test_csv_ingest_tbl"
+            temp_csv = Path(self.TEST_DOMAIN + "_ingest.csv")
+            try:
+                # Write 5 rows
+                rows_text = "sku,title,category,content_body\n" + "\n".join(
+                    f"SKU-{i},Product {i},Category {i % 2},Detailed specifications and usage guide for product {i}."
+                    for i in range(1, 6)
+                )
+                temp_csv.write_text(rows_text, encoding="utf-8")
+
+                res = DBManager.ingest_csv_rows(
+                    dir_name=self.TEST_DOMAIN,
+                    table_name=tbl_name,
+                    csv_path=str(temp_csv),
+                    text_column="content_body",
+                    overwrite=True
+                )
+                self.assertEqual(res["status"], "success")
+                self.assertEqual(res["inserted_count"], 5)
+
+                # Query ingested table
+                table_data = DBManager.get_table_data(self.TEST_DOMAIN, tbl_name, limit=10)
+                self.assertEqual(table_data["total_rows"], 5)
+                cols = table_data["columns"]
+                self.assertIn("file_name", cols)
+                self.assertIn("content", cols)
+                self.assertIn("metadata", cols)
+
+                # Verify first row content matches the text column
+                first_row = table_data["data"][0]
+                content_val = first_row[cols.index("content")]
+                self.assertIn("Detailed specifications and usage guide for product 1", content_val)
+
+            finally:
+                if temp_csv.exists():
+                    try:
+                        temp_csv.unlink()
+                    except Exception:
+                        pass
+
+    def test_prompt_substitution_csv_metadata(self):
+        """[Prompts] Verify format_prompt substitutes CSV metadata columns ({col} and {metadata.col})."""
+        row = {
+            "file_name": "inventory.csv #Row 1",
+            "content": "A high precision digital camera",
+            "metadata": {
+                "sku": "CAM-99",
+                "price": "$499.00",
+                "brand": "OptiVision"
+            }
+        }
+        template = "Analyze {file_name}: Brand is {brand}, SKU is {metadata.sku}, Price is {price}. Details: {content}"
+        rendered = PromptExecutor.format_prompt(template, row)
+        self.assertIn("Brand is OptiVision", rendered)
+        self.assertIn("SKU is CAM-99", rendered)
+        self.assertIn("Price is $499.00", rendered)
+        self.assertIn("A high precision digital camera", rendered)
 
     def test_undo_last_operation(self):
         """[Database] Verify 1-click Undo drops newly added LLM columns and reverts table schema."""
@@ -901,7 +996,10 @@ class CleanTestResult(unittest.TestResult):
         self.stream.flush()
 
 
-def run_tests():
+def run_tests(include_e2e=None):
+    if include_e2e is None:
+        include_e2e = "--e2e" in sys.argv
+
     header = "=" * 76
     print("\n" + header, flush=True)
     print("  PIPELINE TOOLS AUTOMATED TEST SUITE", flush=True)
@@ -919,12 +1017,13 @@ def run_tests():
     except Exception:
         pass
 
-    try:
-        from tests.test_browser_e2e import TestBrowserE2E, PLAYWRIGHT_AVAILABLE
-        if PLAYWRIGHT_AVAILABLE:
-            suite.addTests(loader.loadTestsFromTestCase(TestBrowserE2E))
-    except Exception:
-        pass
+    if include_e2e:
+        try:
+            from tests.test_browser_e2e import TestBrowserE2E, PLAYWRIGHT_AVAILABLE
+            if PLAYWRIGHT_AVAILABLE:
+                suite.addTests(loader.loadTestsFromTestCase(TestBrowserE2E))
+        except Exception:
+            pass
 
     total_count = suite.countTestCases()
     result = CleanTestResult(sys.stdout, total_tests=total_count)

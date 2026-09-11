@@ -66,8 +66,6 @@ class TestBrowserE2E(unittest.TestCase):
         if not PLAYWRIGHT_AVAILABLE:
             return
 
-        # Pre-flight embedded PostgreSQL lock self-healing
-        DBManager.heal_postgres_locks()
         # Seed isolated test domain and table
         if PIXELTABLE_AVAILABLE:
             try:

@@ -122,12 +122,22 @@ import logging
 logger = logging.getLogger("pipeline_tools.prompts")
 
 def format_prompt(template: str, row: Dict[str, Any], context_fragment: str = "") -> str:
-    """Replace {column_name} variables in prompt template with row values."""
+    """Replace {column_name} variables in prompt template with row values, supporting metadata attributes."""
     formatted = template
     for k, v in row.items():
+        if k == "metadata":
+            continue
         placeholder = f"{{{k}}}"
         val_str = str(v) if v is not None else ""
         formatted = formatted.replace(placeholder, val_str)
+
+    meta = row.get("metadata")
+    if isinstance(meta, dict):
+        for mk, mv in meta.items():
+            val_str = str(mv) if mv is not None else ""
+            formatted = formatted.replace(f"{{{mk}}}", val_str)
+            formatted = formatted.replace(f"{{metadata.{mk}}}", val_str)
+
     if "{ingestion_context}" in formatted:
         formatted = formatted.replace("{ingestion_context}", context_fragment)
     return formatted
@@ -135,15 +145,15 @@ def format_prompt(template: str, row: Dict[str, Any], context_fragment: str = ""
 
 if PIXELTABLE_AVAILABLE and pxt is not None:
     @pxt.udf
-    def pxt_generate_text(file_name: Optional[str], content: Optional[str], template: str, system_prompt: str, provider: str, model: str) -> str:
-        row_dict = {"file_name": file_name or "", "content": content or ""}
+    def pxt_generate_text(file_name: Optional[str], content: Optional[str], metadata: Optional[dict], template: str, system_prompt: str, provider: str, model: str) -> str:
+        row_dict = {"file_name": file_name or "", "content": content or "", "metadata": metadata or {}}
         prompt = format_prompt(template, row_dict)
         res = LLMService.generate(provider=provider, model=model, prompt=prompt, system=system_prompt, json_mode=False)
         return str(res or "")
 
     @pxt.udf
-    def pxt_generate_append(existing_text: Optional[str], file_name: Optional[str], content: Optional[str], template: str, system_prompt: str, provider: str, model: str) -> str:
-        row_dict = {"file_name": file_name or "", "content": content or ""}
+    def pxt_generate_append(existing_text: Optional[str], file_name: Optional[str], content: Optional[str], metadata: Optional[dict], template: str, system_prompt: str, provider: str, model: str) -> str:
+        row_dict = {"file_name": file_name or "", "content": content or "", "metadata": metadata or {}}
         prompt = format_prompt(template, row_dict)
         new_res = str(LLMService.generate(provider=provider, model=model, prompt=prompt, system=system_prompt, json_mode=False) or "")
         if existing_text and existing_text.strip():
@@ -151,8 +161,8 @@ if PIXELTABLE_AVAILABLE and pxt is not None:
         return new_res
 
     @pxt.udf
-    def pxt_generate_json(file_name: Optional[str], content: Optional[str], template: str, system_prompt: str, provider: str, model: str) -> dict:
-        row_dict = {"file_name": file_name or "", "content": content or ""}
+    def pxt_generate_json(file_name: Optional[str], content: Optional[str], metadata: Optional[dict], template: str, system_prompt: str, provider: str, model: str) -> dict:
+        row_dict = {"file_name": file_name or "", "content": content or "", "metadata": metadata or {}}
         prompt = format_prompt(template, row_dict)
         res = LLMService.generate(provider=provider, model=model, prompt=prompt, system=system_prompt, json_mode=True)
         parsed = extract_json_payload(res)
@@ -278,6 +288,7 @@ class PromptExecutor:
                 primary_col: pxt_generate_json(
                     file_name=table.file_name,
                     content=table.content,
+                    metadata=table.metadata,
                     template=prompt_template,
                     system_prompt=system_prompt,
                     provider=provider,
@@ -370,6 +381,7 @@ class PromptExecutor:
                         existing_text=table[safe_col],
                         file_name=table.file_name,
                         content=table.content,
+                        metadata=table.metadata,
                         template=prompt_template,
                         system_prompt=system_prompt,
                         provider=provider,
@@ -386,6 +398,7 @@ class PromptExecutor:
                     safe_col: pxt_generate_text(
                         file_name=table.file_name,
                         content=table.content,
+                        metadata=table.metadata,
                         template=prompt_template,
                         system_prompt=system_prompt,
                         provider=provider,

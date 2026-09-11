@@ -64,7 +64,7 @@ class DBManager:
     _operation_history: Dict[str, List[Dict[str, Any]]] = {}
 
     @classmethod
-    def heal_postgres_locks(cls, pgdata_dir: Optional[Any] = None, force_purge_orphans: bool = True, force_wal_reset: bool = False) -> Dict[str, Any]:
+    def heal_postgres_locks(cls, pgdata_dir: Optional[Any] = None, force_purge_orphans: bool = False, force_wal_reset: bool = False) -> Dict[str, Any]:
         """
         Embedded PostgreSQL lock self-healing engine (Windows & POSIX).
         
@@ -72,9 +72,10 @@ class DBManager:
         1. Validates whether the PID in postmaster.pid corresponds to an active, legitimate process.
         2. Safely terminates orphaned/dangling postgres processes holding directory or file locks
            targeting Pixeltable or specified pgdata directories (protecting unrelated system Postgres servers).
-        3. Removes stale postmaster.pid, lock files (.lockfile), and socket files (.s.PGSQL.*).
-        4. Cleans up ungraceful shutdown state via pg_resetwal only when recovering from a crash.
-        5. Clears cached PostgresServer references in pixeltable_pgserver and resets Pixeltable's Env.
+        3. Never terminates processes belonging to the current running process or its descendants.
+        4. Removes stale postmaster.pid, lock files (.lockfile), and socket files (.s.PGSQL.*).
+        5. Cleans up ungraceful shutdown state via pg_resetwal only when recovering from a crash.
+        6. Clears cached PostgresServer references in pixeltable_pgserver and resets Pixeltable's Env.
         """
         import time
         try:
@@ -102,6 +103,15 @@ class DBManager:
             "stale_pids_removed": []
         }
 
+        # Collect our own process ID and descendant process IDs to protect active connections
+        protected_pids = {os.getpid()}
+        if psutil is not None:
+            try:
+                current_proc = psutil.Process()
+                protected_pids.update(c.pid for c in current_proc.children(recursive=True))
+            except Exception:
+                pass
+
         # Collect any PIDs explicitly recorded in target postmaster.pid files
         known_target_pids = set()
         for pgdata in target_dirs:
@@ -118,9 +128,11 @@ class DBManager:
         if psutil is not None and force_purge_orphans:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
+                    pid = proc.pid
+                    if pid in protected_pids:
+                        continue
                     pname = (proc.info.get('name') or '').lower()
                     if "postgres" in pname:
-                        pid = proc.pid
                         cmdline_parts = proc.info.get('cmdline') or []
                         cmdline_str = " ".join(cmdline_parts).lower()
                         # Safe check: only target processes that belong to Pixeltable or target pgdata
@@ -129,7 +141,7 @@ class DBManager:
                             ".pixeltable" in cmdline_str or
                             any(td in cmdline_str for td in target_dir_strs)
                         )
-                        if is_target_proc and pid != os.getpid() and pid not in results["orphaned_pids_killed"]:
+                        if is_target_proc and pid not in results["orphaned_pids_killed"]:
                             logger.info(f"Self-healed: Terminating dangling Pixeltable postgres process {pid}")
                             try:
                                 proc.terminate()
@@ -177,8 +189,10 @@ class DBManager:
                             except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 is_alive = False
 
-                        if not is_alive or force_purge_orphans:
-                            if is_alive and force_purge_orphans and psutil is not None:
+                        if not is_alive:
+                            stale = True
+                        elif force_purge_orphans and found_pid not in protected_pids:
+                            if psutil is not None:
                                 try:
                                     p = psutil.Process(found_pid)
                                     p.terminate()
@@ -191,6 +205,8 @@ class DBManager:
                                 except Exception:
                                     pass
                             stale = True
+                        else:
+                            stale = False
                     else:
                         stale = True
                 except Exception as e:
@@ -681,6 +697,150 @@ class DBManager:
                 "status": "error",
                 "message": f"Failed to ingest files into Pixeltable:\n{type(e).__name__}: {str(e)}\n\n"
                            f"Hint: Table and Domain names cannot contain dashes '-' or start with digits."
+            }
+
+    @classmethod
+    def ingest_csv_rows(cls, dir_name: str, table_name: str, csv_path: str,
+                        text_column: Optional[str] = None,
+                        overwrite: bool = False,
+                        progress_callback: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        Ingest each row of a CSV/TSV file as an individual document record into Pixeltable.
+        
+        Design Invariant:
+        Uses chunked batch streaming (BATCH_SIZE = 100) with csv.DictReader to guarantee O(1)
+        heap memory usage, scaling safely to tens of thousands of rows.
+        """
+        import csv
+        p = Path(csv_path)
+        if not p.exists() or not p.is_file():
+            return {"status": "error", "message": f"CSV file '{csv_path}' does not exist or is not a regular file."}
+
+        if not PIXELTABLE_AVAILABLE:
+            return {
+                "status": "error",
+                "message": "Pixeltable is not installed in the current environment (`uv pip install pixeltable`)."
+            }
+
+        try:
+            valid_dir, safe_dir, dir_msg = sanitize_identifier(dir_name or "default")
+            valid_tbl, safe_tbl, tbl_msg = sanitize_identifier(table_name or "raw_assets")
+            if not valid_dir:
+                return {"status": "error", "message": f"Invalid Domain name: {dir_msg}"}
+            if not valid_tbl:
+                return {"status": "error", "message": f"Invalid Table name: {tbl_msg}"}
+
+            full_table_path = cls.resolve_table_path(safe_dir, safe_tbl)
+            overwritten_notice = ""
+
+            existing_tables = cls.list_tables(safe_dir)
+            if safe_tbl in existing_tables:
+                if overwrite:
+                    if progress_callback:
+                        progress_callback(0, 1, f"Overwriting table '{safe_dir}.{safe_tbl}' (archiving previous version)...")
+                    try:
+                        pxt.drop_table(full_table_path, if_not_exists="ignore")
+                        overwritten_notice = " (Previous table version archived in Pixeltable lineage)"
+                    except Exception:
+                        pass
+
+            table = cls.get_or_create_table(safe_dir, safe_tbl)
+
+            # Initialize dynamic ingestion context accumulator (RES-12)
+            from src.core.ingestion_context import IngestionContext
+            ctx = IngestionContext(domain=safe_dir, table=safe_tbl)
+
+            ext = p.suffix.lower()
+            delimiter = "\t" if ext in [".tsv", ".tab"] else ","
+            abs_path = str(p.resolve())
+            csv_name = p.name
+
+            # Stream through rows in bounded batches
+            BATCH_SIZE = 100
+            total_inserted = 0
+            batch_rows = []
+
+            with open(p, "r", encoding="utf-8", errors="replace") as f:
+                reader = csv.DictReader(f, delimiter=delimiter)
+                if not reader.fieldnames:
+                    return {"status": "error", "message": f"CSV file '{csv_name}' has no column headers."}
+
+                for row_idx, row in enumerate(reader):
+                    row_dict = {k.strip(): v for k, v in row.items() if k is not None}
+
+                    # Determine content: if text_column specified and present, use it;
+                    # otherwise format all non-empty key-values into clean markdown text.
+                    if text_column and text_column in row_dict and row_dict[text_column]:
+                        content_str = str(row_dict[text_column])
+                    else:
+                        formatted_parts = [f"**{k}**: {v}" for k, v in row_dict.items() if v is not None and str(v).strip()]
+                        content_str = " | ".join(formatted_parts) if formatted_parts else f"Row {row_idx + 1}"
+
+                    # Record row in dynamic context accumulator
+                    ctx.record_row(
+                        file_name=f"{csv_name} #Row {row_idx + 1}",
+                        modality="docs",
+                        file_type=ext,
+                        content_snippet=content_str[:200],
+                        extracted_tags=["csv", "row"]
+                    )
+
+                    row_record = {
+                        "file_name": f"{csv_name} #Row {row_idx + 1}",
+                        "file_path": abs_path,
+                        "rel_path": csv_name,
+                        "modality": "docs",
+                        "file_type": ext,
+                        "file_size": len(content_str.encode("utf-8")),
+                        "content": content_str,
+                        "doc": None,
+                        "image": None,
+                        "audio": None,
+                        "video": None,
+                        "metadata": row_dict,
+                        "created_at": datetime.now()
+                    }
+                    batch_rows.append(row_record)
+
+                    if len(batch_rows) >= BATCH_SIZE:
+                        table.insert(batch_rows, on_error="ignore")
+                        total_inserted += len(batch_rows)
+                        if progress_callback:
+                            progress_callback(total_inserted, total_inserted + 50, f"Ingested {total_inserted} CSV rows...")
+                        batch_rows = []
+
+                if batch_rows:
+                    table.insert(batch_rows, on_error="ignore")
+                    total_inserted += len(batch_rows)
+                    batch_rows = []
+
+            total_count = table.count()
+            context_file = ctx.export_to_markdown()
+            cls.record_operation(safe_dir, safe_tbl, {
+                "action": "ingest_csv_rows",
+                "source_file": csv_name,
+                "count": total_inserted,
+                "context_file": str(context_file),
+                "entities_count": len(ctx.entities)
+            })
+
+            note = f" (Name adjusted: '{safe_dir}.{safe_tbl}')" if (safe_dir != dir_name or safe_tbl != table_name) else ""
+            return {
+                "status": "success",
+                "message": f"Successfully ingested {total_inserted} rows from '{csv_name}' into '{safe_dir}.{safe_tbl}'{note}{overwritten_notice}. Total rows in table: {total_count}",
+                "inserted_count": total_inserted,
+                "total_count": total_count,
+                "domain": safe_dir,
+                "table": safe_tbl,
+                "overwritten": bool(overwritten_notice),
+                "context_file": str(context_file),
+                "entities_count": len(ctx.entities)
+            }
+        except Exception as e:
+            logger.error(f"Failed to ingest CSV rows into Pixeltable: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Failed to ingest CSV rows into Pixeltable:\n{type(e).__name__}: {str(e)}"
             }
 
     @classmethod

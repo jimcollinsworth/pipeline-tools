@@ -179,49 +179,48 @@ def render_playground_tab(tab=None):
             )
 
         # -------------------------------------------------------------------------
-        # Section 3: Consolidated Two-Table Workbench
+        # Section 3: Consolidated Full-Width Two-Table Workbench
         # -------------------------------------------------------------------------
-        with gr.Row():
-            # Table 1: Input Table (Source Data with Sample Target Highlight)
-            with gr.Column(scale=1):
-                input_table_header = gr.Markdown(initial_in_header)
-                input_table = gr.Dataframe(
-                    headers=initial_in_headers,
-                    datatype=initial_in_datatypes,
-                    value=initial_in_data,
-                    interactive=False,
-                    wrap=True,
-                    min_width=400,
-                    max_height=380
-                )
+        # Table 1: Input Table (Source Data with Sample Target Highlight)
+        with gr.Group():
+            input_table_header = gr.Markdown(initial_in_header)
+            input_table = gr.Dataframe(
+                headers=initial_in_headers,
+                datatype=initial_in_datatypes,
+                value=initial_in_data,
+                interactive=False,
+                wrap=True,
+                min_width=800,
+                max_height=380
+            )
 
-                # Media Inspector Drawer for selected row
-                with gr.Group(visible=False, elem_classes=["status-panel"]) as pg_media_inspector_group:
-                    with gr.Row():
-                        gr.Markdown("#### 🔬 Selected Record Media Inspector", scale=4)
-                        pg_close_inspector_btn = gr.Button("✖️ Close", size="sm", scale=1)
+            # Media Inspector Drawer for selected row
+            with gr.Group(visible=False, elem_classes=["status-panel"]) as pg_media_inspector_group:
+                with gr.Row():
+                    gr.Markdown("#### 🔬 Selected Record Media Inspector", scale=4)
+                    pg_close_inspector_btn = gr.Button("✖️ Close", size="sm", scale=1)
 
-                    with gr.Row():
-                        pg_inspector_image = gr.Image(label="🖼️ Image Preview", visible=False, scale=2, interactive=False)
-                        pg_inspector_audio = gr.Audio(label="🎵 Audio Playback", visible=False, scale=2, interactive=False)
-                        pg_inspector_video = gr.Video(label="🎬 Video Player", visible=False, scale=2, interactive=False)
+                with gr.Row():
+                    pg_inspector_image = gr.Image(label="🖼️ Image Preview", visible=False, scale=2, interactive=False)
+                    pg_inspector_audio = gr.Audio(label="🎵 Audio Playback", visible=False, scale=2, interactive=False)
+                    pg_inspector_video = gr.Video(label="🎬 Video Player", visible=False, scale=2, interactive=False)
 
-                        with gr.Column(scale=3):
-                            pg_inspector_details = gr.Markdown("*(Select a row in the table above to inspect full media & metadata)*")
-                            pg_inspector_content = gr.Textbox(label="📄 Extracted Content / Text", lines=6, visible=False, interactive=False)
+                    with gr.Column(scale=3):
+                        pg_inspector_details = gr.Markdown("*(Select a row in the table above to inspect full media & metadata)*")
+                        pg_inspector_content = gr.Textbox(label="📄 Extracted Content / Text", lines=6, visible=False, interactive=False)
 
-            # Table 2: Output Table (Consolidated Test Preview & Enriched Batch Results)
-            with gr.Column(scale=1):
-                output_table_header = gr.Markdown("#### 📤 Output Table (Test Preview & Enriched Results)")
-                output_table = gr.Dataframe(
-                    headers=["Status", "Row ID", "File Name", "Model Output"],
-                    datatype=["str", "str", "str", "str"],
-                    value=[["Ready", "—", "—", f"Loaded table '{initial_domain}.{initial_table}'. Run sample test or commit batch to generate output."]],
-                    interactive=False,
-                    wrap=True,
-                    min_width=400,
-                    max_height=380
-                )
+        # Table 2: Output Table (Consolidated Test Preview & Enriched Batch Results)
+        with gr.Group():
+            output_table_header = gr.Markdown("#### 📤 Output Table (Test Preview & Enriched Results)")
+            output_table = gr.Dataframe(
+                headers=["Status", "Row ID", "File Name", "Model Output"],
+                datatype=["str", "str", "str", "str"],
+                value=[["Ready", "—", "—", f"Loaded table '{initial_domain}.{initial_table}'. Run sample test or commit batch to generate output."]],
+                interactive=False,
+                wrap=True,
+                min_width=800,
+                max_height=380
+            )
 
     # -------------------------------------------------------------------------
     # Helper Functions & Event Handlers

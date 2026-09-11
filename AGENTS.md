@@ -40,8 +40,15 @@ This document defines core conventions, toolchain rules, architecture patterns, 
     - All table transformations, prompt evaluations, entity extractions, and model enrichments must use `@pxt.udf` and native declarative computed columns (`table.add_computed_column`).
     - **Exception Policy**: Any exception to declarative computed columns requires explicit developer authorization and documented justification in `journal.md`.
   - **High-Scale Ingestion Memory Invariant (Supporting 10,000+ Rows)**:
-    - Ingestion of files into Pixeltable must use **chunked batch streaming** (batch size $\le 200$) to bound memory usage to $O(1)$.
+    - Ingestion of files into Pixeltable must use **chunked batch streaming** (batch size $\le 200$, default 100) to bound memory usage to $O(1)$.
     - Never accumulate all scanned files or raw text strings in a monolithic in-memory list before calling `table.insert()`.
+  - **Dual Ingestion Mode Architecture**:
+    - **Mode 1 (Directory Multi-Asset Scanner)**: Ingests unstructured folders of media (*Docs*, *Images*, *Audio*, *Video*) mapping 1 file $\rightarrow$ 1 Pixeltable row.
+    - **Mode 2 (Single Row-Oriented File / CSV)**: Targets a single CSV/TSV without recursive traversal, ingesting **each row as an individual document record** into Pixeltable (`file_name="{file.csv} #Row {idx}"`, `content=primary_text_col or formatted summary`, `metadata=full_row_dict`, `modality="docs"`).
+    - Prompt templates support direct `{column}` placeholders from CSV metadata via automatic fallback to `row["metadata"]`.
+  - **Embedded PostgreSQL Process Safety Invariant**:
+    - Embedded lock self-healing (`DBManager.heal_postgres_locks`) must strictly protect the active Python process and its descendant PIDs (`protected_pids = {os.getpid()} | children`).
+    - Never terminate active database servers mid-lifecycle or between test cases. Pre-flight self-healing should run only once at process startup or test suite initialization with `force_purge_orphans=False`.
 - **Local LLM Engine (`src/core/ollama_client.py` & `src/prompts/executor.py`)**:
   - Ollama REST API for local model discovery, health checks, and batched prompt execution.
 - **Configuration & Persistence (`src/core/config.py`)**:
@@ -79,10 +86,14 @@ This document defines core conventions, toolchain rules, architecture patterns, 
 
 ## 🧪 5. Testing & Code Quality
 
-- **Running Tests**:
+- **Running Tests & Stratification**:
   - Always verify changes with `uv run python -m tests`.
+  - **Stratified Test Execution**:
+    - **Fast Core Suite (`uv run python -m tests`)**: Executes unit and controller tests deterministically in $< 15$ seconds without spawning ephemeral web servers or headless browsers.
+    - **On-Demand E2E Suite (`uv run python -m tests --e2e`)**: Runs the Playwright headless browser suite across viewports and interactive UI flows only on demand.
+    - **Remote Cloud Testing**: Remote instances (e.g. Hugging Face Spaces) must never be tested during regular local test loops; test them only on demand with specialized scripts.
   - Test runner must use `CleanTestRunner` to mute third-party logger noise (`Pixeltable`, Python 3.13 `asyncio` loop warnings) and provide formatted timing metrics.
-  - Maintain descriptive docstrings (`[Config]`, `[Scanner]`, `[UI]`, `[Database]`, `[Ingest]`) on all test methods.
+  - Maintain descriptive docstrings (`[Config]`, `[Scanner]`, `[UI]`, `[Database]`, `[Ingest]`, `[Controller]`) on all test methods.
   - Ensure Windows terminal encoding compatibility (`cp1252` safe or `reconfigure(encoding='utf-8')`).
 
 ---

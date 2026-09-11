@@ -574,7 +574,7 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
-## 📅 2026-09-11: Dual Ingestion Modes (Directory Multi-Asset vs. CSV Row Documents) & Test Stability (v1.2.1)
+## 📅 2026-09-11: Dual Ingestion Modes (Directory Multi-Asset vs. CSV Row Documents) & Test Stability (v1.3.0)
 
 **Context:** Implementing single row-oriented file (CSV/TSV) ingestion mapping each row into an individual document record (Issue #6), and eliminating test runner timeouts and process lock contention.
 

@@ -572,4 +572,32 @@ This journal records verbatim developer instructions, architectural directives, 
      - Global System Prompt updates persist across sessions.
    - All 7 E2E browser tests pass cleanly.
 
+---
 
+## 📅 2026-09-11: Dual Ingestion Modes (Directory Multi-Asset vs. CSV Row Documents) & Test Stability (v1.2.1)
+
+**Context:** Implementing single row-oriented file (CSV/TSV) ingestion mapping each row into an individual document record (Issue #6), and eliminating test runner timeouts and process lock contention.
+
+**Verbatim Instruction:**
+> `Yes, we want to add the CSV ingestion. We'll have to make some changes to the ingestion directory scanner because there will now be two modes: 1. ingest files, which can be docs, images, audio, or video, and I would scan a directory, 2. ingest just a single row-oriented file like a CSV. In that case, we sort just a single file versus a directory, and there is no recursive subdirectory traversal. Add a GitHub issue first for this ticket.`
+> `something keeps looping stop tests let's reassess sequence and risks, and logging, let's make sure something is running test wise. we don't need to test the hugging face instance normally, that can be a specialized test on demand only.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Dual Ingestion Architecture (`src/ui/ingest_tab.py` & `src/controllers/ingest_controller.py`)**:
+   - Added `ingest_mode_radio` allowing dynamic toggling between:
+     - `📁 Directory Multi-Asset Scanner`: Scans local folders for multimodal files (1 file $\rightarrow$ 1 Pixeltable row).
+     - `📄 Single Row-Oriented File (CSV)`: Ingests a single structured CSV/TSV without recursive traversal, parsing each row into an individual document record.
+   - Added single-file typeahead dropdown with automatic CWD, user home, and `.csv`/`.tsv` discovery.
+   - Added Primary Text Column selector with automatic detection of common text fields (`text`, `description`, `content`, `body`, `summary`) and fallback to formatted key-value summaries.
+2. **Chunked Streaming & Multimodal Schema Mapping (`src/db/manager.py`)**:
+   - Added `DBManager.ingest_csv_rows()` using Python's streaming `csv.DictReader` in batches of 100 rows (`BATCH_SIZE = 100`), guaranteeing $O(1)$ memory usage for 10,000+ rows.
+   - Records map cleanly to standard Pixeltable columns: `file_name="{source.csv} #Row {idx}"`, `content=primary_text_column or formatted key-values`, `metadata=full_row_dict`, `modality="docs"`.
+3. **Prompt Metadata Placeholder Resolution (`src/prompts/executor.py`)**:
+   - Enhanced `format_prompt` and Pixeltable `@pxt.udf` functions (`pxt_generate_text`, `pxt_generate_append`, `pxt_generate_json`) to resolve any original CSV column directly (e.g. `{category}`, `{price}`, `{headline}`) via automatic fallback to `row["metadata"]`.
+4. **Embedded PostgreSQL Lock Safety & Test Runner Decoupling (`src/db/manager.py` & `tests/test_app.py`)**:
+   - Hardened `DBManager.heal_postgres_locks()` with `protected_pids` guarding the active Python process and its child processes, ensuring mid-suite cleanup never terminates its own database connection.
+   - Decoupled test runner: Default `uv run python -m tests` runs the fast, deterministic 53 unit and controller tests in ~10 seconds.
+   - Heavyweight browser Playwright E2E tests run on-demand via `--e2e` (`uv run python -m tests --e2e`), eliminating unnecessary browser launches during rapid development cycles.
+5. **Verification**:
+   - Default test suite: **53 Passed, 0 Failed, 0 Errors** (10.2s).
+   - Full E2E suite (`--e2e`): **60 Passed, 0 Failed, 0 Errors** (37.5s).

@@ -235,5 +235,7 @@ flowchart TD
 | RES-22 | Architectural Code Review & Pixeltable Deep-Dive | Complete | Comprehensive code review of 51-test suite, memory scalability, and Pixeltable declarative computed columns/views/indexes published to GitHub Issue #4. |
 | RES-23 | Declarative Computed Columns & High-Scale Streaming Ingestion | Complete | Replaced imperative row-by-row loops with native Pixeltable @pxt.udf computed columns, implemented chunked batch streaming for 10,000+ rows, codified AGENTS.md invariant, and logged multi-user concurrency Issue #5. |
 | RES-24 | Hugging Face Spaces Cloud Adaptation & Website Embed | Complete | Added cloud container server binding (0.0.0.0 for SPACE_ID), Gemini default provider fallback, packages.txt with ffmpeg, pruned test dependencies, and embedded interactive app switcher into jimcollinsworth.github.io. |
+| RES-25 | Dual Ingestion Modes (Directory Multi-Asset vs CSV Row Documents) | Complete | Added single row-oriented file (CSV/TSV) ingestion parsing each row into individual document records with chunked batch streaming, primary text column selection, and automatic metadata placeholder resolution in prompts (resolves Issue #6). |
+
 
 

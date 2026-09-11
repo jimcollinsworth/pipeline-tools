@@ -42,10 +42,6 @@ This document defines core conventions, toolchain rules, architecture patterns, 
   - **High-Scale Ingestion Memory Invariant (Supporting 10,000+ Rows)**:
     - Ingestion of files into Pixeltable must use **chunked batch streaming** (batch size $\le 200$, default 100) to bound memory usage to $O(1)$.
     - Never accumulate all scanned files or raw text strings in a monolithic in-memory list before calling `table.insert()`.
-  - **Dual Ingestion Mode Architecture**:
-    - **Mode 1 (Directory Multi-Asset Scanner)**: Ingests unstructured folders of media (*Docs*, *Images*, *Audio*, *Video*) mapping 1 file $\rightarrow$ 1 Pixeltable row.
-    - **Mode 2 (Single Row-Oriented File / CSV)**: Targets a single CSV/TSV without recursive traversal, ingesting **each row as an individual document record** into Pixeltable (`file_name="{file.csv} #Row {idx}"`, `content=primary_text_col or formatted summary`, `metadata=full_row_dict`, `modality="docs"`).
-    - Prompt templates support direct `{column}` placeholders from CSV metadata via automatic fallback to `row["metadata"]`.
   - **Embedded PostgreSQL Process Safety Invariant**:
     - Embedded lock self-healing (`DBManager.heal_postgres_locks`) must strictly protect the active Python process and its descendant PIDs (`protected_pids = {os.getpid()} | children`).
     - Never terminate active database servers mid-lifecycle or between test cases. Pre-flight self-healing should run only once at process startup or test suite initialization with `force_purge_orphans=False`.
@@ -153,6 +149,9 @@ Guidelines to reduce common LLM coding pitfalls, biasing toward caution and simp
     2. `planning.md`: Architecture, system design, tasks, roadmap, and research items.
     3. `journal.md`: Verbatim developer directives, mentoring notes, and key architectural decisions.
   - **NEVER** create additional arbitrary documentation files (such as `walkthrough.md`, `specs.md`, etc.) without explicit user authorization. You may propose new documentation files, but never create them unprompted.
+- **Keep AGENTS.md Focused on Toolchain, Invariants & General Rules**:
+  - `AGENTS.md` is strictly reserved for cross-cutting repository guidelines, toolchain rules, architecture patterns, testing standards, and coding invariants.
+  - **NEVER** place project-specific product features, user documentation, UI flow descriptions, or feature implementations into `AGENTS.md`. Those belong in `README.md` (for product capabilities and user guides) or `planning.md` (for feature roadmaps and technical designs).
 - **Explain Changes**:
   - Explain why and what you have done whenever changes are made to any file in 1-2 simple, concise sentences.
 

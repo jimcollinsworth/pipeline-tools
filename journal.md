@@ -601,3 +601,22 @@ This journal records verbatim developer instructions, architectural directives, 
 5. **Verification**:
    - Default test suite: **53 Passed, 0 Failed, 0 Errors** (10.2s).
    - Full E2E suite (`--e2e`): **60 Passed, 0 Failed, 0 Errors** (37.5s).
+
+---
+
+## 📅 2026-09-11: Documentation Separation & AGENTS.md Scope Correction
+
+**Context:** Mentoring correction on strictly separating repository/agent toolchain rules from project-specific user-facing feature documentation.
+
+**Verbatim Instruction:**
+> `dual ingestion mode stuff doesn't belong in agents, it's project specific, for readme probably, log this correction in agents and journal`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Strict Separation of AGENTS.md vs README.md**:
+   - `AGENTS.md` is strictly reserved for cross-cutting repository guidelines, toolchain rules (`uv`), framework invariants (declarative computed columns, embedded postgres process safety), testing standards, and behavioral guidelines.
+   - Project-specific product features, UI layout workflows, user documentation, and domain capabilities belong exclusively in `README.md` (and `planning.md` for technical design/roadmaps).
+2. **Corrections Applied**:
+   - Removed project-specific dual ingestion mode UI flow descriptions from `AGENTS.md`.
+   - Updated `README.md` (v1.3) with comprehensive user-facing documentation of Mode 1 (Directory Multi-Asset Scanner) vs. Mode 2 (Single Row-Oriented File / CSV) and direct metadata `{column}` placeholder support.
+   - Codified the explicit rule in `AGENTS.md` Section 5: *"Keep AGENTS.md Focused on Toolchain, Invariants & General Rules"*.
+

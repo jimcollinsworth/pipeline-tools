@@ -9,18 +9,20 @@ app_file: app.py
 pinned: false
 ---
 
-# Pipeline Tools v1.2: Multimodal Ingestion, Prompt Workbench & Export Engine
+# Pipeline Tools v1.3: Multimodal Ingestion, Prompt Workbench & Export Engine
 
-A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and **Gradio**. Ingest directories of documents, images, audio, and video; test and iterate on LLM extraction/summarization prompts on sample rows; execute scalable batch runs with automatic dependency caching; and export enriched metadata to per-row sidecars (`_meta.md`), CSVs, and synthesized Markdown reports.
+A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and **Gradio**. Ingest directories of documents, images, audio, and video or single row-oriented tabular files (CSV/TSV); test and iterate on LLM extraction/summarization prompts on sample rows; execute scalable batch runs with automatic dependency caching; and export enriched metadata to per-row sidecars (`_meta.md`), CSVs, and synthesized Markdown reports.
 
 ---
 
 ## 🛠 Features
 
-- **Multimodal Directory Ingestion & Scanner**:
-  - Recursively scans local project folders, classifying files into modalities (*Docs*, *Images*, *Audio*, *Video*, *Code*).
-  - One-file-to-one-row ingestion with native text extraction (Markdown, TXT) and PDF page extraction via Pixeltable's bundled `pypdfium2` engine into the `content` column.
-  - Intelligent filterable type-ahead dropdowns for directories, domains, and tables with automatic discovery.
+- **Dual Ingestion Modes (Ingestion & Scanner)**:
+  - **Mode 1 (Directory Multi-Asset Scanner)**: Recursively scans local project folders, classifying files into modalities (*Docs*, *Images*, *Audio*, *Video*, *Code*). Maps 1 file $\rightarrow$ 1 Pixeltable row with native text extraction (Markdown, TXT) and PDF page extraction via Pixeltable's bundled `pypdfium2` engine into the `content` column.
+  - **Mode 2 (Single Row-Oriented File / CSV)**: Targets a single CSV/TSV without recursive traversal, parsing **each row as an individual document record** into Pixeltable (`file_name="{source.csv} #Row {idx}"`, `content=primary_text or summary`, `metadata=full_row_dict`). Uses chunked batch streaming ($O(1)$ memory) to scale reliably to tens of thousands of rows.
+  - **Primary Text Column Selection**: Auto-detects primary narrative columns (`text`, `description`, `content`, `body`, `summary`) with fallback to formatted key-value summaries.
+  - **Direct CSV Placeholder Resolution**: Prompt templates on the Data Enhancement tab support direct `{column}` and `{metadata.column}` placeholders for any original CSV column.
+  - Intelligent filterable type-ahead dropdowns for directories, single files, domains, and tables with automatic discovery.
 - **Sample-First Prompt Playground (Data Enhancement)**:
   - Dry-run and iterate on system/user prompts with `{column}` placeholders across 1–N sample rows before running full-scale batch jobs.
   - **⚡ JSON Auto-Split Engine**: Extract structured JSON payloads from model output and dynamically create native Pixeltable schema columns (`pxt.String`, `pxt.Int`, `pxt.Float`, `pxt.Json`, `pxt.Bool`) in one pass.

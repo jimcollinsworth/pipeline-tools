@@ -15,6 +15,15 @@ from src.ui.ingest_tab import render_ingest_tab
 from src.ui.playground_tab import render_playground_tab
 from src.ui.tables_tab import render_tables_tab
 
+# Hugging Face ZeroGPU compatibility hook: prevents startup error if ZeroGPU hardware is selected
+try:
+    import spaces
+    @spaces.GPU
+    def _hf_zero_gpu_guard():
+        return True
+except Exception:
+    pass
+
 # Gradio 6.0: theme and css must be passed to launch(), not Blocks()
 clean_theme = gr.themes.Default(
     primary_hue=gr.themes.colors.blue,

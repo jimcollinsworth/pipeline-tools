@@ -349,10 +349,13 @@ if __name__ == "__main__":
     existing_drives = [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\")]
     allowed_system_paths = list(set(existing_drives + [str(Path.home()), str(Path.cwd())]))
 
-    print(f"🚀 Launching Pipeline Tools web server on http://127.0.0.1:{port} ...\n", flush=True)
+    is_hf_space = bool(os.environ.get("SPACE_ID"))
+    server_name = "0.0.0.0" if is_hf_space else "127.0.0.1"
+
+    print(f"🚀 Launching Pipeline Tools web server on http://{server_name}:{port} ...\n", flush=True)
     try:
         demo.launch(
-            server_name="127.0.0.1",
+            server_name=server_name,
             server_port=port,
             show_error=True,
             allowed_paths=allowed_system_paths,

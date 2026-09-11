@@ -517,3 +517,28 @@ This journal records verbatim developer instructions, architectural directives, 
    - **Multi-User Backlog**: Logged multi-user concurrency, connection pooling, and stress testing as a future enhancement in [GitHub Issue #5](https://github.com/jimcollinsworth/pipeline-tools/issues/5).
 5. **Verification**:
    - Full test suite verified: **53 Passed, 0 Failed, 0 Errors** in 28 seconds (`uv run python -m tests`).
+
+---
+
+## 📅 2026-09-11: Hugging Face Spaces Cloud Adaptation and Personal Website App Embedding
+
+**Context:** Preparing Pipeline Tools for cloud deployment on Hugging Face Spaces and integrating the live interactive application into the user's personal website (`jimcollinsworth.github.io`).
+
+**Verbatim Instruction:**
+> `ok next goal is getting pipeline tools running on hf and embedded into my site as an app`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Cloud Container Environment Adaptation (`app.py` & `src/core/config.py`)**:
+   - In `app.py`: Dynamically binds `server_name="0.0.0.0"` when running in Hugging Face Spaces (`SPACE_ID`), while preserving `127.0.0.1` for local desktop execution.
+   - In `src/core/config.py`: When `SPACE_ID` is detected in `load_settings()`, automatically defaults provider and model to Google Gemini (`gemini-3.6-flash`), preventing connection errors to offline local Ollama instances.
+2. **Production Dependency Pruning (`requirements.txt` & `packages.txt`)**:
+   - Removed test-only `playwright` dependency from `requirements.txt` to eliminate heavy browser binary downloads during container image builds.
+   - Added `packages.txt` with `ffmpeg` so Pixeltable audio and video frame operations run natively on Linux containers.
+3. **Automated Hugging Face Sync Workflow (`.github/workflows/sync-to-huggingface.yml`)**:
+   - Maintained automated git push sync from GitHub repository `main` branch to `https://huggingface.co/spaces/jimcollinsworth/pipeline-tools`.
+4. **Interactive Dual-Target Embedding (`jimcollinsworth.github.io`)**:
+   - Upgraded `content/pages/pipeline-tools.md` and `devops.md` to offer an interactive switch between live cloud hosting (`https://jimcollinsworth-pipeline-tools.hf.space`) and local developer workbench (`http://127.0.0.1:7860`).
+   - Integrated direct links to Hugging Face Spaces and GitHub repositories, with instructions on configuring API keys.
+5. **Verification**:
+   - Test suite expanded to 54 automated tests: **54 Passed, 0 Failed, 0 Errors** (`uv run python -m tests`).
+

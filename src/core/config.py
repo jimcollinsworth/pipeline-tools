@@ -107,6 +107,13 @@ def load_settings() -> Settings:
         settings.gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if os.environ.get("OLLAMA_HOST"):
         settings.ollama_host = os.environ.get("OLLAMA_HOST")
+
+    # In cloud container environments (Hugging Face Spaces), default to Gemini
+    if os.environ.get("SPACE_ID"):
+        settings.default_provider = "Gemini"
+        if settings.last_provider == "Ollama":
+            settings.last_provider = "Gemini"
+            settings.last_model = settings.default_gemini_model or "gemini-3.6-flash"
         
     return settings
 

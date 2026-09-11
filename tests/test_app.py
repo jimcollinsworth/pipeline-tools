@@ -247,6 +247,22 @@ class TestPipelineTools(unittest.TestCase):
         ollama_models = LLMService.list_models_for_provider("Ollama")
         self.assertTrue(len(ollama_models) > 0)
 
+    def test_cloud_hf_space_config_defaults(self):
+        """[Config] Verify environment adaptation defaults to Gemini in Hugging Face Spaces cloud container."""
+        from src.core.config import load_settings
+        old_space_id = os.environ.get("SPACE_ID")
+        try:
+            os.environ["SPACE_ID"] = "jimcollinsworth/pipeline-tools"
+            s = load_settings()
+            self.assertEqual(s.default_provider, "Gemini")
+            self.assertEqual(s.last_provider, "Gemini")
+            self.assertIn("gemini", s.last_model.lower())
+        finally:
+            if old_space_id is not None:
+                os.environ["SPACE_ID"] = old_space_id
+            else:
+                os.environ.pop("SPACE_ID", None)
+
     def test_extract_json_payload_variations(self):
         """[JSON] Verify robust extraction across pure JSON, markdown blocks, leading/trailing text, and malformed strings."""
         # Case 1: Pure JSON string

@@ -234,4 +234,6 @@ flowchart TD
 | RES-21 | Real-time Dynamic Ingestion Context Visualization | Open | Live context inspector and state stream in Data Enhancement tab showing dynamic context evolution row-by-row (tracked in GitHub Issue #3). |
 | RES-22 | Architectural Code Review & Pixeltable Deep-Dive | Complete | Comprehensive code review of 51-test suite, memory scalability, and Pixeltable declarative computed columns/views/indexes published to GitHub Issue #4. |
 | RES-23 | Declarative Computed Columns & High-Scale Streaming Ingestion | Complete | Replaced imperative row-by-row loops with native Pixeltable @pxt.udf computed columns, implemented chunked batch streaming for 10,000+ rows, codified AGENTS.md invariant, and logged multi-user concurrency Issue #5. |
+| RES-24 | Hugging Face Spaces Cloud Adaptation & Website Embed | Complete | Added cloud container server binding (0.0.0.0 for SPACE_ID), Gemini default provider fallback, packages.txt with ffmpeg, pruned test dependencies, and embedded interactive app switcher into jimcollinsworth.github.io. |
+
 

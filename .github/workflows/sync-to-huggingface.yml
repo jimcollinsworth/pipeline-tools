@@ -1,0 +1,24 @@
+name: Sync to Hugging Face Spaces
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  sync-to-hub:
+    name: Sync Repository to Hugging Face Space
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        if: "${{ env.HF_TOKEN != '' }}"
+        run: |
+          git push --force https://jimcollinsworth:$HF_TOKEN@huggingface.co/spaces/jimcollinsworth/pipeline-tools main

@@ -1,0 +1,8 @@
+# Core dependencies for Hugging Face Spaces & Pipeline Tools
+pixeltable>=0.7.0
+gradio>=6.0.0
+pyyaml>=6.0
+pydantic>=2.0
+pandas>=2.0
+google-genai>=2.0.0
+playwright>=1.40.0

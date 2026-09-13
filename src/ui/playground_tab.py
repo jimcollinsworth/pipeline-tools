@@ -467,7 +467,8 @@ def render_playground_tab(tab=None):
             prompt_template_input, output_mode_radio, target_column_input, write_mode_radio,
             limit_rows_input, preview_mode_toggle, sample_count_slider
         ],
-        outputs=[batch_status_markdown, input_table_header, input_table, available_columns_info, output_table_header, output_table]
+        outputs=[batch_status_markdown, input_table_header, input_table, available_columns_info, output_table_header, output_table],
+        show_progress_on=[batch_status_markdown]
     )
 
     # -------------------------------------------------------------------------

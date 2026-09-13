@@ -361,7 +361,7 @@ def get_custom_head() -> str:
 <script>
 window.PIPELINE_SKILLS = {skills_json};
 
-document.addEventListener("DOMContentLoaded", () => {{
+const initSlashIntellisense = () => {{
     const disableAutofill = () => {{
         document.querySelectorAll("input").forEach(input => {{
             if (input.type === "password") {{
@@ -372,9 +372,11 @@ document.addEventListener("DOMContentLoaded", () => {{
             }}
         }});
     }};
-    disableAutofill();
-    const observer = new MutationObserver(disableAutofill);
-    observer.observe(document.body, {{ childList: true, subtree: true }});
+    if (document.body) {{
+        disableAutofill();
+        const observer = new MutationObserver(disableAutofill);
+        observer.observe(document.body, {{ childList: true, subtree: true }});
+    }}
 
     // In-Textbox Direct Slash Intellisense
     let activeTextarea = null;
@@ -390,7 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {{
         menu.setAttribute("role", "listbox");
         menu.setAttribute("aria-label", "Discovered Agent Skills");
         menu.style.display = "none";
-        document.body.appendChild(menu);
+        (document.body || document.documentElement).appendChild(menu);
     }}
 
     const hideMenu = () => {{
@@ -512,7 +514,13 @@ document.addEventListener("DOMContentLoaded", () => {{
             hideMenu();
         }}
     }});
-}});
+}};
+
+if (document.readyState === "loading") {{
+    document.addEventListener("DOMContentLoaded", initSlashIntellisense);
+}} else {{
+    initSlashIntellisense();
+}}
 </script>
 """
 

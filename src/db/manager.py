@@ -1041,7 +1041,11 @@ class DBManager:
                 "table": safe_tbl
             }
         except Exception as e:
-            logger.error(f"Error in get_table_data: {e}", exc_info=True)
+            err_str = str(e).lower()
+            if "does not exist" in err_str or "not found" in err_str or type(e).__name__ in ("NotFoundError", "NoSuchTableError"):
+                logger.info(f"Table or directory '{dir_name}.{table_name}' does not exist yet: {e}")
+            else:
+                logger.error(f"Error in get_table_data: {e}", exc_info=True)
             return {
                 "columns": [],
                 "datatypes": [],

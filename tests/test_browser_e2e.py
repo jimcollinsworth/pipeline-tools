@@ -46,7 +46,7 @@ except ImportError:
 
 from src.core.config import get_settings, get_domain_system_prompt, set_domain_system_prompt
 from src.db.manager import DBManager
-from app import create_app
+from app import create_app, custom_css, get_custom_head
 
 
 class TestBrowserE2E(unittest.TestCase):
@@ -111,7 +111,9 @@ class TestBrowserE2E(unittest.TestCase):
             server_name="127.0.0.1",
             server_port=free_port,
             prevent_thread_lock=True,
-            show_error=True
+            show_error=True,
+            css=custom_css,
+            head=get_custom_head()
         )
         cls.server_port = free_port
         cls.base_url = f"http://127.0.0.1:{free_port}"
@@ -158,6 +160,7 @@ class TestBrowserE2E(unittest.TestCase):
         tabs_to_verify = [
             "Ingestion & Scanner",
             "Data Enhancement",
+            "Context View",
             "View & Export",
             "Settings & Models",
         ]
@@ -312,15 +315,15 @@ class TestBrowserE2E(unittest.TestCase):
             page.goto(self.base_url, wait_until="load", timeout=20000)
             page.wait_for_selector("button:has-text('Ingestion & Scanner')", timeout=10000)
             page.wait_for_timeout(1000)
-            # Switch to Settings & Models tab
-            tab_btn = page.locator(".tab-nav button:has-text('Settings & Models'), [role='tablist'] button:has-text('Settings & Models')").first
+            # Switch to Context View tab
+            tab_btn = page.locator(".tab-nav button:has-text('Context View'), [role='tablist'] button:has-text('Context View')").first
             tab_btn.wait_for(state="attached", timeout=5000)
             tab_btn.scroll_into_view_if_needed()
             tab_btn.click(force=True)
             page.wait_for_timeout(1000)
 
-            # Verify Domain System Prompt Configuration section exists
-            section_header = page.locator("*:has-text('Domain System Prompt Configuration')").first
+            # Verify Domain System Prompt (LLM Governance) section exists
+            section_header = page.locator("*:has-text('Domain System Prompt (LLM Governance)')").first
             self.assertTrue(section_header.is_visible(), "Domain System Prompt section header not visible.")
 
             # Update system prompt programmatically & via config
@@ -438,7 +441,7 @@ class TestBrowserE2E(unittest.TestCase):
             page.wait_for_timeout(1000)
 
             # 1. Verify the Active Domain System Prompt textarea is visible
-            system_prompt_area = page.locator("textarea[placeholder*='Enter domain system prompt']").first
+            system_prompt_area = page.locator("textarea[placeholder*='Enter governance rules']").first
             system_prompt_area.wait_for(state="visible", timeout=5000)
             self.assertTrue(system_prompt_area.is_visible(), "Active Domain System Prompt textarea is not visible.")
 
@@ -488,8 +491,8 @@ class TestBrowserE2E(unittest.TestCase):
             menu = page.locator("#slash-intellisense-menu")
             self.assertEqual(menu.count(), 1, "Slash intellisense popup menu element missing from DOM.")
 
-            # 4. Switch to Tables & Data Exploration tab
-            tables_tab = page.locator(".tab-nav button:has-text('Tables & Data Exploration'), [role='tablist'] button:has-text('Tables & Data Exploration')").first
+            # 4. Switch to View & Export tab
+            tables_tab = page.locator(".tab-nav button:has-text('View & Export'), [role='tablist'] button:has-text('View & Export')").first
             tables_tab.wait_for(state="attached", timeout=5000)
             tables_tab.click(force=True)
             page.wait_for_timeout(1000)

@@ -80,7 +80,7 @@ class ContextController:
         entity_rows = []
         for name, meta in ctx.entities.items():
             cat = meta.get("category", "entity")
-            count = meta.get("occurrences", 1)
+            count = meta.get("mentions", meta.get("occurrences", 1))
             docs = ", ".join(meta.get("referencing_documents", [])) or "—"
             entity_rows.append([name, cat, count, docs])
 

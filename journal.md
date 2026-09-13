@@ -634,3 +634,27 @@ This journal records verbatim developer instructions, architectural directives, 
    - Re-aligned cleanly with `origin/main` on feature branch `feature/context-and-ui-enhancements`.
    - Verified with fast core suite (56 tests passing in ~19s) and updated Playwright E2E browser tests.
 
+---
+
+## 📅 2026-09-13: Systematic Debugging — Context State, Progress Duplication & E2E Stabilization
+
+**Context:** Resolving runtime crashes on Context View tab select (`AttributeError: 'IngestionContext' object has no attribute 'format_markdown_register'`), noisy Pixeltable startup tracebacks, duplicate real-time export progress bars, and aligning the full Playwright E2E browser suite.
+
+**Key Decisions & Engineering Takeaways:**
+1. **Context Register Export Implementation (`src/core/ingestion_context.py`)**:
+   - Added `format_markdown_register(self) -> str` to `IngestionContext` to generate structured Markdown tables for entities, taxonomies, and themes, refactoring `export_to_markdown` to use it.
+   - Added unit test `test_context_controller_load_context_state_and_export` in `tests/test_controllers.py` and UI flow test `test_context_tab_ui_flows` in `tests/test_app.py`.
+2. **Clean Startup & Database Lookups (`src/db/manager.py`)**:
+   - In `DBManager.get_table_data()`, gracefully caught `NotFoundError` and "does not exist" errors, logging as `logger.info` without full exception tracebacks when launching on a fresh or empty database.
+3. **Export & Batch Progress Bar De-duplication (`src/ui/tables_tab.py`, `src/ui/playground_tab.py`)**:
+   - Gradio attaches progress animations to every component in `outputs` by default when `show_progress_on` is `None`.
+   - Explicitly configured `show_progress_on=[export_status_box]` and `show_progress_on=[batch_status_markdown]`, eliminating duplicate stacked progress bars over the preview and download components.
+4. **Client-Side Slash Intellisense ReadyState Lifecycle (`app.py`, `tests/test_browser_e2e.py`)**:
+   - Refactored head script to check `document.readyState !== "loading"` and invoke `initSlashIntellisense()` immediately if the document is already parsed, preventing missed `DOMContentLoaded` events in browser tests and SPA re-renders.
+   - Updated E2E tests to pass `css=custom_css` and `head=get_custom_head()` during test launch, updated selectors for the relocated Domain System Prompt in Context View, and fixed the View & Export tab locator.
+5. **Verification**:
+   - Fast Core Suite: **58 Passed, 0 Failed, 0 Errors** in 17s.
+   - Full On-Demand E2E Suite (`uv run python -m tests --e2e`): **66 Passed, 0 Failed, 0 Errors** in 43s.
+   - Bumped patch version to `1.3.2` in `pyproject.toml`.
+
+

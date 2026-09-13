@@ -510,7 +510,8 @@ def render_tables_tab(tab=None):
             export_strategy_radio,
             custom_filename_input
         ],
-        outputs=[export_status_box, export_preview_markdown, download_file_component]
+        outputs=[export_status_box, export_preview_markdown, download_file_component],
+        show_progress_on=[export_status_box]
     )
 
     def on_undo_table(domain, table_name, limit, is_lightweight):

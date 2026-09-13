@@ -177,15 +177,11 @@ class IngestionContext:
             lines.append(f"- **Recent Prior Records**: {recent_str}")
         return "\n".join(lines)
 
-    def export_to_markdown(self, export_dir: str = "exports") -> Path:
+    def format_markdown_register(self) -> str:
         """
-        Export accumulated dataset context to exports/{domain}-{table}-ingestion-context.md
-        with YAML frontmatter and JSON-LD structured metadata.
+        Format accumulated dataset context into a structured Markdown register string
+        with YAML frontmatter, table summary, entity dictionary, and JSON-LD schema.
         """
-        out_dir = Path(export_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        file_path = out_dir / f"{self.domain}-{self.table}-ingestion-context.md"
-
         frontmatter = {
             "title": f"Ingestion Context: {self.domain}.{self.table}",
             "domain": self.domain,
@@ -220,7 +216,10 @@ class IngestionContext:
             md_lines.append("| Canonical Entity | Category | Mentions | First Seen |")
             md_lines.append("|---|---|---|---|")
             for ent_name, info in sorted(self.entities.items(), key=lambda x: x[1].get("mentions", 0), reverse=True):
-                md_lines.append(f"| **{ent_name}** | `{info.get('category', 'general')}` | {info.get('mentions', 1)} | {info.get('first_seen', 'N/A')[:19]} |")
+                cat = info.get("category", "general")
+                mentions = info.get("mentions", info.get("occurrences", 1))
+                first_seen = str(info.get("first_seen", "N/A"))[:19]
+                md_lines.append(f"| **{ent_name}** | `{cat}` | {mentions} | {first_seen} |")
         else:
             md_lines.append("*No explicit entities extracted during this batch run.*")
         md_lines.append("\n")
@@ -257,7 +256,18 @@ class IngestionContext:
         md_lines.append(json.dumps(json_ld, indent=2))
         md_lines.append("```\n")
 
-        content = "\n".join(md_lines)
+        return "\n".join(md_lines)
+
+    def export_to_markdown(self, export_dir: str = "exports") -> Path:
+        """
+        Export accumulated dataset context to exports/{domain}-{table}-ingestion-context.md
+        with YAML frontmatter and JSON-LD structured metadata.
+        """
+        out_dir = Path(export_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        file_path = out_dir / f"{self.domain}-{self.table}-ingestion-context.md"
+
+        content = self.format_markdown_register()
         file_path.write_text(content, encoding="utf-8")
         logger.info(f"Saved ingestion context knowledge register to {file_path}")
         return file_path

@@ -316,3 +316,25 @@ class TestControllers(unittest.TestCase):
         summary = ContextController.get_minimal_activity_summary(self.TEST_DOMAIN, "export_ctrl_tbl")
         self.assertIn("Entities Tracked", summary)
 
+    def test_context_controller_load_context_state_and_export(self):
+        """[Controller] Verify load_context_state and export_context_markdown generate valid markdown and entity rows."""
+        from src.controllers.context_controller import ContextController
+        from src.core.ingestion_context import IngestionContextManager
+        
+        ctx = IngestionContextManager.get_context(self.TEST_DOMAIN, "ctx_test_table")
+        ctx.normalize_entity("PostgreSQL", "database")
+        ctx.normalize_entity("Pixeltable", "database")
+        
+        state = ContextController.load_context_state(self.TEST_DOMAIN, "ctx_test_table")
+        self.assertEqual(state["status"], "success")
+        self.assertIn("Ingestion Context Knowledge Register", state["markdown_register"])
+        self.assertEqual(len(state["entity_rows"]), 2)
+        
+        export_res = ContextController.export_context_markdown(self.TEST_DOMAIN, "ctx_test_table")
+        self.assertEqual(export_res["status"], "success")
+        self.assertTrue(Path(export_res["file_path"]).exists())
+        self.assertIn("Ingestion Context Knowledge Register", export_res["content"])
+        
+        # Clean up test export
+        Path(export_res["file_path"]).unlink(missing_ok=True)
+

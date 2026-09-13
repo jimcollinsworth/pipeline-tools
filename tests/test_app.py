@@ -659,6 +659,32 @@ class TestPipelineTools(unittest.TestCase):
         has_mode_radio = any(choices and "📄 Single Row-Oriented File (CSV)" in str(choices) for choices in radio_choices)
         self.assertTrue(has_mode_radio, "Dual Ingest Mode radio missing from UI.")
 
+    def test_context_tab_ui_flows(self):
+        """[UI] Verify Context View handlers (on_load_context, on_save_system_prompt, on_export_context) execute cleanly."""
+        import gradio as gr
+        from src.ui.context_tab import render_context_tab
+        from src.controllers.context_controller import ContextController
+        from src.core.ingestion_context import IngestionContextManager
+
+        # Seed context data
+        ctx = IngestionContextManager.get_context(self.TEST_DOMAIN, "ctx_ui_tbl")
+        ctx.normalize_entity("PyMuPDF", "library")
+        ctx.normalize_entity("PostgreSQL", "database")
+
+        # Directly invoke ContextController methods wired to UI
+        state = ContextController.load_context_state(self.TEST_DOMAIN, "ctx_ui_tbl")
+        self.assertEqual(state["status"], "success")
+        self.assertIn("Ingestion Context Knowledge Register", state["markdown_register"])
+        self.assertEqual(len(state["entity_rows"]), 2)
+
+        save_res = ContextController.save_domain_system_prompt(self.TEST_DOMAIN, "You are an AI research assistant.")
+        self.assertEqual(save_res["status"], "success")
+
+        export_res = ContextController.export_context_markdown(self.TEST_DOMAIN, "ctx_ui_tbl")
+        self.assertEqual(export_res["status"], "success")
+        self.assertTrue(Path(export_res["file_path"]).exists())
+        Path(export_res["file_path"]).unlink(missing_ok=True)
+
     def test_scan_single_file_csv(self):
         """[Scanner] Verify scan_single_file inspects headers, preview rows, and calculates total row count."""
         temp_csv = Path(self.TEST_DOMAIN + "_sample.csv")

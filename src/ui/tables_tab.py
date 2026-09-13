@@ -211,14 +211,12 @@ def render_tables_tab(tab=None):
 
             export_status_box = gr.Markdown("#### Export Status: *Ready to export.*")
 
-            with gr.Row():
-                with gr.Column(scale=3):
-                    export_preview_markdown = gr.Markdown(
-                        "*(Exported Markdown report preview will appear here upon completion)*",
-                        elem_classes=["status-panel"]
-                    )
-                with gr.Column(scale=1):
-                    download_file_component = gr.File(label="📥 Download Exported Markdown File", interactive=False)
+            download_file_component = gr.File(label="📥 Download Exported Markdown File", interactive=False)
+
+            export_preview_markdown = gr.Markdown(
+                "*(Exported Markdown report preview will appear here upon completion)*",
+                elem_classes=["status-panel"]
+            )
 
     # Event handlers
     table_load_outputs = [

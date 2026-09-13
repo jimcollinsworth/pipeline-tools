@@ -136,6 +136,21 @@ body, gradio-app, .gradio-container {
     border: 1px solid #d4d0c8 !important;
     background: #ffffff !important;
     min-height: 70px !important;
+    width: 100% !important;
+}
+.status-panel table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin: 12px 0 !important;
+}
+.status-panel th, .status-panel td {
+    padding: 8px 12px !important;
+    border: 1px solid #e5e1d8 !important;
+    text-align: left !important;
+}
+.status-panel th {
+    background-color: #f4f1ea !important;
+    font-weight: 600 !important;
 }
 .progress-level {
     margin-bottom: 8px !important;

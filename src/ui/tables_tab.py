@@ -94,6 +94,21 @@ def render_tables_tab(tab=None):
 
         table_stats_markdown = gr.Markdown("#### Table Stats: *Click 'Load / Refresh Table' or select a table to view data.*")
 
+        with gr.Row(elem_classes=["column-pills-row"]):
+            column_selector = gr.CheckboxGroup(
+                choices=[],
+                value=[],
+                label="Columns Visibility",
+                elem_classes=["column-pills-group"],
+                scale=9
+            )
+            reset_cols_btn = gr.Button("✕", size="sm", variant="secondary", scale=1, min_width=40, elem_id="reset-cols-btn")
+
+        full_table_data_state = gr.State([])
+        full_table_cols_state = gr.State([])
+        ordered_table_cols_state = gr.State([])
+        prev_selected_cols_state = gr.State([])
+
         data_view_table = gr.Dataframe(
             headers=["Column 1", "Column 2", "Column 3"],
             datatype=["str", "str", "str"],
@@ -206,9 +221,60 @@ def render_tables_tab(tab=None):
                     download_file_component = gr.File(label="📥 Download Exported Markdown File", interactive=False)
 
     # Event handlers
+    table_load_outputs = [
+        table_stats_markdown, data_view_table, available_columns_info,
+        column_selector, full_table_data_state, full_table_cols_state,
+        ordered_table_cols_state, prev_selected_cols_state
+    ]
+
     def on_load_table(domain, table_name, limit, is_lightweight=True):
         res = TablesController.handle_load_table(domain, table_name, limit=limit, is_lightweight=is_lightweight)
-        return res["stats_text"], gr.update(headers=res["columns"], datatype=res["datatypes"], value=res["data"]), res["placeholders_text"]
+        cols = res["columns"]
+        data = res["data"]
+        return (
+            res["stats_text"],
+            gr.update(headers=cols, datatype=res["datatypes"], value=data),
+            res["placeholders_text"],
+            gr.update(choices=cols, value=cols),
+            data,
+            cols,
+            cols,
+            cols
+        )
+
+    def on_column_selector_change(selected_cols, data, canonical_cols, current_order, prev_selected):
+        selected = selected_cols if selected_cols is not None else []
+        canonical = canonical_cols or []
+        order = current_order or canonical
+        prev = prev_selected if prev_selected is not None else canonical
+
+        new_order = TablesController.reorder_columns_on_selection(
+            canonical_cols=canonical,
+            current_order=order,
+            selected_cols=selected,
+            prev_selected_cols=prev
+        )
+        filtered_data, filtered_cols = TablesController.filter_dataframe_columns(data, canonical, selected)
+        if new_order == order:
+            selector_update = gr.update()
+        else:
+            selector_update = gr.update(choices=new_order, value=selected)
+
+        return (
+            gr.update(headers=filtered_cols, value=filtered_data),
+            selector_update,
+            new_order,
+            selected
+        )
+
+    def on_reset_columns(data, canonical_cols):
+        cols = canonical_cols or []
+        return (
+            gr.update(headers=cols, value=data),
+            gr.update(choices=cols, value=cols),
+            cols,
+            cols
+        )
 
     def on_domain_change(domain):
         """Update table dropdown choices and active system prompt info when domain selection changes."""
@@ -347,26 +413,40 @@ def render_tables_tab(tab=None):
     load_refresh_btn.click(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+        outputs=table_load_outputs
     )
 
     table_dropdown.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+        outputs=table_load_outputs
     )
 
     # Rule 3: Parameter controls (limit slider & lightweight toggle) refresh the view on change.
     limit_slider.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+        outputs=table_load_outputs
     )
 
     lightweight_toggle.change(
         fn=on_load_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+        outputs=table_load_outputs
+    )
+
+    # Column pills interactive selection and reordering
+    column_selector.change(
+        fn=on_column_selector_change,
+        inputs=[column_selector, full_table_data_state, full_table_cols_state, ordered_table_cols_state, prev_selected_cols_state],
+        outputs=[data_view_table, column_selector, ordered_table_cols_state, prev_selected_cols_state]
+    )
+
+    # Column pills ✕ reset button (restores canonical table order)
+    reset_cols_btn.click(
+        fn=on_reset_columns,
+        inputs=[full_table_data_state, full_table_cols_state],
+        outputs=[data_view_table, column_selector, ordered_table_cols_state, prev_selected_cols_state]
     )
 
     # Rule 4: Zero-query row inspection. Passing data_view_table directly allows extracting
@@ -439,14 +519,14 @@ def render_tables_tab(tab=None):
         res = DBManager.undo_last_operation(clean_dir, clean_tbl)
         status_msg = res.get("message", "Undo completed.")
         prefix = "✅" if res.get("status") == "success" else ("ℹ️" if res.get("status") == "info" else "❌")
-        stats_text, df_update, cols_text = on_load_table(clean_dir, clean_tbl, limit, is_lightweight)
-        combined_stats = f"#### Undo Status: {prefix} {status_msg}\n\n{stats_text}"
-        return combined_stats, df_update, cols_text
+        load_res = on_load_table(clean_dir, clean_tbl, limit, is_lightweight)
+        combined_stats = f"#### Undo Status: {prefix} {status_msg}\n\n{load_res[0]}"
+        return (combined_stats, *load_res[1:])
 
     undo_table_btn.click(
         fn=on_undo_table,
         inputs=[domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-        outputs=[table_stats_markdown, data_view_table, available_columns_info]
+        outputs=table_load_outputs
     )
 
     def on_request_delete_table(domain, table_name):
@@ -499,7 +579,8 @@ def render_tables_tab(tab=None):
         new_tbl = latest_tables[0]
 
         update_last_entry(last_domain=new_dom, last_table=new_tbl)
-        stats_text, df_update, cols_text = on_load_table(new_dom, new_tbl, limit, is_lightweight)
+        del_outputs = on_load_table(new_dom, new_tbl, limit, is_lightweight)
+        stats_text = del_outputs[0]
         prefix = "✅" if res.get("status") == "success" else "❌"
         del_msg = f"#### Status: {prefix} {res.get('message', '')}\n\n{stats_text}"
 
@@ -508,14 +589,13 @@ def render_tables_tab(tab=None):
             gr.update(choices=latest_domains, value=new_dom),
             gr.update(choices=latest_tables, value=new_tbl),
             del_msg,
-            df_update,
-            cols_text
+            *del_outputs[1:]
         )
 
     confirm_delete_action_btn.click(
         fn=on_confirm_delete,
         inputs=[pending_delete_type_state, domain_dropdown, table_dropdown, limit_slider, lightweight_toggle],
-        outputs=[delete_confirm_group, domain_dropdown, table_dropdown, table_stats_markdown, data_view_table, available_columns_info]
+        outputs=[delete_confirm_group, domain_dropdown, table_dropdown, *table_load_outputs]
     )
 
     if tab is not None:

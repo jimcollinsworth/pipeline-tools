@@ -256,3 +256,63 @@ class TestControllers(unittest.TestCase):
                 self.assertEqual(sidecar_res["status"], "success")
                 self.assertIn("Per-Row Sidecars", sidecar_res["message"])
                 self.assertTrue(len(sidecar_res.get("saved_files", [])) > 0)
+
+    def test_reorder_columns_on_selection_moves_deselected_to_end(self):
+        """[Controller] Verify unhighlighted/deselected columns dynamically move to the end of the pill list."""
+        canonical = ["id", "file_name", "content", "summary", "category"]
+        current_order = list(canonical)
+        prev_selected = list(canonical)
+
+        # 1. Deselect 'content' -> 'content' moves to end of order
+        selected = ["id", "file_name", "summary", "category"]
+        new_order = TablesController.reorder_columns_on_selection(
+            canonical_cols=canonical,
+            current_order=current_order,
+            selected_cols=selected,
+            prev_selected_cols=prev_selected
+        )
+        self.assertEqual(new_order, ["id", "file_name", "summary", "category", "content"])
+
+        # 2. Deselect 'file_name' -> 'file_name' also moves to end
+        selected_2 = ["id", "summary", "category"]
+        new_order_2 = TablesController.reorder_columns_on_selection(
+            canonical_cols=canonical,
+            current_order=new_order,
+            selected_cols=selected_2,
+            prev_selected_cols=selected
+        )
+        self.assertEqual(new_order_2, ["id", "summary", "category", "content", "file_name"])
+
+        # 3. Reset all -> restores canonical order
+        reset_order = TablesController.reset_column_order(canonical)
+        self.assertEqual(reset_order, canonical)
+
+    def test_filter_dataframe_columns(self):
+        """[Controller] Verify filter_dataframe_columns projects only selected columns in matching order."""
+        cols = ["a", "b", "c"]
+        data = [
+            [1, 2, 3],
+            [4, 5, 6]
+        ]
+        filtered_data, filtered_cols = TablesController.filter_dataframe_columns(data, cols, ["c", "a"])
+        self.assertEqual(filtered_cols, ["c", "a"])
+        self.assertEqual(filtered_data, [
+            [3, 1],
+            [6, 4]
+        ])
+
+    def test_context_controller_system_prompt_and_activity(self):
+        """[Controller] Verify ContextController saves domain system prompt and formats minimal activity."""
+        from src.controllers.context_controller import ContextController
+        # 1. Update domain system prompt
+        res = ContextController.save_domain_system_prompt(self.TEST_DOMAIN, "You are a test researcher.")
+        self.assertEqual(res["status"], "success")
+
+        # 2. Get domain system prompt
+        prompt = ContextController.get_domain_system_prompt(self.TEST_DOMAIN)
+        self.assertEqual(prompt, "You are a test researcher.")
+
+        # 3. Activity summary for Data Enhancement minimal accordion
+        summary = ContextController.get_minimal_activity_summary(self.TEST_DOMAIN, "export_ctrl_tbl")
+        self.assertIn("Entities Tracked", summary)
+

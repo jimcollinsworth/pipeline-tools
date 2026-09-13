@@ -40,6 +40,19 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
   - **🗂️ Per-Row Sidecars (`_meta.md`)**: Executes one LLM call per row to produce rich, standalone sidecar documents (`exports/{source_stem}_meta.md`) with clean YAML frontmatter, automatic row-specific image embedding (`![photo](file_path)`), and continuous real-time preview updates in the browser.
   - **Task-Oriented Presets**: *📰 Newspaper Story & Embedded Photo*, *Entity & Keyword Intelligence*, *Visual & Scene Breakdown*, *Thematic Summary & Patterns*, and *Structured Media Catalog*.
   - Live in-browser Markdown preview and instant 1-click file download from `exports/`.
+- **Context View & Entity Management (Context View Tab)**:
+  - Centralized domain context and system prompt configuration workspace (`src/ui/context_tab.py`).
+  - System prompts are managed exclusively per domain and persisted automatically.
+  - Interactive Register Table displaying accumulated knowledge, entities, definitions, and facts.
+  - Full-text Markdown viewer and 1-click Markdown export download (`⚡ Export Context Markdown`).
+- **Dynamic Column Pills & Fast Visibility Controls (Tables & Data Exploration)**:
+  - Highlighted/unhighlighted pill badges replace traditional checkboxes for toggling column visibility.
+  - Hidden columns automatically move to the end of the pill list to keep active columns front-and-center.
+  - 1-click `✕` reset icon button instantly restores original canonical column ordering and displays all columns.
+- **Floating Slash Intellisense Popup (Data Enhancement)**:
+  - Typing `/` inside the prompt textarea triggers a floating Intellisense popup listing project skills (e.g., `/entity-recognition`, `/report-generation`).
+  - Full keyboard navigation (Arrow Up/Down, Enter/Tab to select, Escape to dismiss) and automatic instruction template insertion.
+  - Minimal context activity accordion below prompt controls providing live summary counts of accumulated facts and entities.
 - **Decoupled Controller Layer**:
   - Strict separation of concerns between Gradio UI tab views (`src/ui/`) and pure business logic controllers (`src/controllers/`): `IngestController`, `PlaygroundController`, and `TablesController`.
   - Enables direct, isolated unit testing of database operations, file scans, prompt execution, and exports without browser server overhead.

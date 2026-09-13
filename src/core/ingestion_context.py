@@ -290,3 +290,28 @@ class IngestionContext:
             relationships=data.get("relationships", []),
             metadata=data.get("metadata", {})
         )
+
+
+class IngestionContextManager:
+    """Manages active IngestionContext instances across domains and tables."""
+    _instances: Dict[str, IngestionContext] = {}
+
+    @classmethod
+    def get_context(cls, domain: str = "default", table: str = "raw_assets") -> IngestionContext:
+        """Retrieve or create the active IngestionContext for the specified domain and table."""
+        d = (domain or "default").strip()
+        t = (table or "raw_assets").strip()
+        key = f"{d}.{t}"
+        if key not in cls._instances:
+            cls._instances[key] = IngestionContext(domain=d, table=t)
+        return cls._instances[key]
+
+    @classmethod
+    def reset_context(cls, domain: str = "default", table: str = "raw_assets") -> IngestionContext:
+        """Reset the active context instance for a domain and table."""
+        d = (domain or "default").strip()
+        t = (table or "raw_assets").strip()
+        key = f"{d}.{t}"
+        cls._instances[key] = IngestionContext(domain=d, table=t)
+        return cls._instances[key]
+

@@ -30,6 +30,7 @@ from src.db.manager import DBManager
 from src.prompts.executor import PromptExecutor
 from src.controllers.playground_controller import PlaygroundController
 from src.controllers.tables_controller import TablesController
+from src.controllers.context_controller import ContextController
 
 
 def render_playground_tab(tab=None):
@@ -175,8 +176,15 @@ def render_playground_tab(tab=None):
                 value=settings.last_user_prompt,
                 lines=5,
                 max_lines=10,
+                elem_classes=["prompt-slash-input"],
                 placeholder="Enter prompt template. Use {file_name}, {content}, or any {column} placeholder..."
             )
+
+            # Minimal Context Activity Accordion (Issue #3)
+            with gr.Accordion("🧠 Context Knowledge & Activity", open=False, elem_classes=["context-activity-accordion"]):
+                context_activity_badge = gr.Markdown(
+                    ContextController.get_minimal_activity_summary(initial_domain, initial_table)
+                )
 
         # -------------------------------------------------------------------------
         # Section 3: Consolidated Full-Width Two-Table Workbench

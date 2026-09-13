@@ -293,3 +293,55 @@ class TablesController:
                 "status": "error",
                 "message": f"### ❌ Export Failed\n```\n{err_msg}\n```"
             }
+
+    @staticmethod
+    def reorder_columns_on_selection(
+        canonical_cols: List[str],
+        current_order: List[str],
+        selected_cols: List[str],
+        prev_selected_cols: List[str]
+    ) -> List[str]:
+        """
+        Dynamically reorder column pills when selection changes.
+        Active (selected) columns remain grouped at the front; newly deselected columns
+        move to the end of the order.
+        """
+        selected_set = set(selected_cols or [])
+        prev_set = set(prev_selected_cols or [])
+        deselected_cols = [c for c in (current_order or canonical_cols) if c in prev_set and c not in selected_set]
+
+        active = [c for c in (current_order or canonical_cols) if c in selected_set]
+        inactive = [c for c in (current_order or canonical_cols) if c not in selected_set and c not in deselected_cols]
+        new_order = active + inactive + deselected_cols
+
+        for c in canonical_cols:
+            if c not in new_order:
+                new_order.append(c)
+        return new_order
+
+    @staticmethod
+    def reset_column_order(canonical_cols: List[str]) -> List[str]:
+        """Restore all columns to their original canonical definition order."""
+        return list(canonical_cols or [])
+
+    @staticmethod
+    def filter_dataframe_columns(
+        data: List[List[Any]],
+        canonical_cols: List[str],
+        selected_cols: List[str]
+    ) -> Tuple[List[List[Any]], List[str]]:
+        """Filter table row projections to include only selected columns in matching order."""
+        if not selected_cols:
+            return [], []
+
+        idx_map = {col: i for i, col in enumerate(canonical_cols)}
+        valid_cols = [c for c in selected_cols if c in idx_map]
+        valid_indices = [idx_map[c] for c in valid_cols]
+
+        filtered_data = []
+        for row in (data or []):
+            filtered_row = [row[i] for i in valid_indices if i < len(row)]
+            filtered_data.append(filtered_row)
+
+        return filtered_data, valid_cols
+

@@ -621,22 +621,25 @@ class TestPipelineTools(unittest.TestCase):
             self.assertEqual(res.get("total_rows"), 0)
 
     def test_ui_components_construction(self):
-        """[UI] Verify all UI tabs (Ingest, Settings, Playground, Tables) construct cleanly within Gradio Blocks."""
+        """[UI] Verify all UI tabs (Ingest, Settings, Playground, Tables, Context) construct cleanly within Gradio Blocks."""
         import gradio as gr
         from src.ui.ingest_tab import render_ingest_tab
         from src.ui.settings_tab import render_settings_tab
         from src.ui.playground_tab import render_playground_tab
+        from src.ui.context_tab import render_context_tab
         from src.ui.tables_tab import render_tables_tab
 
         with gr.Blocks() as demo:
             with gr.TabItem("📂 Ingest"):
                 render_ingest_tab()
-            with gr.TabItem("⚙️ Settings"):
-                render_settings_tab()
             with gr.TabItem("🧪 Data Enhancement"):
                 render_playground_tab()
+            with gr.TabItem("🧠 Context View"):
+                render_context_tab()
             with gr.TabItem("📊 View & Export"):
                 render_tables_tab()
+            with gr.TabItem("⚙️ Settings"):
+                render_settings_tab()
 
         self.assertIsNotNone(demo)
         
@@ -646,9 +649,11 @@ class TestPipelineTools(unittest.TestCase):
         self.assertIn("💾 Save System Prompt", button_labels, "Save System Prompt button missing from UI components.")
         self.assertIn("🔍 Inspect CSV File", button_labels, "Inspect CSV File button missing from UI components.")
         self.assertIn("🔍 Scan Directory", button_labels, "Scan Directory button missing from UI components.")
+        self.assertIn("⚡ Export Context Markdown", button_labels, "Export Context Markdown button missing from UI components.")
+        self.assertIn("✕", button_labels, "Reset columns button missing from UI components.")
         
         textbox_labels = [getattr(c, "label", None) for c in demo.blocks.values() if isinstance(c, gr.Textbox)]
-        self.assertIn("Active System Prompt", textbox_labels, "Active System Prompt textbox missing from UI components.")
+        self.assertIn("Active Domain System Prompt", textbox_labels, "Active Domain System Prompt textbox missing from UI components.")
 
         radio_choices = [getattr(c, "choices", None) for c in demo.blocks.values() if isinstance(c, gr.Radio)]
         has_mode_radio = any(choices and "📄 Single Row-Oriented File (CSV)" in str(choices) for choices in radio_choices)
@@ -860,9 +865,11 @@ class TestPipelineTools(unittest.TestCase):
         from src.core.skills import SkillsRegistry
 
         # Test discovery
-        skills = SkillsRegistry.discover_skills()
+        skills = SkillsRegistry.discover_skills(force_refresh=True)
         self.assertTrue(len(skills) > 0)
         self.assertTrue(any(k in skills for k in ["postgresql", "/postgresql", "pixeltable", "/pixeltable"]))
+        self.assertTrue(any(k in skills for k in ["entity-recognition", "/entity-recognition"]))
+        self.assertTrue(any(k in skills for k in ["report-generation", "/report-generation"]))
 
         # Test list_skills and slash commands
         cmds = SkillsRegistry.get_slash_commands()

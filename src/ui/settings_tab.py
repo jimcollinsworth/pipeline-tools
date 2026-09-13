@@ -14,29 +14,7 @@ def render_settings_tab(tab=None):
 
     with gr.Column():
         gr.Markdown("### ⚙️ Engine Settings & Multi-Provider LLM Configuration")
-        
-        # -------------------------------------------------------------------------
-        # Prominent Global System Prompt (Applied to All Models)
-        # -------------------------------------------------------------------------
-        with gr.Group():
-            gr.Markdown("#### 🧠 System Prompt (Applied Across All Models & Prompts)")
-            gr.Markdown(
-                "This user-facing system prompt defines the active persona, extraction instructions, and base formatting "
-                "applied across **all models** (Ollama & Gemini) during Data Enhancement and Export operations."
-            )
-            with gr.Row():
-                global_system_prompt_input = gr.Textbox(
-                    label="Active System Prompt",
-                    value=settings.last_system_prompt or "You are a helpful AI assistant extracting entities, summaries, and key metadata from documents.",
-                    lines=4,
-                    scale=4,
-                    placeholder="Enter global system prompt instructions applied to all models..."
-                )
-            with gr.Row():
-                save_global_prompt_btn = gr.Button("💾 Save System Prompt", variant="primary", scale=1)
-                global_prompt_status = gr.Markdown("", scale=3)
-
-        gr.Markdown("---")
+        gr.Markdown("Manage local Ollama instance, Google Gemini API keys, default models, and storage directories.")
 
         with gr.Row():
             with gr.Column(scale=1):
@@ -138,31 +116,6 @@ def render_settings_tab(tab=None):
                     allow_custom_value=True
                 )
 
-        gr.Markdown("---")
-        with gr.Group(elem_classes=["status-panel"]):
-            gr.Markdown("#### 🧠 Domain System Prompt Configuration")
-            gr.Markdown(
-                "Configure and maintain active system instructions and personas on a per-domain basis. "
-                "Data Enhancement and Export operations in any domain automatically inherit its configured system prompt."
-            )
-            with gr.Row():
-                domain_prompt_selector = gr.Dropdown(
-                    label="Domain / Directory",
-                    choices=domains,
-                    value=initial_domain,
-                    allow_custom_value=True,
-                    scale=2
-                )
-                save_domain_prompt_btn = gr.Button("💾 Save Domain Prompt", variant="primary", scale=1)
-
-            domain_system_prompt_input = gr.Textbox(
-                label="Active Domain System Prompt",
-                value=get_domain_system_prompt(initial_domain),
-                lines=4,
-                placeholder="Enter domain system instructions..."
-            )
-            domain_prompt_status = gr.Markdown("")
-
     # Event handlers
     def test_and_fetch_ollama(host):
         client = OllamaClient(host=host)
@@ -211,53 +164,8 @@ def render_settings_tab(tab=None):
             gr.Error(msg)
             return msg, gr.update(), gr.update()
 
-    def on_domain_prompt_change(selected_domain):
-        dom = selected_domain.strip() if selected_domain and selected_domain.strip() else "default"
-        return get_domain_system_prompt(dom), ""
-
-    domain_prompt_selector.change(
-        fn=on_domain_prompt_change,
-        inputs=[domain_prompt_selector],
-        outputs=[domain_system_prompt_input, domain_prompt_status]
-    )
-
-    def on_save_global_prompt(prompt):
+    def on_save_settings(host, def_ollama, gemini_key, def_gemini, def_provider, pt_dir, exp_dir):
         curr = get_settings()
-        cleaned = prompt.strip() if prompt else ""
-        curr.last_system_prompt = cleaned
-        if curr.domain_system_prompts is None:
-            curr.domain_system_prompts = {}
-        curr.domain_system_prompts["default"] = cleaned
-        save_settings(curr)
-        gr.Info("Global System Prompt saved successfully!")
-        return "✅ **System Prompt saved and applied across all models!**"
-
-    save_global_prompt_btn.click(
-        fn=on_save_global_prompt,
-        inputs=[global_system_prompt_input],
-        outputs=[global_prompt_status]
-    )
-
-    def on_save_domain_prompt(domain, prompt):
-        dom = domain.strip() if domain and domain.strip() else "default"
-        set_domain_system_prompt(dom, prompt)
-        gr.Info(f"System prompt saved for domain '{dom}'!")
-        return f"✅ **System prompt saved for domain `{dom}`!**"
-
-    save_domain_prompt_btn.click(
-        fn=on_save_domain_prompt,
-        inputs=[domain_prompt_selector, domain_system_prompt_input],
-        outputs=[domain_prompt_status]
-    )
-
-    def on_save_settings(host, def_ollama, gemini_key, def_gemini, def_provider, pt_dir, exp_dir, global_prompt, dom_sel, dom_prompt):
-        curr = get_settings()
-        dom = dom_sel.strip() if dom_sel and dom_sel.strip() else "default"
-        curr_prompts = dict(curr.domain_system_prompts or {})
-        cleaned_global = global_prompt.strip() if global_prompt else curr.last_system_prompt
-        curr_prompts["default"] = cleaned_global
-        if dom_prompt and dom_prompt.strip():
-            curr_prompts[dom] = dom_prompt.strip()
         updated = Settings(
             ollama_host=host.strip(),
             default_ollama_model=def_ollama.strip() if def_ollama else "llama3.2",
@@ -269,9 +177,9 @@ def render_settings_tab(tab=None):
             last_provider=def_provider,
             last_domain=curr.last_domain,
             last_table=curr.last_table,
-            last_system_prompt=cleaned_global,
+            last_system_prompt=curr.last_system_prompt,
             last_user_prompt=curr.last_user_prompt,
-            domain_system_prompts=curr_prompts
+            domain_system_prompts=curr.domain_system_prompts
         )
         save_settings(updated)
         gr.Info("Settings saved successfully!")
@@ -298,24 +206,8 @@ def render_settings_tab(tab=None):
             default_gemini_dropdown,
             default_provider_radio,
             pixeltable_dir_input,
-            export_dir_input,
-            global_system_prompt_input,
-            domain_prompt_selector,
-            domain_system_prompt_input
+            export_dir_input
         ],
         outputs=[save_status_box]
     )
 
-    if tab is not None:
-        def on_settings_tab_select(current_dom):
-            latest_dirs = DBManager.list_dirs() or ["default"]
-            if "default" not in latest_dirs:
-                latest_dirs.insert(0, "default")
-            selected = current_dom if current_dom in latest_dirs else latest_dirs[0]
-            return gr.update(choices=latest_dirs, value=selected), get_domain_system_prompt(selected)
-
-        tab.select(
-            fn=on_settings_tab_select,
-            inputs=[domain_prompt_selector],
-            outputs=[domain_prompt_selector, domain_system_prompt_input]
-        )

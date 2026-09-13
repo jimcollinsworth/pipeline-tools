@@ -9,10 +9,13 @@ import string
 import signal
 import atexit
 from pathlib import Path
+import json
 import gradio as gr
+from src.core.skills import SkillsRegistry
 from src.ui.settings_tab import render_settings_tab
 from src.ui.ingest_tab import render_ingest_tab
 from src.ui.playground_tab import render_playground_tab
+from src.ui.context_tab import render_context_tab
 from src.ui.tables_tab import render_tables_tab
 
 # Hugging Face ZeroGPU compatibility hook: prevents startup error if ZeroGPU hardware is selected
@@ -273,57 +276,279 @@ code {
     border-radius: 3px !important;
     font-size: 0.82rem !important;
 }
+
+/* Floating Slash Intellisense Menu */
+.slash-intellisense-menu {
+    position: absolute;
+    z-index: 10000;
+    background: #ffffff;
+    border: 1px solid #d4d0c8;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    max-height: 280px;
+    overflow-y: auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.slash-menu-header {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 6px 12px;
+    background: #f4f1ea;
+    color: #52525b;
+    border-bottom: 1px solid #e5e1d8;
+}
+.slash-menu-list {
+    padding: 4px 0;
+}
+.slash-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f4f1ea;
+    transition: background-color 0.15s ease;
+}
+.slash-menu-item:last-child {
+    border-bottom: none;
+}
+.slash-menu-item.active, .slash-menu-item:hover {
+    background-color: #eff6ff;
+}
+.slash-menu-cmd {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #2563eb;
+    margin-bottom: 2px;
+}
+.slash-menu-desc {
+    font-size: 0.76rem;
+    color: #71717a;
+    line-height: 1.3;
+}
+
+/* Interactive Column Visibility Check-Pills (No Checkboxes) */
+.column-pills-group input[type="checkbox"] {
+    display: none !important;
+}
+.column-pills-group label {
+    border: 1px solid #d4d0c8 !important;
+    border-radius: 9999px !important;
+    padding: 3px 12px !important;
+    font-size: 0.78rem !important;
+    font-weight: 500 !important;
+    background: #f4f4f5 !important;
+    color: #71717a !important;
+    margin: 2px 4px !important;
+    cursor: pointer !important;
+    transition: all 0.12s ease !important;
+}
+.column-pills-group label:has(input:checked) {
+    border-color: #2563eb !important;
+    background: #eff6ff !important;
+    color: #1d4ed8 !important;
+    font-weight: 600 !important;
+}
+.column-pills-group label:hover {
+    border-color: #94a3b8 !important;
+}
 """
 
-custom_head = """
+def get_custom_head() -> str:
+    """Generate HTML head script injecting discovered skills and in-textbox slash Intellisense."""
+    skills_json = json.dumps(SkillsRegistry.list_skills())
+    return f"""
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-    const disableAutofill = () => {
-        document.querySelectorAll("input").forEach(input => {
-            if (input.type === "password") {
+window.PIPELINE_SKILLS = {skills_json};
+
+document.addEventListener("DOMContentLoaded", () => {{
+    const disableAutofill = () => {{
+        document.querySelectorAll("input").forEach(input => {{
+            if (input.type === "password") {{
                 input.setAttribute("autocomplete", "new-password");
                 input.setAttribute("data-1p-ignore", "true");
-            } else {
+            }} else {{
                 input.setAttribute("autocomplete", "off");
-            }
-        });
-    };
+            }}
+        }});
+    }};
     disableAutofill();
     const observer = new MutationObserver(disableAutofill);
-    observer.observe(document.body, { childList: true, subtree: true });
-});
+    observer.observe(document.body, {{ childList: true, subtree: true }});
+
+    // In-Textbox Direct Slash Intellisense
+    let activeTextarea = null;
+    let selectedIndex = 0;
+    let currentMatches = [];
+    let queryStartIndex = -1;
+
+    let menu = document.getElementById("slash-intellisense-menu");
+    if (!menu) {{
+        menu = document.createElement("div");
+        menu.id = "slash-intellisense-menu";
+        menu.className = "slash-intellisense-menu";
+        menu.setAttribute("role", "listbox");
+        menu.setAttribute("aria-label", "Discovered Agent Skills");
+        menu.style.display = "none";
+        document.body.appendChild(menu);
+    }}
+
+    const hideMenu = () => {{
+        menu.style.display = "none";
+        activeTextarea = null;
+        currentMatches = [];
+        selectedIndex = 0;
+    }};
+
+    const insertSkill = (skill) => {{
+        if (!activeTextarea || queryStartIndex === -1) return;
+        const text = activeTextarea.value;
+        const cursorPos = activeTextarea.selectionStart;
+        const beforeSlash = text.substring(0, queryStartIndex);
+        const afterCursor = text.substring(cursorPos);
+        const cmd = skill.slash_command || `/${{skill.name}}`;
+        const insertedText = `${{cmd}} `;
+
+        activeTextarea.value = beforeSlash + insertedText + afterCursor;
+        const newCursor = queryStartIndex + insertedText.length;
+        activeTextarea.setSelectionRange(newCursor, newCursor);
+
+        // Notify Gradio of state change
+        activeTextarea.dispatchEvent(new Event("input", {{ bubbles: true }}));
+        activeTextarea.dispatchEvent(new Event("change", {{ bubbles: true }}));
+        hideMenu();
+        activeTextarea.focus();
+    }};
+
+    const positionMenu = () => {{
+        if (!activeTextarea) return;
+        const rect = activeTextarea.getBoundingClientRect();
+        menu.style.left = `${{window.scrollX + rect.left}}px`;
+        menu.style.top = `${{window.scrollY + rect.bottom + 4}}px`;
+        menu.style.width = `${{Math.min(rect.width, 540)}}px`;
+    }};
+
+    const renderMenu = () => {{
+        if (!currentMatches.length) {{
+            hideMenu();
+            return;
+        }}
+        let html = '<div class="slash-menu-header">⚡ Agent Skills & Directives</div><div class="slash-menu-list">';
+        currentMatches.forEach((s, idx) => {{
+            const isSelected = idx === selectedIndex;
+            const cmd = s.slash_command || `/${{s.name}}`;
+            html += `<div class="slash-menu-item ${{isSelected ? 'active' : ''}}" role="option" aria-selected="${{isSelected}}" data-index="${{idx}}">
+                <div class="slash-menu-cmd">${{cmd}}</div>
+                <div class="slash-menu-desc">${{s.description || ''}}</div>
+            </div>`;
+        }});
+        html += '</div>';
+        menu.innerHTML = html;
+
+        menu.querySelectorAll(".slash-menu-item").forEach(item => {{
+            item.addEventListener("mousedown", (e) => {{
+                e.preventDefault();
+                const idx = parseInt(item.getAttribute("data-index"), 10);
+                insertSkill(currentMatches[idx]);
+            }});
+        }});
+
+        positionMenu();
+        menu.style.display = "block";
+    }};
+
+    document.addEventListener("input", (e) => {{
+        const target = e.target;
+        if (!target || target.tagName !== "TEXTAREA") return;
+        const parent = target.closest(".prompt-slash-input");
+        if (!parent) return;
+
+        const val = target.value;
+        const cursorPos = target.selectionStart;
+        const textBeforeCursor = val.substring(0, cursorPos);
+
+        const match = textBeforeCursor.match(/(?:^|[\\s\\n])\\/([a-zA-Z0-9_\\-]*)$/);
+        if (match) {{
+            activeTextarea = target;
+            queryStartIndex = cursorPos - match[1].length - 1;
+            const query = match[1].toLowerCase();
+
+            const allSkills = window.PIPELINE_SKILLS || [];
+            currentMatches = allSkills.filter(s => 
+                s.name.toLowerCase().includes(query) ||
+                (s.slash_command && s.slash_command.toLowerCase().includes(query)) ||
+                (s.description && s.description.toLowerCase().includes(query))
+            );
+            selectedIndex = 0;
+            renderMenu();
+        }} else {{
+            hideMenu();
+        }}
+    }});
+
+    document.addEventListener("keydown", (e) => {{
+        if (menu.style.display !== "block" || !activeTextarea) return;
+
+        if (e.key === "ArrowDown") {{
+            e.preventDefault();
+            selectedIndex = (selectedIndex + 1) % currentMatches.length;
+            renderMenu();
+        }} else if (e.key === "ArrowUp") {{
+            e.preventDefault();
+            selectedIndex = (selectedIndex - 1 + currentMatches.length) % currentMatches.length;
+            renderMenu();
+        }} else if (e.key === "Enter" || e.key === "Tab") {{
+            if (currentMatches[selectedIndex]) {{
+                e.preventDefault();
+                insertSkill(currentMatches[selectedIndex]);
+            }}
+        }} else if (e.key === "Escape") {{
+            hideMenu();
+        }}
+    }});
+
+    document.addEventListener("click", (e) => {{
+        if (menu.style.display === "block" && !menu.contains(e.target) && e.target !== activeTextarea) {{
+            hideMenu();
+        }}
+    }});
+}});
 </script>
 """
 
 def create_app():
-    with gr.Blocks(title="Pipeline Tools v1.2", fill_width=True) as demo:
+    with gr.Blocks(title="Pipeline Tools v1.3", fill_width=True) as demo:
         gr.Markdown(
             """
             <div class="app-header">
-                <h1>PIPELINE TOOLS v1.2 // Multimodal Workbench</h1>
-                <p>Declarative Ingestion (Pixeltable) &bull; Data Enhancement (Ollama / Gemini) &bull; View & Export</p>
+                <h1>PIPELINE TOOLS v1.3 // Multimodal Workbench</h1>
+                <p>Declarative Ingestion (Pixeltable) &bull; Data Enhancement &bull; Context Knowledge &bull; View & Export</p>
             </div>
             """
         )
         
         with gr.Tabs():
             with gr.Tab("Ingestion & Scanner") as ingest_tab:
-                print("  [1/4] Initializing Ingestion & Scanner tab...", flush=True)
+                print("  [1/5] Initializing Ingestion & Scanner tab...", flush=True)
                 render_ingest_tab(tab=ingest_tab)
                 
             with gr.Tab("Data Enhancement") as playground_tab:
-                print("  [2/4] Initializing Data Enhancement tab (discovering models & tables)...", flush=True)
+                print("  [2/5] Initializing Data Enhancement tab (discovering models & tables)...", flush=True)
                 render_playground_tab(tab=playground_tab)
+
+            with gr.Tab("Context View") as context_tab:
+                print("  [3/5] Initializing Context View tab (governance & knowledge register)...", flush=True)
+                render_context_tab(tab=context_tab)
                 
             with gr.Tab("View & Export") as tables_tab:
-                print("  [3/4] Initializing View & Export tab...", flush=True)
+                print("  [4/5] Initializing View & Export tab...", flush=True)
                 render_tables_tab(tab=tables_tab)
                 
             with gr.Tab("Settings & Models") as settings_tab:
-                print("  [4/4] Initializing Settings & Models tab...", flush=True)
+                print("  [5/5] Initializing Settings & Models tab...", flush=True)
                 render_settings_tab(tab=settings_tab)
 
-    print("  ✅ All workbench tabs and database connections initialized!", flush=True)
+    print("  ✅ All 5 workbench tabs and database connections initialized!", flush=True)
     return demo
 demo = None
 
@@ -370,8 +595,9 @@ if __name__ == "__main__":
             allowed_paths=allowed_system_paths,
             theme=clean_theme,
             css=custom_css,
-            head=custom_head
+            head=get_custom_head()
         )
+
     except KeyboardInterrupt:
         clean_exit()
     except OSError as e:

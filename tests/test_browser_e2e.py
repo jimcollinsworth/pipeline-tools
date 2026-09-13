@@ -421,7 +421,7 @@ class TestBrowserE2E(unittest.TestCase):
             context.close()
 
     def test_07_global_system_prompt_visibility_and_saving(self):
-        """[E2E] Verify prominent Global System Prompt textarea and save button in Settings & Models."""
+        """[E2E] Verify prominent Domain System Prompt textarea and save button in Context View tab."""
         context = self.browser.new_context(viewport={"width": 1400, "height": 900})
         page = context.new_page()
 
@@ -430,17 +430,17 @@ class TestBrowserE2E(unittest.TestCase):
             page.wait_for_selector("button:has-text('Ingestion & Scanner')", timeout=10000)
             page.wait_for_timeout(1000)
 
-            # Switch to Settings & Models tab
-            tab_btn = page.locator(".tab-nav button:has-text('Settings & Models'), [role='tablist'] button:has-text('Settings & Models')").first
+            # Switch to Context View tab
+            tab_btn = page.locator(".tab-nav button:has-text('Context View'), [role='tablist'] button:has-text('Context View')").first
             tab_btn.wait_for(state="attached", timeout=5000)
             tab_btn.scroll_into_view_if_needed()
             tab_btn.click(force=True)
             page.wait_for_timeout(1000)
 
-            # 1. Verify the Active System Prompt textarea is visible
-            system_prompt_area = page.locator("textarea[placeholder*='Enter global system prompt instructions']").first
+            # 1. Verify the Active Domain System Prompt textarea is visible
+            system_prompt_area = page.locator("textarea[placeholder*='Enter domain system prompt']").first
             system_prompt_area.wait_for(state="visible", timeout=5000)
-            self.assertTrue(system_prompt_area.is_visible(), "Active System Prompt textarea is not visible.")
+            self.assertTrue(system_prompt_area.is_visible(), "Active Domain System Prompt textarea is not visible.")
 
             # 2. Verify Save System Prompt button is visible and clickable
             save_prompt_btn = page.locator("button:has-text('Save System Prompt')").first
@@ -457,6 +457,46 @@ class TestBrowserE2E(unittest.TestCase):
             # 4. Verify persisted setting
             settings = get_settings()
             self.assertEqual(settings.last_system_prompt, test_val)
+        finally:
+            context.close()
+
+    def test_08_slash_intellisense_and_column_pills(self):
+        """[E2E] Verify floating slash popup menu in Playground tab and column pills in Tables tab."""
+        context = self.browser.new_context(viewport={"width": 1400, "height": 900})
+        page = context.new_page()
+
+        try:
+            page.goto(self.base_url, wait_until="load", timeout=20000)
+            page.wait_for_selector("button:has-text('Ingestion & Scanner')", timeout=10000)
+            page.wait_for_timeout(1000)
+
+            # 1. Navigate to Data Enhancement (Playground) tab
+            tab_btn = page.locator(".tab-nav button:has-text('Data Enhancement'), [role='tablist'] button:has-text('Data Enhancement')").first
+            tab_btn.wait_for(state="attached", timeout=5000)
+            tab_btn.click(force=True)
+            page.wait_for_timeout(1000)
+
+            # 2. Type '/' into the prompt input textarea
+            prompt_input = page.locator(".prompt-slash-input textarea").first
+            prompt_input.wait_for(state="visible", timeout=5000)
+            prompt_input.focus()
+            prompt_input.fill("/")
+            prompt_input.press("ArrowRight")
+            page.wait_for_timeout(500)
+
+            # 3. Verify slash popup menu exists in DOM
+            menu = page.locator("#slash-intellisense-menu")
+            self.assertEqual(menu.count(), 1, "Slash intellisense popup menu element missing from DOM.")
+
+            # 4. Switch to Tables & Data Exploration tab
+            tables_tab = page.locator(".tab-nav button:has-text('Tables & Data Exploration'), [role='tablist'] button:has-text('Tables & Data Exploration')").first
+            tables_tab.wait_for(state="attached", timeout=5000)
+            tables_tab.click(force=True)
+            page.wait_for_timeout(1000)
+
+            # 5. Verify reset button '✕' is present
+            reset_btn = page.locator("button:has-text('✕')").first
+            self.assertTrue(reset_btn.is_visible(), "Reset column order button '✕' is not visible.")
         finally:
             context.close()
 

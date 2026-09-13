@@ -604,19 +604,33 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
-## 📅 2026-09-11: Documentation Separation & AGENTS.md Scope Correction
+## 📅 2026-09-13: Context View Tab, Dynamic Column Pills & Slash Intellisense
 
-**Context:** Mentoring correction on strictly separating repository/agent toolchain rules from project-specific user-facing feature documentation.
+**Context:** Synchronizing repo with origin/main, recovering uncommitted local features, centralizing domain context/prompts, and improving data exploration ergonomics.
 
 **Verbatim Instruction:**
-> `dual ingestion mode stuff doesn't belong in agents, it's project specific, for readme probably, log this correction in agents and journal`
+> `yes, import the skills, port the floating slash intellisense popup to a new feature branch, and add the dynamic column check-pills for show/hide. when a column is hidden, move it's name to the list end, have a clear button to reshow all in the table order. don't use check boxes, just highlight/unhighlight pills.`
+> `add the context view tab back in so we can see, edit and export context, but stick with the superior origin architecture. maybe this context tab is a better place for the system prompt than on models, not sure.`
+> `we also must have some way on data enhancement page to see the context activity, at a minimum to see that it is being added to/modified, but don't want to show too much data/traffic. we can continue to work on this view later. could be actual context fragments, or context function call logs, maybe a popup or accordian. think about ideas, log in the issue. but go ahead and put in the most minimal context activity display you can think of for now, just to start to understand the feature.`
+> `instead of 'reshow all', just use an X or clear/reset icon. where is the LLM prompt that controls the row by row processing, is that editable?`
 
 **Key Decisions & Engineering Takeaways:**
-1. **Strict Separation of AGENTS.md vs README.md**:
-   - `AGENTS.md` is strictly reserved for cross-cutting repository guidelines, toolchain rules (`uv`), framework invariants (declarative computed columns, embedded postgres process safety), testing standards, and behavioral guidelines.
-   - Project-specific product features, UI layout workflows, user documentation, and domain capabilities belong exclusively in `README.md` (and `planning.md` for technical design/roadmaps).
-2. **Corrections Applied**:
-   - Removed project-specific dual ingestion mode UI flow descriptions from `AGENTS.md`.
-   - Updated `README.md` (v1.3) with comprehensive user-facing documentation of Mode 1 (Directory Multi-Asset Scanner) vs. Mode 2 (Single Row-Oriented File / CSV) and direct metadata `{column}` placeholder support.
-   - Codified the explicit rule in `AGENTS.md` Section 5: *"Keep AGENTS.md Focused on Toolchain, Invariants & General Rules"*.
+1. **Centralized Domain Context & Prompt Management (`src/ui/context_tab.py`, `src/controllers/context_controller.py`)**:
+   - System prompts were removed from Settings & Models and placed exclusively in the dedicated Context View tab, tied to the active domain via `IngestionContextManager`.
+   - The tab provides an interactive domain prompt editor, an entity register table, full markdown preview, and 1-click Markdown export download (`⚡ Export Context Markdown`).
+2. **Minimal Context Activity Display (`src/ui/playground_tab.py`)**:
+   - Added a compact, collapsible `gr.Accordion("🧠 Context Knowledge & Activity", open=False)` beneath prompt controls on the Data Enhancement tab.
+   - Displays real-time summary counts of accumulated facts and entities per domain without cluttering the screen or overwhelming traffic.
+   - Extended roadmap logged for GitHub Issue #3 (real-time streaming diffs, interactive entity graph, context fragments).
+3. **Dynamic Column Visibility Pills (`src/ui/tables_tab.py`, `src/controllers/tables_controller.py`)**:
+   - Replaced standard checkboxes with highlighted/unhighlighted pill badges via CSS (`.column-pills-group`).
+   - Dynamically reorders pills on toggle: hidden columns are moved to the end of the pill list, keeping active visible columns at the front.
+   - Added a compact `✕` reset icon button to immediately restore canonical table column order and show all columns.
+4. **Floating Slash Intellisense Popup (`app.py`, `.agents/skills/`)**:
+   - Restored missing prompt skills (`entity-recognition` and `report-generation`).
+   - Injected client-side JavaScript intellisense menu (#slash-intellisense-menu) listening on `.prompt-slash-input` textareas with ArrowUp/Down, Enter/Tab completion, and Esc dismissal.
+5. **Multi-Machine Git Hygiene & Testing**:
+   - Preserved prior local divergence in `backup-local-work` branch.
+   - Re-aligned cleanly with `origin/main` on feature branch `feature/context-and-ui-enhancements`.
+   - Verified with fast core suite (56 tests passing in ~19s) and updated Playwright E2E browser tests.
 

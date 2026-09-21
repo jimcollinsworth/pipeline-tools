@@ -142,6 +142,103 @@ class TestAudioMelSpectrogram(unittest.TestCase):
         self.assertTrue(insp.get("has_spectrogram", False))
         self.assertIsNotNone(insp.get("spectrogram_path"))
 
+    def test_06_load_audio_pyav_direct(self):
+        """[Audio] Verify load_audio_pyav decodes audio file into a 1D float32 mono array."""
+        from src.audio.spectrogram import load_audio_pyav
+        arr = load_audio_pyav(str(self.audio_file), target_sr=22050)
+        self.assertIsNotNone(arr)
+        self.assertIsInstance(arr, np.ndarray)
+        self.assertEqual(arr.dtype, np.float32)
+        self.assertGreater(len(arr), 1000)
+
+    def test_07_udf_registry_matching_and_params(self):
+        """[Audio] Verify UDFRegistry matches slash commands and natural language prompts with parameter overrides."""
+        from src.core.udf_registry import UDFRegistry
+        
+        # 1. Slash command
+        match_slash = UDFRegistry.match_prompt("/mel_spectrogram hop_length=256 colormap=viridis")
+        self.assertIsNotNone(match_slash)
+        udf_def, kwargs = match_slash
+        self.assertEqual(udf_def.name, "mel_spectrogram")
+        self.assertEqual(kwargs["hop_length"], 256)
+        self.assertEqual(kwargs["colormap"], "viridis")
+
+        # 2. Natural language prompt
+        match_nl = UDFRegistry.match_prompt("please generate mel spectrograph of {file_name} n_mels=64")
+        self.assertIsNotNone(match_nl)
+        udf_def2, kwargs2 = match_nl
+        self.assertEqual(udf_def2.name, "mel_spectrogram")
+        self.assertEqual(kwargs2["n_mels"], 64)
+
+        # 3. Non-UDF prompt returns None
+        self.assertIsNone(UDFRegistry.match_prompt("Summarize the text in {content}"))
+
+    def test_08_prompt_driven_udf_sample_and_batch(self):
+        """[Audio] Verify PlaygroundController executes UDF sample tests and batch commits via prompt."""
+        from src.controllers.playground_controller import PlaygroundController
+        
+        # Test sample flow with UDF prompt
+        sample_res = PlaygroundController.test_sample_flow(
+            domain=self.domain,
+            table_name=self.table,
+            provider="Ollama",
+            model="llama3.2",
+            prompt_template="/mel_spectrogram hop_length=256 colormap=plasma",
+            sample_count=2
+        )
+        self.assertEqual(sample_res["status"], "success")
+        self.assertIn("mel_spectrogram_img", sample_res["headers"])
+        self.assertTrue(sample_res.get("is_udf", False))
+
+        # Test batch commit with UDF prompt
+        batch_res = PlaygroundController.commit_batch_flow(
+            domain=self.domain,
+            table_name=self.table,
+            provider="Ollama",
+            model="llama3.2",
+            prompt_template="mel spectrogram of {file_name}"
+        )
+        self.assertEqual(batch_res["status"], "success")
+        self.assertIn("mel_spectrogram", batch_res["columns_created"])
+        self.assertIn("mel_spectrogram_img", batch_res["columns_created"])
+
+    def test_09_db_manager_renders_pil_image_in_get_table_data(self):
+        """[Audio] Verify DBManager.get_table_data renders PIL Images as HTML img tags with data URIs."""
+        res = DBManager.get_table_data(self.domain, self.table, limit=5, lightweight=False)
+        self.assertIn("mel_spectrogram_img", res["columns"])
+        spec_idx = res["columns"].index("mel_spectrogram_img")
+        self.assertEqual(res["datatypes"][spec_idx], "html")
+        
+        # Check that audio row has an HTML img tag with data URI
+        audio_row = [r for r in res["data"] if r[res["columns"].index("file_name")] == "test_tone.wav"][0]
+        img_cell = audio_row[spec_idx]
+        self.assertTrue(img_cell.startswith("<img") and "data:image" in img_cell)
+
+    def test_10_render_spectrogram_array_to_image(self):
+        """[Audio] Verify render_spectrogram_array_to_image converts 2D numpy array to valid PIL Image."""
+        from src.audio.spectrogram import render_spectrogram_array_to_image
+        dummy_spec = np.random.randn(128, 40).astype(np.float32)
+        img = render_spectrogram_array_to_image(dummy_spec, colormap="magma")
+        self.assertIsNotNone(img)
+        self.assertIsInstance(img, Image.Image)
+        self.assertEqual(img.mode, "RGB")
+        self.assertGreaterEqual(img.width, 256)
+
+    def test_11_handle_row_inspection_with_numpy_array(self):
+        """[Audio] Verify TablesController detects and renders 2D numpy array in row inspection."""
+        import pandas as pd
+        dummy_spec = np.random.randn(128, 40).astype(np.float32)
+        df = pd.DataFrame([
+            {
+                "file_name": "test_tone.wav",
+                "audio": str(self.audio_file),
+                "mel_spectrogram": dummy_spec
+            }
+        ])
+        insp = TablesController.handle_row_inspection(0, df, self.domain, self.table)
+        self.assertTrue(insp.get("has_spectrogram", False))
+        self.assertTrue(isinstance(insp.get("spectrogram_path"), (Image.Image, str)))
+
 
 if __name__ == "__main__":
     unittest.main()

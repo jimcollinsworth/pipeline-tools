@@ -77,7 +77,7 @@ def render_tables_tab(tab=None):
             )
             load_refresh_btn = gr.Button("🔄 Load / Refresh Table", variant="primary", scale=2)
             limit_slider = gr.Slider(minimum=5, maximum=100, value=25, step=5, label="Max Rows to Fetch", scale=2)
-            lightweight_toggle = gr.Checkbox(label="⚡ Lightweight Preview", value=True, scale=1)
+            lightweight_toggle = gr.Checkbox(label="⚡ Lightweight Preview", value=False, scale=1)
 
         with gr.Row():
             undo_table_btn = gr.Button("↩️ Undo Last Operation", variant="secondary", scale=2)
@@ -254,22 +254,40 @@ def render_tables_tab(tab=None):
             prev_selected_cols=prev
         )
         filtered_data, filtered_cols = TablesController.filter_dataframe_columns(data, canonical, selected)
-        if new_order == order:
-            selector_update = gr.update()
-        else:
-            selector_update = gr.update(choices=new_order, value=selected)
+        datatypes = [
+            "html" if (
+                c == "media_preview"
+                or "preview" in c.lower()
+                or "img" in c.lower()
+                or "spectrogram" in c.lower()
+                or "spectrograph" in c.lower()
+                or any(isinstance(r[i], str) and any(tag in r[i] for tag in ("<img", "<audio", "<video", "<div", "<a ")) for r in filtered_data[:3] if i < len(r))
+            ) else "str"
+            for i, c in enumerate(filtered_cols)
+        ]
 
         return (
-            gr.update(headers=filtered_cols, value=filtered_data),
-            selector_update,
+            gr.update(headers=filtered_cols, datatype=datatypes, value=filtered_data),
+            gr.update(),
             new_order,
             selected
         )
 
     def on_reset_columns(data, canonical_cols):
         cols = canonical_cols or []
+        datatypes = [
+            "html" if (
+                c == "media_preview"
+                or "preview" in c.lower()
+                or "img" in c.lower()
+                or "spectrogram" in c.lower()
+                or "spectrograph" in c.lower()
+                or any(isinstance(r[i], str) and any(tag in r[i] for tag in ("<img", "<audio", "<video", "<div", "<a ")) for r in (data or [])[:3] if i < len(r))
+            ) else "str"
+            for i, c in enumerate(cols)
+        ]
         return (
-            gr.update(headers=cols, value=data),
+            gr.update(headers=cols, datatype=datatypes, value=data),
             gr.update(choices=cols, value=cols),
             cols,
             cols

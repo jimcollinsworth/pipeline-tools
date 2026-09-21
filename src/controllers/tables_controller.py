@@ -101,14 +101,19 @@ class TablesController:
             if 0 <= row_idx < len(data_rows):
                 row_dict = dict(zip(headers, data_rows[row_idx]))
 
-        if not row_dict:
+        if not row_dict or not row_dict.get("file_path"):
             clean_dir = domain.strip() if domain else "default"
             clean_tbl = table_name.strip() if table_name else "raw_assets"
             res = DBManager.get_table_data(clean_dir, clean_tbl, limit=50, lightweight=False)
             cols = res.get("columns", [])
             data = res.get("data", [])
             if 0 <= row_idx < len(data):
-                row_dict = dict(zip(cols, data[row_idx]))
+                fallback_dict = dict(zip(cols, data[row_idx]))
+                for k, v in fallback_dict.items():
+                    val = row_dict.get(k)
+                    is_empty = val is None or (isinstance(val, str) and not val.strip())
+                    if k not in row_dict or is_empty:
+                        row_dict[k] = v
 
         file_path = str(row_dict.get("file_path", ""))
         file_name = str(row_dict.get("file_name", "Unknown File"))
@@ -122,8 +127,15 @@ class TablesController:
             f"- **Modality:** `{modality}` | **Format:** `{file_type}` | **Size:** {size} bytes",
             f"- **File Path:** `{file_path}`"
         ]
+        excluded_keys = {
+            "id", "file_name", "file_path", "rel_path", "modality", "file_type", "file_size",
+            "content", "media_preview", "doc", "image", "audio", "video", "metadata", "created_at",
+            "mel_spectrogram", "mel_spectrogram_img"
+        }
         for k, v in row_dict.items():
-            if k not in ["id", "file_name", "file_path", "rel_path", "modality", "file_type", "file_size", "content", "media_preview", "doc", "image", "audio", "video", "metadata", "created_at"] and v:
+            if k not in excluded_keys and v is not None:
+                if isinstance(v, str) and not v.strip():
+                    continue
                 summary_lines.append(f"- **{k}:** {v}")
 
         details_md = "\n".join(summary_lines)
@@ -135,11 +147,21 @@ class TablesController:
         has_content = bool(content and content.strip())
 
         # Inspect Mel Spectrogram preview image if generated
-        spec_img = row_dict.get("mel_spectrogram_img")
+        spec_img = row_dict.get("mel_spectrogram_img") or row_dict.get("mel_spectrogram")
         spec_val = None
         if spec_img is not None:
-            if isinstance(spec_img, str) and (os.path.exists(spec_img) or spec_img.startswith("data:")):
-                spec_val = spec_img
+            import numpy as np
+            if isinstance(spec_img, np.ndarray) and spec_img.ndim == 2:
+                from src.audio.spectrogram import render_spectrogram_array_to_image
+                spec_val = render_spectrogram_array_to_image(spec_img)
+            elif isinstance(spec_img, str):
+                if spec_img.startswith("<img") and "src=" in spec_img:
+                    import re
+                    m = re.search(r'src=["\']([^"\']+)["\']', spec_img)
+                    if m:
+                        spec_val = m.group(1)
+                elif os.path.exists(spec_img) or spec_img.startswith("data:"):
+                    spec_val = spec_img
             elif hasattr(spec_img, "save"):  # PIL.Image.Image
                 spec_val = spec_img
         has_spectrogram = bool(spec_val is not None)
@@ -344,10 +366,13 @@ class TablesController:
     ) -> Tuple[List[List[Any]], List[str]]:
         """Filter table row projections to include only selected columns in matching order."""
         if not selected_cols:
-            return [], []
+            return [["Select at least one column to display"]], ["Notice"]
 
         idx_map = {col: i for i, col in enumerate(canonical_cols)}
         valid_cols = [c for c in selected_cols if c in idx_map]
+        if not valid_cols:
+            return [["Select at least one column to display"]], ["Notice"]
+
         valid_indices = [idx_map[c] for c in valid_cols]
 
         filtered_data = []

@@ -13,6 +13,37 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
+## 📅 2026-09-21: Prompt-Driven Declarative UDFs, Media Players Across All Tables & DataFrame Crash Fix (v1.3.4)
+
+**Context:** The developer reported a Gradio DataFrame `ValueError` when clicking the `id` column pill to hide it, noted missing spectrogram rendering and media players in table views, and directed that UDF execution should not use hardcoded buttons but be driven through prompting (e.g. `"mel spectrograph of filename"` or `/mel_spectrogram`) with default and custom parameter overrides.
+
+**Verbatim Instruction:**
+> `this happened when clicking on the id column to hide ... ValueError: The length of the headers list must be equal to the column_count. The column count is set to 3 but headers has 0 items.`
+> `fix/change: no spectrographs are in the new column, fix that.`
+> `no player for the audio in the table views, check this in all tables, should have players/viewers for audio, video and images`
+> `don't like the mel spectrograp button, not clear how that relates to prompt and run test operations. i thought this would all be prompting, i just enter "mel spectrograph of filename" in the prompt and it would run the UDF using native pixeltable processing with default values, i could enter alternative values/parameters in the prompting. Eventually we will have multiple UDFs that could be called. is all this possible? what options? will processing be efficient? do we have to predefine all the possible UDF/functions? is this just tool calling? /boost /brainstorming /pixeltable`
+
+**Key Decisions & Engineering Takeaways:**
+1. **DataFrame `ValueError` & Pill Bouncing Resolution**:
+   - In `TablesController.filter_dataframe_columns`, when `selected_cols` is empty, never return `headers=[]` (which Gradio evaluates as falsy and falls back to default `column_count=3`). Instead, preserve canonical columns or display a notice column.
+   - Stopped shuffling deselected pills to the end of the pill list in `reorder_columns_on_selection`, preventing jarring DOM rebuilds that emitted empty selection states.
+2. **Spectrogram Rendering & PyAV Fallback**:
+   - Added PyAV (`import av`) fallback inside `compute_mel_spectrogram_core` to decode `.m4a` and `.aac` voice notes without external FFmpeg.
+   - Updated `_truncate_cell` and `get_table_data` to convert both `PIL.Image.Image` and 2D `np.ndarray` into base64 data URIs (`<img src="data:image/jpeg;base64,...">`) and dynamically assigned `"html"` datatypes so Gradio renders graphics instead of raw string pointers or float matrices.
+3. **Media Players & Inspector Across All Table Views**:
+   - Ingestion scanner: Added `Preview` column with HTML `<audio>`, `<video>`, and `<img>` players for pre-ingestion auditioning.
+   - Data Enhancement (Playground): Wired `input_table.select` to `pg_media_inspector_group` and defaulted `preview_mode_toggle` to `False` so media players are visible.
+   - View & Export: Defaulted `lightweight_toggle` to `False` so media players render on initial table load.
+4. **Prompt-Driven UDF Execution Architecture (`UDFRegistry`)**:
+   - Removed the standalone "🎵 Mel Spectrogram" button.
+   - Implemented `UDFRegistry` (`src/core/udf_registry.py`) providing metadata, aliases, parameter schemas, and Pixeltable column binding functions.
+   - Prompts matching slash commands (`/mel_spectrogram hop_length=256 colormap=plasma`) or natural language (`"mel spectrograph of filename"`) are parsed for parameters and executed declaratively via Pixeltable expressions (`table.select(...)` for sample tests, `table.add_computed_column(...)` for batch commits).
+   - This provides $O(1)$ intent resolution and native database-level C/multiprocessing vectorization across thousands of rows.
+5. **Full Test Suite Verification**:
+   - Added 6 new test cases covering PyAV audio decoding, UDFRegistry matching, prompt-driven sample/batch execution, base64 image rendering, and 2D numpy array row inspection (69/69 tests passing).
+
+---
+
 ## 📅 2026-09-21: Declarative Audio Mel Spectrogram Pipeline & Inspector Integration (v1.3.3)
 
 **Context:** The developer requested an audio Mel Spectrogram extraction capability for audio files, exploring UDF possibilities, library choices, and representation formats through a `/grill-me` design interview.

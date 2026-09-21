@@ -969,9 +969,9 @@ class DBManager:
             # Inspect column names from table schema without fetching heavy data rows
             available_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
             
-            # CRITICAL: Exclude heavy raw binary media pointers and large numerical arrays
-            # from the database query to prevent loading 100s of MBs/GBs into RAM.
-            heavy_binary_cols = {"doc", "image", "audio", "video", "thumbnail", "media_preview", "mel_spectrogram"}
+            # CRITICAL: Exclude heavy raw binary media pointers from the database query
+            # to prevent loading 100s of MBs/GBs into RAM.
+            heavy_binary_cols = {"doc", "image", "audio", "video", "thumbnail", "media_preview"}
             query_cols = [c for c in available_cols if c not in heavy_binary_cols]
 
             if query_cols:
@@ -1022,6 +1022,21 @@ class DBManager:
                     return ""
                 if hasattr(val, "isoformat"):
                     return val.isoformat()
+                # If cell is a PIL Image (or has .save), render as compact base64 HTML img
+                if hasattr(val, "save") and not isinstance(val, (str, bytes)):
+                    uri = cls.pil_to_base64_data_uri(val, size=(120, 60))
+                    if uri:
+                        return f'<img src="{uri}" alt="spectrogram" style="height:48px; max-width:120px; border-radius:4px; object-fit:contain; display:block; margin:auto;" />'
+                    return ""
+                # If cell is a 2D numpy array (such as mel_spectrogram), render as compact base64 HTML img
+                import numpy as np
+                if isinstance(val, np.ndarray) and val.ndim == 2 and val.shape[0] in (64, 128, 256, 512):
+                    from src.audio.spectrogram import render_spectrogram_array_to_image
+                    img = render_spectrogram_array_to_image(val)
+                    if img:
+                        uri = cls.pil_to_base64_data_uri(img, size=(120, 60))
+                        if uri:
+                            return f'<img src="{uri}" alt="spectrogram" style="height:48px; max-width:120px; border-radius:4px; object-fit:contain; display:block; margin:auto;" />'
                 s = str(val)
                 return (s[:max_len] + "...") if len(s) > max_len else s
 
@@ -1030,7 +1045,18 @@ class DBManager:
                     df[col] = df[col].apply(_truncate_cell)
 
             cols = list(df.columns)
-            datatypes = ["html" if c == "media_preview" else "str" for c in cols]
+            datatypes = []
+            for c in cols:
+                c_low = c.lower()
+                is_html = (
+                    c == "media_preview"
+                    or "preview" in c_low
+                    or "img" in c_low
+                    or "spectrogram" in c_low
+                    or "spectrograph" in c_low
+                    or (len(df) > 0 and isinstance(df[c].iloc[0], str) and any(tag in df[c].iloc[0] for tag in ("<img", "<audio", "<video", "<div", "<a ")))
+                )
+                datatypes.append("html" if is_html else "str")
 
             return {
                 "columns": cols,

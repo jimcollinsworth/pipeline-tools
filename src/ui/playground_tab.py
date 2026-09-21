@@ -104,7 +104,7 @@ def render_playground_tab(tab=None):
                 )
                 preview_mode_toggle = gr.Checkbox(
                     label="⚡ Lightweight",
-                    value=True,
+                    value=False,
                     scale=1
                 )
 
@@ -147,7 +147,6 @@ def render_playground_tab(tab=None):
             with gr.Row():
                 test_sample_btn = gr.Button("🚀 Run Test on Sample Rows", variant="primary", scale=2)
                 commit_batch_btn = gr.Button("💾 Execute on Table & Save Columns", variant="primary", scale=2)
-                compute_spectrogram_btn = gr.Button("🎵 Mel Spectrogram", variant="secondary", scale=1)
                 undo_batch_btn = gr.Button("↩️ Undo Last Operation", variant="secondary", scale=1)
 
             batch_status_markdown = gr.Markdown("#### Status: *Ready. Select sample rows to test or execute batch on table.*")
@@ -163,6 +162,7 @@ def render_playground_tab(tab=None):
                     * **System Instructions**: Centrally managed per-domain in *Settings & Models*.
                     * **User Prompt**: Supplies row variables (`{file_name}`, `{content}`, `{rel_path}`, `{modality}`).
                     * **⚡ Auto-Split Mode**: Top-level keys in the JSON response automatically become individual table columns!
+                    * **🎵 Declarative UDFs**: Run built-in UDFs via prompt commands (e.g. `/mel_spectrogram hop_length=256 colormap=magma` or `"mel spectrogram of {file_name}"`).
                     """
                 )
                 with gr.Row():
@@ -170,6 +170,7 @@ def render_playground_tab(tab=None):
                     preset_meta_btn = gr.Button("🔍 Precision Metadata", size="sm")
                     preset_art_btn = gr.Button("🎨 Creative Curator", size="sm")
                     preset_doc_btn = gr.Button("📄 Document Intelligence", size="sm")
+                    preset_spectrogram_btn = gr.Button("🎵 Mel Spectrogram UDF", size="sm")
 
             available_columns_info = gr.Markdown(initial_cols_text)
             prompt_template_input = gr.Textbox(
@@ -398,7 +399,15 @@ def render_playground_tab(tab=None):
             status_msg = f"#### Status: 🧪 Evaluated **{count}** sample rows with **[{provider}] {model}**"
             out_hdr = f"#### 📤 Output Table: 🧪 Sample Test Preview ({count} rows dry-run)"
             gr.Info(f"Evaluated {count} sample rows successfully!")
-            return status_msg, out_hdr, gr.update(headers=res["headers"], datatype=["str"] * len(res["headers"]), value=res["data"])
+            headers = res["headers"]
+            datatypes = res.get("datatypes") or [
+                "html" if (
+                    c == "media_preview" or "img" in c.lower() or "spectrogram" in c.lower() or "spectrograph" in c.lower() or "preview" in c.lower()
+                    or any(isinstance(r[i], str) and any(tag in r[i] for tag in ("<img", "<audio", "<video", "<div", "<a ")) for r in res.get("data", [])[:3] if i < len(r))
+                ) else "str"
+                for i, c in enumerate(headers)
+            ]
+            return status_msg, out_hdr, gr.update(headers=headers, datatype=datatypes, value=res["data"])
         else:
             err_msg = res.get("message", "Test execution failed")
             gr.Error(err_msg)
@@ -453,9 +462,17 @@ def render_playground_tab(tab=None):
             in_info, in_df, in_pills = load_input_table(domain, table_name, lightweight=is_lightweight, sample_count=sample_count)
             
             out_hdr = f"#### 📤 Output Table: 💾 Batch Execution Committed ({rows_done} rows saved to `{table_name}`)"
+            out_headers = res.get("output_headers", [])
+            out_datatypes = res.get("output_datatypes") or [
+                "html" if (
+                    c == "media_preview" or "img" in c.lower() or "spectrogram" in c.lower() or "spectrograph" in c.lower() or "preview" in c.lower()
+                    or any(isinstance(r[i], str) and any(tag in r[i] for tag in ("<img", "<audio", "<video", "<div", "<a ")) for r in res.get("output_data", [])[:3] if i < len(r))
+                ) else "str"
+                for i, c in enumerate(out_headers)
+            ]
             out_df = gr.update(
-                headers=res.get("output_headers", []),
-                datatype=["str"] * len(res.get("output_headers", [])),
+                headers=out_headers,
+                datatype=out_datatypes,
                 value=res.get("output_data", [])
             )
             return res["message"], in_info, in_df, in_pills, out_hdr, out_df
@@ -510,30 +527,6 @@ def render_playground_tab(tab=None):
     )
 
     # -------------------------------------------------------------------------
-    # Mel Spectrogram Enrichment -> Computes Array & Image Columns
-    # -------------------------------------------------------------------------
-    def on_compute_spectrogram(domain, table_name, is_lightweight, sample_count):
-        if not domain or not table_name:
-            gr.Warning("Domain and Table selection required.")
-            return "#### Status: ⚠️ Domain and Table selection required.", gr.update(), gr.update(), gr.update()
-
-        res = PlaygroundController.handle_compute_spectrogram(domain, table_name, is_lightweight=is_lightweight)
-        if res.get("status") == "success":
-            gr.Info("Mel Spectrogram computed and attached to table!")
-            in_info, in_df, in_pills = load_input_table(domain, table_name, lightweight=is_lightweight, sample_count=sample_count)
-            return f"#### Status: {res.get('message', 'Spectrogram enriched.')}", in_info, in_df, in_pills
-        else:
-            err_msg = res.get("message", "Failed to compute spectrogram.")
-            gr.Error(err_msg)
-            return f"#### Status: {err_msg}", gr.update(), gr.update(), gr.update()
-
-    compute_spectrogram_btn.click(
-        fn=on_compute_spectrogram,
-        inputs=[domain_dropdown, table_dropdown, preview_mode_toggle, sample_count_slider],
-        outputs=[batch_status_markdown, input_table_header, input_table, available_columns_info]
-    )
-
-    # -------------------------------------------------------------------------
     # Presets Wireup
     # -------------------------------------------------------------------------
     def on_apply_preset_cv():
@@ -552,6 +545,9 @@ def render_playground_tab(tab=None):
         usr_p = "Analyze the document: {file_name}\n\nContent:\n{content}\n\nExtract JSON containing:\n- \"doc_summary\": 2-3 sentence executive summary.\n- \"key_entities\": Comma-separated list of organizations, people, and locations.\n- \"action_items\": Comma-separated list of key requirements or dates."
         return usr_p, "⚡ Auto-Split JSON Keys into Columns"
 
+    def on_apply_preset_spectrogram():
+        return "/mel_spectrogram hop_length=512 colormap=magma", "⚡ Auto-Split JSON Keys into Columns"
+
     preset_cv_btn.click(
         fn=on_apply_preset_cv,
         outputs=[prompt_template_input, output_mode_radio]
@@ -566,6 +562,10 @@ def render_playground_tab(tab=None):
     )
     preset_doc_btn.click(
         fn=on_apply_preset_doc,
+        outputs=[prompt_template_input, output_mode_radio]
+    )
+    preset_spectrogram_btn.click(
+        fn=on_apply_preset_spectrogram,
         outputs=[prompt_template_input, output_mode_radio]
     )
 

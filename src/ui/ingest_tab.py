@@ -1,3 +1,4 @@
+import os
 import gradio as gr
 import pandas as pd
 from pathlib import Path
@@ -69,13 +70,28 @@ def render_ingest_tab(tab=None):
         summary_markdown = gr.Markdown("#### Scan Summary: *No directory scanned yet.*")
 
         files_table = gr.Dataframe(
-            headers=["Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"],
-            datatype=["str", "str", "str", "str", "str", "str"],
+            headers=["Preview", "Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"],
+            datatype=["html", "str", "str", "str", "str", "str", "str"],
             value=[],
             interactive=False,
             wrap=True,
             min_width=800
         )
+
+        # Interactive Media Inspector Drawer for scanned files
+        with gr.Group(visible=False, elem_classes=["status-panel"]) as ingest_media_inspector_group:
+            with gr.Row():
+                gr.Markdown("#### 🔬 Scanned File Media Inspector", scale=4)
+                ingest_close_inspector_btn = gr.Button("✖️ Close Inspector", size="sm", scale=1)
+
+            with gr.Row():
+                ingest_inspector_image = gr.Image(label="🖼️ Image Preview", visible=False, scale=2, interactive=False)
+                ingest_inspector_audio = gr.Audio(label="🎵 Audio Playback", visible=False, scale=2, interactive=False)
+                ingest_inspector_video = gr.Video(label="🎬 Video Player", visible=False, scale=2, interactive=False)
+
+                with gr.Column(scale=3):
+                    ingest_inspector_details = gr.Markdown("*(Select a row in the table above to preview media & details)*")
+                    ingest_inspector_content = gr.Textbox(label="📄 Extracted Content / Text", lines=6, visible=False, interactive=False)
 
         # State to store scanned files in memory for ingestion
         scanned_state = gr.State([])
@@ -122,12 +138,13 @@ def render_ingest_tab(tab=None):
     def on_mode_change(selected_mode):
         is_csv = ("single" in selected_mode.lower() or "csv" in selected_mode.lower())
         summary_text = "#### Scan Summary: *No CSV file inspected yet.*" if is_csv else "#### Scan Summary: *No directory scanned yet.*"
-        default_headers = ["Column 1", "Column 2", "Column 3"] if is_csv else ["Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"]
+        default_headers = ["Column 1", "Column 2", "Column 3"] if is_csv else ["Preview", "Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"]
+        default_dt = ["str", "str", "str"] if is_csv else ["html", "str", "str", "str", "str", "str", "str"]
         return (
             gr.update(visible=not is_csv),
             gr.update(visible=is_csv),
             summary_text,
-            gr.update(headers=default_headers, value=[]),
+            gr.update(headers=default_headers, datatype=default_dt, value=[]),
             []
         )
 
@@ -176,7 +193,11 @@ def render_ingest_tab(tab=None):
 
         return (
             res["summary"],
-            gr.update(headers=["Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"], value=res["files_table"]),
+            gr.update(
+                headers=res.get("headers", ["Preview", "Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"]),
+                datatype=res.get("datatypes", ["html", "str", "str", "str", "str", "str", "str"]),
+                value=res["files_table"]
+            ),
             res["scanned_files"],
             gr.update(choices=res["directory_choices"])
         )
@@ -277,6 +298,61 @@ def render_ingest_tab(tab=None):
         fn=on_scan_single_file,
         inputs=[file_input],
         outputs=[summary_markdown, files_table, scanned_state, file_input, primary_text_col_dropdown]
+    )
+
+    def on_select_scanned_row(evt: gr.SelectData, current_df, scanned_files):
+        if not evt or evt.index is None:
+            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        row_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else 0
+        file_path = ""
+        file_name = ""
+        modality = ""
+        file_type = ""
+        size = ""
+
+        if scanned_files and 0 <= row_idx < len(scanned_files):
+            sf = scanned_files[row_idx]
+            file_path = sf.get("abs_path", "")
+            file_name = sf.get("name", Path(file_path).name if file_path else "Unknown")
+            modality = str(sf.get("modality", "")).lower()
+            file_type = str(sf.get("extension", "")).lower()
+            size = sf.get("size", "")
+        elif hasattr(current_df, "iloc") and 0 <= row_idx < len(current_df):
+            r = current_df.iloc[row_idx].to_dict()
+            file_name = str(r.get("Name", ""))
+            modality = str(r.get("Modality", "")).lower()
+            file_type = str(r.get("Type", "")).lower()
+            size = str(r.get("Size", ""))
+            file_path = str(r.get("Absolute Path", ""))
+
+        file_exists = os.path.exists(file_path) if file_path else False
+        img_val = file_path if (modality == "images" or file_type in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"]) and file_exists else None
+        audio_val = file_path if (modality == "audio" or file_type in [".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"]) and file_exists else None
+        video_val = file_path if (modality == "video" or file_type in [".mp4", ".webm", ".mov", ".avi", ".mkv"]) and file_exists else None
+
+        content = DBManager.extract_file_content(file_path, modality, file_type) if file_exists else ""
+        has_content = bool(content and content.strip())
+
+        details_md = f"### 📄 **{file_name}**\n- **Modality:** `{modality}` | **Type:** `{file_type}` | **Size:** {size}\n- **Path:** `{file_path}`"
+
+        return (
+            gr.update(visible=True),
+            gr.update(value=img_val, visible=bool(img_val)),
+            gr.update(value=audio_val, visible=bool(audio_val)),
+            gr.update(value=video_val, visible=bool(video_val)),
+            details_md,
+            gr.update(value=content if has_content else "", visible=has_content)
+        )
+
+    files_table.select(
+        fn=on_select_scanned_row,
+        inputs=[files_table, scanned_state],
+        outputs=[ingest_media_inspector_group, ingest_inspector_image, ingest_inspector_audio, ingest_inspector_video, ingest_inspector_details, ingest_inspector_content]
+    )
+
+    ingest_close_inspector_btn.click(
+        fn=lambda: gr.update(visible=False),
+        outputs=[ingest_media_inspector_group]
     )
 
     ingest_btn.click(

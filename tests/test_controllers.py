@@ -301,6 +301,16 @@ class TestControllers(unittest.TestCase):
             [6, 4]
         ])
 
+        # Test empty selected columns returns Notice column and helpful message
+        empty_data, empty_cols = TablesController.filter_dataframe_columns(data, cols, [])
+        self.assertEqual(empty_cols, ["Notice"])
+        self.assertEqual(empty_data, [["Select at least one column to display"]])
+
+        # Test non-matching selected columns returns Notice column
+        none_data, none_cols = TablesController.filter_dataframe_columns(data, cols, ["non_existent"])
+        self.assertEqual(none_cols, ["Notice"])
+        self.assertEqual(none_data, [["Select at least one column to display"]])
+
     def test_context_controller_system_prompt_and_activity(self):
         """[Controller] Verify ContextController saves domain system prompt and formats minimal activity."""
         from src.controllers.context_controller import ContextController

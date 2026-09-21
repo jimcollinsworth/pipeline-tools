@@ -155,15 +155,27 @@ class IngestController:
         summary_md = f"### 📂 Scanned `{p.resolve()}`\n**Total Files Discovered:** {len(files)} ({counts_str})"
 
         table_rows = [
-            [f["name"], f["modality"], f["extension"], f["size"], f["rel_path"], f["abs_path"]]
+            [
+                DBManager.format_media_preview_html(f["abs_path"], f["modality"], f["extension"]),
+                f["name"],
+                f["modality"],
+                f["extension"],
+                f["size"],
+                f["rel_path"],
+                f["abs_path"]
+            ]
             for f in files
         ]
+
+        headers = ["Preview", "Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"]
+        datatypes = ["html", "str", "str", "str", "str", "str", "str"]
 
         return {
             "status": "success",
             "summary": summary_md,
             "files_table": table_rows,
-            "headers": ["Name", "Modality", "Type", "Size", "Relative Path", "Absolute Path"],
+            "headers": headers,
+            "datatypes": datatypes,
             "scanned_files": files,
             "directory_choices": updated_choices
         }

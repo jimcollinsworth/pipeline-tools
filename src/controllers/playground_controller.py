@@ -155,6 +155,16 @@ class PlaygroundController:
 
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
+
+        # Check if prompt triggers a registered declarative UDF (e.g. /mel_spectrogram or "mel spectrogram")
+        from src.core.udf_registry import UDFRegistry
+        udf_match = UDFRegistry.match_prompt(prompt_template)
+        if udf_match is not None:
+            udf_def, udf_kwargs = udf_match
+            if progress_callback:
+                progress_callback(0.5, f"Evaluating declarative UDF '{udf_def.name}' on {sample_count} sample rows...")
+            return udf_def.sample_eval_fn(clean_dir, clean_tbl, sample_count=sample_count, **udf_kwargs)
+
         resolved_sys_prompt = system_prompt.strip() if system_prompt and system_prompt.strip() else get_domain_system_prompt(clean_dir)
         is_auto_split = (output_mode == "⚡ Auto-Split JSON Keys into Columns")
 
@@ -197,6 +207,7 @@ class PlaygroundController:
                     return {
                         "status": "success",
                         "headers": headers,
+                        "datatypes": ["str"] * len(headers),
                         "data": rows,
                         "count": len(rows),
                         "keys": all_keys
@@ -210,6 +221,7 @@ class PlaygroundController:
             return {
                 "status": "success",
                 "headers": headers,
+                "datatypes": ["str"] * len(headers),
                 "data": rows,
                 "count": len(rows)
             }
@@ -245,6 +257,59 @@ class PlaygroundController:
 
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
+
+        # Check if prompt triggers a registered declarative UDF
+        from src.core.udf_registry import UDFRegistry
+        udf_match = UDFRegistry.match_prompt(prompt_template)
+        if udf_match is not None:
+            udf_def, udf_kwargs = udf_match
+            if progress_callback:
+                progress_callback(0.5, f"Declaratively attaching UDF '{udf_def.name}' computed columns to table...")
+            attach_res = udf_def.attach_fn(clean_dir, clean_tbl, **udf_kwargs)
+            if attach_res.get("status") == "success":
+                cols_created = attach_res.get("columns", ["mel_spectrogram", "mel_spectrogram_img"])
+                raw_preview = DBManager.get_table_data(clean_dir, clean_tbl, limit=25, lightweight=is_lightweight)
+                raw_cols = raw_preview.get("columns", [])
+                raw_data = raw_preview.get("data", [])
+
+                lead_cols = [c for c in ["id", "file_name"] if c in raw_cols]
+                created_in_raw = [c for c in cols_created if c in raw_cols and c not in lead_cols]
+                other_cols = [c for c in raw_cols if c not in lead_cols and c not in created_in_raw]
+                ordered_cols = lead_cols + created_in_raw + other_cols
+
+                col_indices = [raw_cols.index(c) for c in ordered_cols]
+                out_headers = ["Status"] + ordered_cols
+                out_rows = []
+                for idx, r in enumerate(raw_data):
+                    reordered_row = [r[i] for i in col_indices]
+                    out_rows.append([f"💾 Saved ({idx + 1})"] + reordered_row)
+
+                raw_dt = raw_preview.get("datatypes", ["str"] * len(raw_cols))
+                dt_map = dict(zip(raw_cols, raw_dt))
+                out_datatypes = ["str"] + [dt_map.get(c, "str") for c in ordered_cols]
+
+                status_msg = (
+                    f"### ✅ UDF Batch Execution Successful!\n"
+                    f"- **Table:** `{clean_dir}.{clean_tbl}`\n"
+                    f"- **UDF:** `{udf_def.name}` ({', '.join(f'{k}={v}' for k, v in udf_kwargs.items())})\n"
+                    f"- **Columns Attached:** `{', '.join(cols_created)}`\n"
+                    f"- **Execution Model:** Declarative Pixeltable Computed Columns (zero row loops)"
+                )
+                return {
+                    "status": "success",
+                    "message": status_msg,
+                    "output_headers": out_headers,
+                    "output_datatypes": out_datatypes,
+                    "output_data": out_rows,
+                    "columns_created": cols_created,
+                    "rows_processed": len(raw_data)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"### ❌ UDF Execution Failed\n```\n{attach_res.get('message', 'Unknown error')}\n```"
+                }
+
         is_auto_split = (output_mode == "⚡ Auto-Split JSON Keys into Columns")
         clean_col = target_column.strip() if target_column and target_column.strip() else "llm_summary"
 
@@ -312,10 +377,15 @@ class PlaygroundController:
                 status_tag = f"💾 Saved ({idx + 1})" if idx < rows_done else "— (Unchanged)"
                 out_rows.append([status_tag] + reordered_row)
 
+            raw_dt = raw_preview.get("datatypes", ["str"] * len(raw_cols))
+            dt_map = dict(zip(raw_cols, raw_dt))
+            out_datatypes = ["str"] + [dt_map.get(c, "str") for c in ordered_cols]
+
             return {
                 "status": "success",
                 "message": status_msg,
                 "output_headers": out_headers,
+                "output_datatypes": out_datatypes,
                 "output_data": out_rows,
                 "columns_created": cols_created,
                 "rows_processed": rows_done

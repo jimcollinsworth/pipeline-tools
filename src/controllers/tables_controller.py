@@ -134,6 +134,16 @@ class TablesController:
         video_val = file_path if (modality == "video" or file_type in [".mp4", ".webm", ".mov", ".avi", ".mkv"]) and file_exists else None
         has_content = bool(content and content.strip())
 
+        # Inspect Mel Spectrogram preview image if generated
+        spec_img = row_dict.get("mel_spectrogram_img")
+        spec_val = None
+        if spec_img is not None:
+            if isinstance(spec_img, str) and (os.path.exists(spec_img) or spec_img.startswith("data:")):
+                spec_val = spec_img
+            elif hasattr(spec_img, "save"):  # PIL.Image.Image
+                spec_val = spec_img
+        has_spectrogram = bool(spec_val is not None)
+
         return {
             "image_path": img_val,
             "has_image": bool(img_val),
@@ -141,6 +151,8 @@ class TablesController:
             "has_audio": bool(audio_val),
             "video_path": video_val,
             "has_video": bool(video_val),
+            "spectrogram_path": spec_val,
+            "has_spectrogram": has_spectrogram,
             "details_markdown": details_md,
             "content_text": content if has_content else "",
             "has_content": has_content

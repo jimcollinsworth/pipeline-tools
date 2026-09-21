@@ -352,3 +352,31 @@ class PlaygroundController:
                 "status": "error",
                 "message": f"### ⚠️ Undo Not Available\n{undo_res.get('message', 'No undo operations available.')}"
             }
+
+    @staticmethod
+    def handle_compute_spectrogram(domain: str, table_name: str, is_lightweight: bool = True) -> Dict[str, Any]:
+        """Declaratively attach Mel Spectrogram computed columns and refresh preview."""
+        if not domain or not table_name:
+            return {
+                "status": "error",
+                "message": "⚠️ Please select a valid Domain and Table."
+            }
+
+        from src.audio.spectrogram import attach_spectrogram_columns
+        clean_dir = domain.strip()
+        clean_tbl = table_name.strip()
+        res = attach_spectrogram_columns(clean_dir, clean_tbl)
+
+        if res.get("status") == "success":
+            preview = PlaygroundController.load_table_preview(clean_dir, clean_tbl, lightweight=is_lightweight)
+            return {
+                "status": "success",
+                "message": f"### 🎵 Mel Spectrogram Enriched\n{res.get('message', '')}",
+                "columns_added": res.get("columns", []),
+                "preview": preview
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"### ❌ Mel Spectrogram Failed\n{res.get('message', '')}"
+            }

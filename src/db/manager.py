@@ -969,9 +969,9 @@ class DBManager:
             # Inspect column names from table schema without fetching heavy data rows
             available_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
             
-            # CRITICAL: Exclude heavy raw binary media pointers ('image', 'doc', 'video', 'audio', 'thumbnail')
-            # from the database query to prevent loading 100s of MBs/GBs of uncompressed raw media into RAM.
-            heavy_binary_cols = {"doc", "image", "audio", "video", "thumbnail", "media_preview"}
+            # CRITICAL: Exclude heavy raw binary media pointers and large numerical arrays
+            # from the database query to prevent loading 100s of MBs/GBs into RAM.
+            heavy_binary_cols = {"doc", "image", "audio", "video", "thumbnail", "media_preview", "mel_spectrogram"}
             query_cols = [c for c in available_cols if c not in heavy_binary_cols]
 
             if query_cols:

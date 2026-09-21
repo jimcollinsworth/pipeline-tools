@@ -29,6 +29,10 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 - **Incremental & Cached Execution**:
   - Leverages Pixeltable declarative computed columns to ensure LLM operations are cached, incremental, and version-controlled.
   - Minimizes redundant LLM calls per row, and accepts structured typed output inserted/appended into table columns.
+- **Audio DSP & Declarative Mel Spectrogram Pipeline**:
+  - Declarative `@pxt.udf` computation of dual-representation audio features: a 2D numerical feature matrix (`mel_spectrogram`, type `pxt.Array`) and visual colormapped spectrogram images (`mel_spectrogram_img`, type `pxt.Image`).
+  - Automatic minimum width upscaling for short audio clips and null-safe execution on mixed-modality datasets.
+  - 1-click "🎵 Mel Spectrogram" generation in Data Enhancement and integrated visual spectrogram viewer in the Media Inspector drawer.
 - **Embedded Multimodal Media & Interactive Inspector**:
   - Fast **⚡ Lightweight Mode** (skips binary deserialization, reducing Python RAM by >95%) and **🔍 Full Media Mode** with inline HTML thumbnails (`<img>`), audio players (`<audio>`), video players (`<video>`), and PDF badges.
   - Interactive **🔬 Selected Record Media Inspector** drawer opens on row selection for deep inspection of full-resolution images, audio playback, video playback, and extracted text.

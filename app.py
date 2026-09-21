@@ -540,6 +540,13 @@ if (document.readyState === "loading") {{
 """
 
 def create_app():
+    # Pre-flight embedded PostgreSQL lock self-healing
+    try:
+        from src.db.manager import DBManager
+        DBManager.heal_postgres_locks(force_purge_orphans=False)
+    except Exception:
+        pass
+
     with gr.Blocks(title="Pipeline Tools v1.3", fill_width=True) as demo:
         gr.Markdown(
             """

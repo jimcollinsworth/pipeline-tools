@@ -1049,6 +1049,11 @@ def run_tests(include_e2e=None):
         suite.addTests(loader.loadTestsFromTestCase(TestControllers))
     except Exception:
         pass
+    try:
+        from tests.test_audio_spectrogram import TestAudioMelSpectrogram
+        suite.addTests(loader.loadTestsFromTestCase(TestAudioMelSpectrogram))
+    except Exception:
+        pass
 
     if include_e2e:
         try:

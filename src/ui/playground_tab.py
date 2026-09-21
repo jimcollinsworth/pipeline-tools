@@ -147,6 +147,7 @@ def render_playground_tab(tab=None):
             with gr.Row():
                 test_sample_btn = gr.Button("🚀 Run Test on Sample Rows", variant="primary", scale=2)
                 commit_batch_btn = gr.Button("💾 Execute on Table & Save Columns", variant="primary", scale=2)
+                compute_spectrogram_btn = gr.Button("🎵 Mel Spectrogram", variant="secondary", scale=1)
                 undo_batch_btn = gr.Button("↩️ Undo Last Operation", variant="secondary", scale=1)
 
             batch_status_markdown = gr.Markdown("#### Status: *Ready. Select sample rows to test or execute batch on table.*")
@@ -212,6 +213,7 @@ def render_playground_tab(tab=None):
                 with gr.Row():
                     pg_inspector_image = gr.Image(label="🖼️ Image Preview", visible=False, scale=2, interactive=False)
                     pg_inspector_audio = gr.Audio(label="🎵 Audio Playback", visible=False, scale=2, interactive=False)
+                    pg_inspector_spectrogram = gr.Image(label="🎵 Mel Spectrogram", visible=False, scale=2, interactive=False)
                     pg_inspector_video = gr.Video(label="🎬 Video Player", visible=False, scale=2, interactive=False)
 
                     with gr.Column(scale=3):
@@ -337,6 +339,7 @@ def render_playground_tab(tab=None):
             gr.update(visible=True),
             gr.update(value=insp["image_path"], visible=insp["has_image"]),
             gr.update(value=insp["audio_path"], visible=insp["has_audio"]),
+            gr.update(value=insp.get("spectrogram_path"), visible=insp.get("has_spectrogram", False)),
             gr.update(value=insp["video_path"], visible=insp["has_video"]),
             insp["details_markdown"],
             gr.update(value=insp["content_text"], visible=insp["has_content"])
@@ -345,13 +348,13 @@ def render_playground_tab(tab=None):
     input_table.select(
         fn=on_select_preview_row,
         inputs=[input_table, domain_dropdown, table_dropdown],
-        outputs=[pg_media_inspector_group, pg_inspector_image, pg_inspector_audio, pg_inspector_video, pg_inspector_details, pg_inspector_content]
+        outputs=[pg_media_inspector_group, pg_inspector_image, pg_inspector_audio, pg_inspector_spectrogram, pg_inspector_video, pg_inspector_details, pg_inspector_content]
     )
 
     output_table.select(
         fn=on_select_preview_row,
         inputs=[output_table, domain_dropdown, table_dropdown],
-        outputs=[pg_media_inspector_group, pg_inspector_image, pg_inspector_audio, pg_inspector_video, pg_inspector_details, pg_inspector_content]
+        outputs=[pg_media_inspector_group, pg_inspector_image, pg_inspector_audio, pg_inspector_spectrogram, pg_inspector_video, pg_inspector_details, pg_inspector_content]
     )
 
     pg_close_inspector_btn.click(
@@ -504,6 +507,30 @@ def render_playground_tab(tab=None):
         fn=on_undo_batch,
         inputs=[domain_dropdown, table_dropdown, preview_mode_toggle, sample_count_slider],
         outputs=[batch_status_markdown, input_table_header, input_table, available_columns_info, output_table_header, output_table]
+    )
+
+    # -------------------------------------------------------------------------
+    # Mel Spectrogram Enrichment -> Computes Array & Image Columns
+    # -------------------------------------------------------------------------
+    def on_compute_spectrogram(domain, table_name, is_lightweight, sample_count):
+        if not domain or not table_name:
+            gr.Warning("Domain and Table selection required.")
+            return "#### Status: ⚠️ Domain and Table selection required.", gr.update(), gr.update(), gr.update()
+
+        res = PlaygroundController.handle_compute_spectrogram(domain, table_name, is_lightweight=is_lightweight)
+        if res.get("status") == "success":
+            gr.Info("Mel Spectrogram computed and attached to table!")
+            in_info, in_df, in_pills = load_input_table(domain, table_name, lightweight=is_lightweight, sample_count=sample_count)
+            return f"#### Status: {res.get('message', 'Spectrogram enriched.')}", in_info, in_df, in_pills
+        else:
+            err_msg = res.get("message", "Failed to compute spectrogram.")
+            gr.Error(err_msg)
+            return f"#### Status: {err_msg}", gr.update(), gr.update(), gr.update()
+
+    compute_spectrogram_btn.click(
+        fn=on_compute_spectrogram,
+        inputs=[domain_dropdown, table_dropdown, preview_mode_toggle, sample_count_slider],
+        outputs=[batch_status_markdown, input_table_header, input_table, available_columns_info]
     )
 
     # -------------------------------------------------------------------------

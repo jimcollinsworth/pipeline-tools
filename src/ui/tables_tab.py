@@ -126,6 +126,7 @@ def render_tables_tab(tab=None):
             with gr.Row():
                 inspector_image = gr.Image(label="🖼️ Image Preview", visible=False, scale=2, interactive=False)
                 inspector_audio = gr.Audio(label="🎵 Audio Playback", visible=False, scale=2, interactive=False)
+                inspector_spectrogram = gr.Image(label="🎵 Mel Spectrogram", visible=False, scale=2, interactive=False)
                 inspector_video = gr.Video(label="🎬 Video Player", visible=False, scale=2, interactive=False)
 
                 with gr.Column(scale=3):
@@ -304,6 +305,7 @@ def render_tables_tab(tab=None):
             gr.update(visible=True),
             gr.update(value=insp["image_path"], visible=insp["has_image"]),
             gr.update(value=insp["audio_path"], visible=insp["has_audio"]),
+            gr.update(value=insp.get("spectrogram_path"), visible=insp.get("has_spectrogram", False)),
             gr.update(value=insp["video_path"], visible=insp["has_video"]),
             insp["details_markdown"],
             gr.update(value=insp["content_text"], visible=insp["has_content"])
@@ -452,7 +454,7 @@ def render_tables_tab(tab=None):
     data_view_table.select(
         fn=on_select_table_row,
         inputs=[data_view_table, domain_dropdown, table_dropdown],
-        outputs=[media_inspector_group, inspector_image, inspector_audio, inspector_video, inspector_details, inspector_content]
+        outputs=[media_inspector_group, inspector_image, inspector_audio, inspector_spectrogram, inspector_video, inspector_details, inspector_content]
     )
 
     close_inspector_btn.click(

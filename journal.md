@@ -13,6 +13,33 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
+## 📅 2026-09-21: Declarative Audio Mel Spectrogram Pipeline & Inspector Integration (v1.3.3)
+
+**Context:** The developer requested an audio Mel Spectrogram extraction capability for audio files, exploring UDF possibilities, library choices, and representation formats through a `/grill-me` design interview.
+
+**Verbatim Instruction:**
+> `i want to call a mel spectrogram function for each audio file, can i pass in a user defined function? do we need a library? options? /grill-me`
+> `dedicated column since it is an image stored in the db (i think). make sure to add an end 2 end test on the mel spectrogram specifically`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Declarative Invariant (`@pxt.udf` Computed Columns)**:
+   - Implemented `compute_mel_spectrogram` and `render_mel_spectrogram_image` as native Pixeltable `@pxt.udf` functions in `src/audio/spectrogram.py`.
+   - In accordance with repository invariants, table enrichment attaches computed columns (`table.add_computed_column`) with zero imperative row loops.
+2. **Dual Output Representation**:
+   - **`mel_spectrogram` (`pxt.Array`)**: Stored as a 2D float32 array `[128, T]` representing dB-scaled mel power spectral density for downstream ML and feature extraction.
+   - **`mel_spectrogram_img` (`pxt.Image`)**: Stored as a colormapped (`magma`) PIL Image for visual inspection in table views and export.
+3. **Null-Safety for Mixed-Modality Datasets**:
+   - The UDF gracefully inspects whether each record contains valid audio data (`audio`), returning `None` for non-audio rows without raising exceptions.
+4. **Interactive Workbench & Media Inspector Integration**:
+   - Added "🎵 Mel Spectrogram" action button in the Data Enhancement tab to enrich tables on-demand.
+   - Added dedicated Spectrogram image preview slots in both Data Enhancement and View & Export Media Inspectors so users can listen to audio and view its spectrogram side-by-side.
+5. **Pre-Flight PostgreSQL Lock Healing in `app.py`**:
+   - Added `DBManager.heal_postgres_locks()` inside `app.py`'s `create_app()` to prevent Windows file sharing violations on restart.
+6. **Dedicated TDD & Integration Test Suite**:
+   - Created `tests/test_audio_spectrogram.py` verifying tone generation, UDF computation, table attachment, null safety, and Media Inspector extraction (63/63 tests passing).
+
+---
+
 ## 📅 2026-08-31: Testing Strategy, Architecture & Tooling Deep Review
 
 **Context:** Initiating a comprehensive quality, testing reliability, and architecture review of the test suite, Pixeltable/Postgres lifecycle management, and web testing strategy.

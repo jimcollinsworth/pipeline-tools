@@ -13,6 +13,27 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
+## 📅 2026-09-22: PIL Image Dimension Clamping & Librosa Warning Suppression (v1.3.13)
+
+**Context:** The developer reported that batch execution on table `personal.documents_audio` failed with `OSError: Maximum supported image dimension is 65500 pixels` inside PIL `_encode_tile` during `attach_chroma_columns`. Additionally, short/corrupt audio files emitted `UserWarning: n_fft=2048 is too large for input signal`.
+
+**Verbatim Instruction:**
+> `execute on table fails after long wait, test rows worked fine. UserWarning: n_fft=2048 is too large for input signal of length=166 ... Maximum supported image dimension is 65500 pixels ... File "PIL\ImageFile.py", line 702, in _encode_tile raise _get_oserror(errcode, encoder=True) from exc`
+
+**Key Decisions & Engineering Takeaways:**
+1. **PIL Max Image Dimension Clamping (`src/audio/spectrogram.py`)**:
+   - Long audio files produce high frame counts ($T > 65,500$), causing PIL's JPEG encoder to raise `OSError: Maximum supported image dimension is 65500 pixels`.
+   - Updated `render_spectrogram_array_to_image` to enforce a strict upper dimension bound (`max_dim=4096`). Image widths and heights $> 4096$ pixels are downsampled to 4096 pixels wide.
+2. **Audio Signal Length Safety & Zero Padding**:
+   - Added minimum signal length checks (`len(y) < 16`) returning `None` for unreadable or truncated audio files.
+   - Automatically zero-padded signals shorter than `n_fft` or `512` to prevent librosa dimension mismatch errors.
+3. **Warning Suppression**:
+   - Wrapped `librosa.load` and feature extraction functions in `warnings.catch_warnings()` with `warnings.simplefilter("ignore")`.
+4. **Comprehensive Test Suite Verification**:
+   - All 110 tests pass cleanly (`110 Passed, 0 Failed, 0 Errors`).
+
+---
+
 ## 📅 2026-09-22: Instant Batch Visual Feedback & Execution Row Limit Clarification (v1.3.12)
 
 **Context:** The developer reported a lack of clear visual feedback during `💾 Execute on Table & Save Columns` button execution ("are we running?"), overlapping status text, and requested an explanation of how `Max Batch Rows (0=all)` works and why the term "batch" was misleading.

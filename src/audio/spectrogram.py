@@ -9,6 +9,7 @@ from audio records, generating:
 
 import os
 import logging
+import warnings
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import numpy as np
@@ -60,7 +61,9 @@ def load_audio_signal(audio_path: Optional[str], sr: int = 22050) -> Optional[Tu
     y = None
     sample_rate = sr
     try:
-        y, sample_rate = librosa.load(str(p), sr=sr, mono=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            y, sample_rate = librosa.load(str(p), sr=sr, mono=True)
     except Exception as e:
         logger.debug(f"librosa.load failed for '{audio_path}', attempting PyAV fallback: {e}")
         y = load_audio_pyav(str(p), target_sr=sr)
@@ -83,21 +86,27 @@ def compute_mel_spectrogram_core(
     if res is None:
         return None
     y, sample_rate = res
+    if len(y) < 16:
+        return None
 
     try:
-        # Compute mel power spectrogram
-        s_mel = librosa.feature.melspectrogram(
-            y=y,
-            sr=sample_rate,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            n_mels=n_mels,
-            fmin=0.0,
-            fmax=8000.0
-        )
-        # Convert to decibels relative to peak
-        s_db = librosa.power_to_db(s_mel, ref=np.max)
-        return s_db.astype(np.float32)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if len(y) < n_fft:
+                y = np.pad(y, (0, n_fft - len(y)))
+            # Compute mel power spectrogram
+            s_mel = librosa.feature.melspectrogram(
+                y=y,
+                sr=sample_rate,
+                n_fft=n_fft,
+                hop_length=hop_length,
+                n_mels=n_mels,
+                fmin=0.0,
+                fmax=8000.0
+            )
+            # Convert to decibels relative to peak
+            s_db = librosa.power_to_db(s_mel, ref=np.max)
+            return s_db.astype(np.float32)
     except Exception as e:
         logger.debug(f"Could not compute mel spectrogram for '{audio_path}': {e}")
         return None
@@ -105,7 +114,8 @@ def compute_mel_spectrogram_core(
 
 def render_spectrogram_array_to_image(
     s_db: np.ndarray,
-    colormap: str = "magma"
+    colormap: str = "magma",
+    max_dim: int = 4096
 ) -> Optional[Image.Image]:
     """Pure Python utility to render a 2D dB-scaled mel spectrogram array directly into a PIL Image."""
     if s_db is None or not isinstance(s_db, np.ndarray) or s_db.ndim != 2 or s_db.size == 0:
@@ -128,8 +138,20 @@ def render_spectrogram_array_to_image(
 
         # Convert to PIL Image
         pil_img = Image.fromarray(rgba_img).convert("RGB")
-        target_w = max(512, pil_img.width) if pil_img.width < 256 else pil_img.width
-        target_h = max(256, pil_img.height) if pil_img.height < 128 else pil_img.height
+        target_w = pil_img.width
+        target_h = pil_img.height
+
+        # Clamp width and height to safe visual boundaries [256..max_dim]
+        if target_w < 256:
+            target_w = 512
+        elif target_w > max_dim:
+            target_w = max_dim
+
+        if target_h < 128:
+            target_h = 256
+        elif target_h > max_dim:
+            target_h = max_dim
+
         if target_w != pil_img.width or target_h != pil_img.height:
             pil_img = pil_img.resize((target_w, target_h), resample=Image.Resampling.BILINEAR)
         return pil_img
@@ -252,15 +274,21 @@ def compute_mfcc_core(
     if res is None:
         return None
     y, sample_rate = res
+    if len(y) < 16:
+        return None
     try:
-        mfcc = librosa.feature.mfcc(
-            y=y,
-            sr=sample_rate,
-            n_mfcc=n_mfcc,
-            n_fft=n_fft,
-            hop_length=hop_length
-        )
-        return mfcc.astype(np.float32)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if len(y) < n_fft:
+                y = np.pad(y, (0, n_fft - len(y)))
+            mfcc = librosa.feature.mfcc(
+                y=y,
+                sr=sample_rate,
+                n_mfcc=n_mfcc,
+                n_fft=n_fft,
+                hop_length=hop_length
+            )
+            return mfcc.astype(np.float32)
     except Exception as e:
         logger.debug(f"Could not compute MFCC for '{audio_path}': {e}")
         return None
@@ -373,15 +401,21 @@ def compute_chroma_core(
     if res is None:
         return None
     y, sample_rate = res
+    if len(y) < 16:
+        return None
     try:
-        chroma = librosa.feature.chroma_stft(
-            y=y,
-            sr=sample_rate,
-            n_chroma=n_chroma,
-            n_fft=n_fft,
-            hop_length=hop_length
-        )
-        return chroma.astype(np.float32)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if len(y) < n_fft:
+                y = np.pad(y, (0, n_fft - len(y)))
+            chroma = librosa.feature.chroma_stft(
+                y=y,
+                sr=sample_rate,
+                n_chroma=n_chroma,
+                n_fft=n_fft,
+                hop_length=hop_length
+            )
+            return chroma.astype(np.float32)
     except Exception as e:
         logger.debug(f"Could not compute Chroma STFT for '{audio_path}': {e}")
         return None
@@ -492,27 +526,33 @@ def compute_audio_stats_core(
     if res is None:
         return None
     y, sample_rate = res
+    if len(y) < 16:
+        return None
     try:
-        duration = float(len(y) / sample_rate)
-        rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
-        zcr = librosa.feature.zero_crossing_rate(y=y, hop_length=hop_length)[0]
-        cent = librosa.feature.spectral_centroid(y=y, sr=sample_rate, hop_length=hop_length)[0]
-        rolloff = librosa.feature.spectral_rolloff(y=y, sr=sample_rate, hop_length=hop_length)[0]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if len(y) < 512:
+                y = np.pad(y, (0, 512 - len(y)))
+            duration = float(len(y) / sample_rate)
+            rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+            zcr = librosa.feature.zero_crossing_rate(y=y, hop_length=hop_length)[0]
+            cent = librosa.feature.spectral_centroid(y=y, sr=sample_rate, hop_length=hop_length)[0]
+            rolloff = librosa.feature.spectral_rolloff(y=y, sr=sample_rate, hop_length=hop_length)[0]
 
-        rms_max = float(np.max(rms)) if len(rms) > 0 else 0.0
-        threshold = max(0.01, 0.05 * rms_max)
-        silence_ratio = float(np.mean(rms < threshold)) if len(rms) > 0 else 0.0
+            rms_max = float(np.max(rms)) if len(rms) > 0 else 0.0
+            threshold = max(0.01, 0.05 * rms_max)
+            silence_ratio = float(np.mean(rms < threshold)) if len(rms) > 0 else 0.0
 
-        return {
-            "duration_sec": round(duration, 3),
-            "sample_rate": int(sample_rate),
-            "rms_mean": round(float(np.mean(rms)), 4),
-            "rms_std": round(float(np.std(rms)), 4),
-            "zcr_mean": round(float(np.mean(zcr)), 4),
-            "spectral_centroid_mean": round(float(np.mean(cent)), 1),
-            "spectral_rolloff_mean": round(float(np.mean(rolloff)), 1),
-            "silence_ratio": round(silence_ratio, 4)
-        }
+            return {
+                "duration_sec": round(duration, 3),
+                "sample_rate": int(sample_rate),
+                "rms_mean": round(float(np.mean(rms)), 4),
+                "rms_std": round(float(np.std(rms)), 4),
+                "zcr_mean": round(float(np.mean(zcr)), 4),
+                "spectral_centroid_mean": round(float(np.mean(cent)), 1),
+                "spectral_rolloff_mean": round(float(np.mean(rolloff)), 1),
+                "silence_ratio": round(silence_ratio, 4)
+            }
     except Exception as e:
         logger.debug(f"Could not compute audio stats for '{audio_path}': {e}")
         return None

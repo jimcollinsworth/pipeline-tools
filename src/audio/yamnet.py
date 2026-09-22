@@ -9,6 +9,7 @@ Exposes declarative Pixeltable UDFs for table computed columns and prompt-driven
 import os
 import csv
 import logging
+import functools
 import urllib.request
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
@@ -16,6 +17,7 @@ import numpy as np
 
 import pixeltable as pxt
 from src.db.manager import DBManager
+from src.core.progress_tracker import RowProgressTracker
 
 logger = logging.getLogger("pipeline_tools.audio.yamnet")
 
@@ -100,10 +102,13 @@ def get_yamnet_session():
     return _SESSION
 
 
-def load_yamnet_waveform(audio_path: Optional[str]) -> Optional[np.ndarray]:
+def load_yamnet_waveform(
+    audio_path: Optional[str],
+    max_duration: Optional[float] = 60.0
+) -> Optional[np.ndarray]:
     """
     Load audio and format as a 1D float32 waveform at 16,000 Hz normalized to [-1.0, 1.0].
-    YAMNet strictly expects 16 kHz mono audio.
+    YAMNet strictly expects 16 kHz mono audio. Caps duration to max_duration (default 60s).
     """
     if not audio_path:
         return None
@@ -112,13 +117,13 @@ def load_yamnet_waveform(audio_path: Optional[str]) -> Optional[np.ndarray]:
     if not path_obj.exists() or not path_obj.is_file():
         return None
 
-    # Load audio at 16,000 Hz using librosa / PyAV fallback
+    # Load audio at 16,000 Hz using librosa / PyAV fallback with duration cap
     y = None
     target_sr = 16000
 
     try:
         from src.audio.spectrogram import load_audio_signal
-        res = load_audio_signal(audio_path, sr=target_sr)
+        res = load_audio_signal(audio_path, sr=target_sr, duration=max_duration)
         if res is not None:
             y, sr = res
     except Exception as e:
@@ -146,15 +151,18 @@ def load_yamnet_waveform(audio_path: Optional[str]) -> Optional[np.ndarray]:
     return y
 
 
+@functools.lru_cache(maxsize=128)
 def classify_audio_yamnet_core(
     audio_path: Optional[str],
     top_k: int = 5,
-    min_confidence: float = 0.05
+    min_confidence: float = 0.05,
+    duration: float = 60.0
 ) -> Optional[Dict[str, Any]]:
     """
     Execute YAMNet inference on an audio file and return structured prediction results.
+    Results are cached across top_k, min_confidence, and duration to eliminate redundant ONNX evaluations.
     """
-    y = load_yamnet_waveform(audio_path)
+    y = load_yamnet_waveform(audio_path, max_duration=duration)
     if y is None:
         return None
 
@@ -209,29 +217,36 @@ def classify_audio_yamnet_core(
         return None
 
 
-def get_yamnet_primary_category_core(audio_path: Optional[str]) -> Optional[str]:
-    """Return top single predicted sound category name."""
-    res = classify_audio_yamnet_core(audio_path, top_k=1, min_confidence=0.0)
+def get_yamnet_primary_category_core(
+    audio_path: Optional[str],
+    top_k: int = 5,
+    min_confidence: float = 0.05,
+    duration: float = 60.0
+) -> Optional[str]:
+    """Return top single predicted sound category name (hits single-pass LRU cache)."""
+    res = classify_audio_yamnet_core(audio_path, top_k=top_k, min_confidence=min_confidence, duration=duration)
     return res["primary_category"] if res else None
 
 
 def get_yamnet_sound_events_core(
     audio_path: Optional[str],
     top_k: int = 5,
-    min_confidence: float = 0.05
+    min_confidence: float = 0.05,
+    duration: float = 60.0
 ) -> Optional[str]:
-    """Return human-readable top-K sound events summary string."""
-    res = classify_audio_yamnet_core(audio_path, top_k=top_k, min_confidence=min_confidence)
+    """Return human-readable top-K sound events summary string (hits single-pass LRU cache)."""
+    res = classify_audio_yamnet_core(audio_path, top_k=top_k, min_confidence=min_confidence, duration=duration)
     return res["sound_events"] if res else None
 
 
 def get_yamnet_scores_core(
     audio_path: Optional[str],
     top_k: int = 5,
-    min_confidence: float = 0.05
+    min_confidence: float = 0.05,
+    duration: float = 60.0
 ) -> Optional[Dict[str, float]]:
-    """Return structured JSON dictionary of top-K sound event scores."""
-    res = classify_audio_yamnet_core(audio_path, top_k=top_k, min_confidence=min_confidence)
+    """Return structured JSON dictionary of top-K sound event scores (hits single-pass LRU cache)."""
+    res = classify_audio_yamnet_core(audio_path, top_k=top_k, min_confidence=min_confidence, duration=duration)
     return res["top_scores"] if res else None
 
 
@@ -239,29 +254,39 @@ def get_yamnet_scores_core(
 # Declarative Pixeltable UDFs
 # -------------------------------------------------------------------------
 @pxt.udf
-def yamnet_primary_category(audio: Optional[pxt.Audio]) -> Optional[pxt.String]:
+def yamnet_primary_category(
+    audio: Optional[pxt.Audio],
+    top_k: int = 5,
+    min_confidence: float = 0.05,
+    duration: float = 60.0
+) -> Optional[pxt.String]:
     """Declarative Pixeltable UDF: Extract top primary sound category via YAMNet."""
-    return get_yamnet_primary_category_core(audio)
+    RowProgressTracker.step(row_label=str(audio or ""))
+    return get_yamnet_primary_category_core(audio, top_k=top_k, min_confidence=min_confidence, duration=duration)
 
 
 @pxt.udf
 def yamnet_sound_events(
     audio: Optional[pxt.Audio],
     top_k: int = 5,
-    min_confidence: float = 0.05
+    min_confidence: float = 0.05,
+    duration: float = 60.0
 ) -> Optional[pxt.String]:
     """Declarative Pixeltable UDF: Extract top-K sound events summary string via YAMNet."""
-    return get_yamnet_sound_events_core(audio, top_k=top_k, min_confidence=min_confidence)
+    RowProgressTracker.step(row_label=str(audio or ""))
+    return get_yamnet_sound_events_core(audio, top_k=top_k, min_confidence=min_confidence, duration=duration)
 
 
 @pxt.udf
 def yamnet_scores(
     audio: Optional[pxt.Audio],
     top_k: int = 5,
-    min_confidence: float = 0.05
+    min_confidence: float = 0.05,
+    duration: float = 60.0
 ) -> Optional[pxt.Json]:
     """Declarative Pixeltable UDF: Extract top-K sound categories and confidence scores as JSON."""
-    return get_yamnet_scores_core(audio, top_k=top_k, min_confidence=min_confidence)
+    RowProgressTracker.step(row_label=str(audio or ""))
+    return get_yamnet_scores_core(audio, top_k=top_k, min_confidence=min_confidence, duration=duration)
 
 
 # -------------------------------------------------------------------------
@@ -271,11 +296,13 @@ def attach_yamnet_columns(
     domain: str,
     table_name: str,
     top_k: int = 5,
-    min_confidence: float = 0.05
+    min_confidence: float = 0.05,
+    duration: float = 60.0
 ) -> Dict[str, Any]:
     """
     Declaratively attach sound_category, sound_events, and sound_scores computed columns
     to a Pixeltable table using native computed columns (no imperative loops).
+    All 3 columns hit the single-pass LRU cache to execute ONNX inference only once per file.
     """
     full_table_path = DBManager.resolve_table_path(domain, table_name)
     try:
@@ -293,33 +320,42 @@ def attach_yamnet_columns(
         return {"status": "error", "message": f"Table '{full_table_path}' lacks an 'audio' or 'file_path' column."}
 
     columns_added = []
+    total_rows = tbl.count()
 
     # 1. sound_category: top single category (e.g. "Speech")
     if "sound_category" not in cols:
+        RowProgressTracker.start("YAMNet Sound Category", total_rows)
         tbl.add_computed_column(
-            sound_category=yamnet_primary_category(audio_col),
+            sound_category=yamnet_primary_category(
+                audio_col, top_k=top_k, min_confidence=min_confidence, duration=duration
+            ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("sound_category")
 
     # 2. sound_events: top-k human readable string (e.g. "Speech (87%), Music (62%)")
     if "sound_events" not in cols:
+        RowProgressTracker.start("YAMNet Sound Events", total_rows)
         tbl.add_computed_column(
             sound_events=yamnet_sound_events(
-                audio_col, top_k=top_k, min_confidence=min_confidence
+                audio_col, top_k=top_k, min_confidence=min_confidence, duration=duration
             ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("sound_events")
 
     # 3. sound_scores: structured top-k dictionary (JSON)
     if "sound_scores" not in cols:
+        RowProgressTracker.start("YAMNet Sound Scores", total_rows)
         tbl.add_computed_column(
             sound_scores=yamnet_scores(
-                audio_col, top_k=top_k, min_confidence=min_confidence
+                audio_col, top_k=top_k, min_confidence=min_confidence, duration=duration
             ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("sound_scores")
 
     return {

@@ -357,6 +357,41 @@ class PlaygroundController:
         progress_callback: Optional[Callable[[float, str], None]] = None
     ) -> Dict[str, Any]:
         """Apply tested prompt across table rows and save newly generated columns."""
+        from src.core.progress_tracker import RowProgressTracker
+        RowProgressTracker.set_callback(progress_callback)
+        try:
+            return PlaygroundController._commit_batch_flow_inner(
+                domain=domain,
+                table_name=table_name,
+                provider=provider,
+                model=model,
+                system_prompt=system_prompt,
+                prompt_template=prompt_template,
+                output_mode=output_mode,
+                target_column=target_column,
+                write_mode=write_mode,
+                limit_rows=limit_rows,
+                is_lightweight=is_lightweight,
+                progress_callback=progress_callback
+            )
+        finally:
+            RowProgressTracker.reset()
+
+    @staticmethod
+    def _commit_batch_flow_inner(
+        domain: str,
+        table_name: str,
+        provider: str,
+        model: str,
+        system_prompt: Optional[str] = None,
+        prompt_template: str = "",
+        output_mode: str = "⚡ Auto-Split JSON Keys into Columns",
+        target_column: str = "llm_summary",
+        write_mode: str = "replace",
+        limit_rows: int = 0,
+        is_lightweight: bool = True,
+        progress_callback: Optional[Callable[[float, str], None]] = None
+    ) -> Dict[str, Any]:
         if not domain or not table_name:
             return {
                 "status": "error",

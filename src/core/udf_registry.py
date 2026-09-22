@@ -393,6 +393,7 @@ def _eval_mel_spectrogram_sample(domain: str, table_name: str, sample_count: int
     n_fft = kwargs.get("n_fft", 2048)
     hop_length = kwargs.get("hop_length", 512)
     colormap = kwargs.get("colormap", "magma")
+    duration = float(kwargs.get("duration", 60.0))
 
     audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
 
@@ -406,7 +407,7 @@ def _eval_mel_spectrogram_sample(domain: str, table_name: str, sample_count: int
         img_html = "—"
 
         if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
-            img = render_mel_spectrogram_image_core(file_path, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
+            img = render_mel_spectrogram_image_core(file_path, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, colormap=colormap, duration=duration)
             if img is not None:
                 uri = DBManager.pil_to_base64_data_uri(img, size=(140, 60))
                 if uri:
@@ -452,7 +453,8 @@ UDFRegistry.register(
             "n_mels": {"type": int, "default": 128, "description": "Number of Mel frequency bins"},
             "n_fft": {"type": int, "default": 2048, "description": "Length of FFT window"},
             "hop_length": {"type": int, "default": 512, "description": "Number of samples between successive frames"},
-            "colormap": {"type": str, "default": "magma", "description": "Matplotlib colormap name"}
+            "colormap": {"type": str, "default": "magma", "description": "Matplotlib colormap name"},
+            "duration": {"type": float, "default": 60.0, "description": "Maximum audio duration in seconds to analyze (default 60.0, 0 for full track)"}
         },
         attach_fn=_attach_mel_spectrogram_batch,
         sample_eval_fn=_eval_mel_spectrogram_sample
@@ -488,6 +490,7 @@ def _eval_mfcc_sample(domain: str, table_name: str, sample_count: int = 2, **kwa
     n_fft = kwargs.get("n_fft", 2048)
     hop_length = kwargs.get("hop_length", 512)
     colormap = kwargs.get("colormap", "plasma")
+    duration = float(kwargs.get("duration", 60.0))
 
     audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
 
@@ -501,7 +504,7 @@ def _eval_mfcc_sample(domain: str, table_name: str, sample_count: int = 2, **kwa
         img_html = "—"
 
         if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
-            img = render_mfcc_image_core(file_path, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
+            img = render_mfcc_image_core(file_path, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, colormap=colormap, duration=duration)
             if img is not None:
                 uri = DBManager.pil_to_base64_data_uri(img, size=(140, 60))
                 if uri:
@@ -528,7 +531,7 @@ def _attach_mfcc_batch(domain: str, table_name: str, **kwargs) -> Dict[str, Any]
 UDFRegistry.register(
     UDFDefinition(
         name="mfcc",
-        description="Compute Mel-Frequency Cepstral Coefficients (MFCCs) for voice timbre and speaker recognition.",
+        description="Compute Mel-Frequency Cepstral Coefficients (MFCCs) and rendered preview image for audio timbre and speaker analysis.",
         aliases=[
             "mfcc",
             "mel frequency cepstral coefficients",
@@ -541,7 +544,8 @@ UDFRegistry.register(
             "n_mfcc": {"type": int, "default": 20, "description": "Number of MFCC coefficients"},
             "n_fft": {"type": int, "default": 2048, "description": "Length of FFT window"},
             "hop_length": {"type": int, "default": 512, "description": "Number of samples between successive frames"},
-            "colormap": {"type": str, "default": "plasma", "description": "Matplotlib colormap name"}
+            "colormap": {"type": str, "default": "plasma", "description": "Matplotlib colormap name"},
+            "duration": {"type": float, "default": 60.0, "description": "Maximum audio duration in seconds to analyze (default 60.0, 0 for full track)"}
         },
         attach_fn=_attach_mfcc_batch,
         sample_eval_fn=_eval_mfcc_sample
@@ -577,6 +581,7 @@ def _eval_chroma_sample(domain: str, table_name: str, sample_count: int = 2, **k
     n_fft = kwargs.get("n_fft", 2048)
     hop_length = kwargs.get("hop_length", 512)
     colormap = kwargs.get("colormap", "coolwarm")
+    duration = float(kwargs.get("duration", 60.0))
 
     audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
 
@@ -590,7 +595,7 @@ def _eval_chroma_sample(domain: str, table_name: str, sample_count: int = 2, **k
         img_html = "—"
 
         if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
-            img = render_chroma_image_core(file_path, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
+            img = render_chroma_image_core(file_path, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, colormap=colormap, duration=duration)
             if img is not None:
                 uri = DBManager.pil_to_base64_data_uri(img, size=(140, 60))
                 if uri:
@@ -631,7 +636,8 @@ UDFRegistry.register(
             "n_chroma": {"type": int, "default": 12, "description": "Number of chroma pitch classes"},
             "n_fft": {"type": int, "default": 2048, "description": "Length of FFT window"},
             "hop_length": {"type": int, "default": 512, "description": "Number of samples between successive frames"},
-            "colormap": {"type": str, "default": "coolwarm", "description": "Matplotlib colormap name"}
+            "colormap": {"type": str, "default": "coolwarm", "description": "Matplotlib colormap name"},
+            "duration": {"type": float, "default": 60.0, "description": "Maximum audio duration in seconds to analyze (default 60.0, 0 for full track)"}
         },
         attach_fn=_attach_chroma_batch,
         sample_eval_fn=_eval_chroma_sample
@@ -665,6 +671,7 @@ def _eval_audio_stats_sample(domain: str, table_name: str, sample_count: int = 2
 
     sr = kwargs.get("sr", 22050)
     hop_length = kwargs.get("hop_length", 512)
+    duration = float(kwargs.get("duration", 60.0))
 
     audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
 
@@ -682,7 +689,7 @@ def _eval_audio_stats_sample(domain: str, table_name: str, sample_count: int = 2
         sil_s = "—"
 
         if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
-            stats = compute_audio_stats_core(file_path, sr=sr, hop_length=hop_length)
+            stats = compute_audio_stats_core(file_path, sr=sr, hop_length=hop_length, duration=duration)
             if stats is not None:
                 dur_s = str(stats.get("duration_sec", "—"))
                 rms_s = str(stats.get("rms_mean", "—"))
@@ -723,7 +730,8 @@ UDFRegistry.register(
         ],
         parameters={
             "sr": {"type": int, "default": 22050, "description": "Sampling rate in Hz"},
-            "hop_length": {"type": int, "default": 512, "description": "Number of samples between successive frames"}
+            "hop_length": {"type": int, "default": 512, "description": "Number of samples between successive frames"},
+            "duration": {"type": float, "default": 60.0, "description": "Maximum audio duration in seconds to analyze (default 60.0, 0 for full track)"}
         },
         attach_fn=_attach_audio_stats_batch,
         sample_eval_fn=_eval_audio_stats_sample
@@ -756,6 +764,7 @@ def _eval_yamnet_sample(domain: str, table_name: str, sample_count: int = 2, **k
 
     top_k = kwargs.get("top_k", 5)
     min_confidence = kwargs.get("min_confidence", 0.05)
+    duration = float(kwargs.get("duration", 60.0))
 
     audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
 
@@ -770,7 +779,7 @@ def _eval_yamnet_sample(domain: str, table_name: str, sample_count: int = 2, **k
         events_s = "None (Non-audio)"
 
         if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
-            pred = classify_audio_yamnet_core(file_path, top_k=top_k, min_confidence=min_confidence)
+            pred = classify_audio_yamnet_core(file_path, top_k=top_k, min_confidence=min_confidence, duration=duration)
             if pred is not None:
                 primary_s = str(pred.get("primary_category", "Unknown"))
                 events_s = str(pred.get("sound_events", primary_s))
@@ -809,10 +818,10 @@ UDFRegistry.register(
         ],
         parameters={
             "top_k": {"type": int, "default": 5, "description": "Number of top sound categories to extract"},
-            "min_confidence": {"type": float, "default": 0.05, "description": "Minimum confidence threshold (0.0 to 1.0)"}
+            "min_confidence": {"type": float, "default": 0.05, "description": "Minimum confidence threshold (0.0 to 1.0)"},
+            "duration": {"type": float, "default": 60.0, "description": "Maximum audio duration in seconds to analyze (default 60.0, 0 for full track)"}
         },
         attach_fn=_attach_yamnet_batch,
         sample_eval_fn=_eval_yamnet_sample
     )
 )
-

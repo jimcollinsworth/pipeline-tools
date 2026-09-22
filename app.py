@@ -490,22 +490,25 @@ const initSlashIntellisense = () => {{
 
     const insertSkill = (skill) => {{
         if (!activeTextarea || queryStartIndex === -1) return;
-        const text = activeTextarea.value;
-        const cursorPos = activeTextarea.selectionStart;
+        const target = activeTextarea;
+        const text = target.value;
+        const cursorPos = target.selectionStart;
         const beforeSlash = text.substring(0, queryStartIndex);
         const afterCursor = text.substring(cursorPos);
         const cmd = skill.slash_command || `/${{skill.name}}`;
         const insertedText = `${{cmd}} `;
 
-        activeTextarea.value = beforeSlash + insertedText + afterCursor;
+        target.value = beforeSlash + insertedText + afterCursor;
         const newCursor = queryStartIndex + insertedText.length;
-        activeTextarea.setSelectionRange(newCursor, newCursor);
+        target.setSelectionRange(newCursor, newCursor);
 
         // Notify Gradio of state change
-        activeTextarea.dispatchEvent(new Event("input", {{ bubbles: true }}));
-        activeTextarea.dispatchEvent(new Event("change", {{ bubbles: true }}));
+        target.dispatchEvent(new Event("input", {{ bubbles: true }}));
+        target.dispatchEvent(new Event("change", {{ bubbles: true }}));
         hideMenu();
-        activeTextarea.focus();
+        if (target && typeof target.focus === "function") {{
+            target.focus();
+        }}
     }};
 
     const positionMenu = () => {{

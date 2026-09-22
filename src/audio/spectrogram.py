@@ -10,6 +10,7 @@ from audio records, generating:
 import os
 import logging
 import warnings
+import functools
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import numpy as np
@@ -20,11 +21,16 @@ import matplotlib.pyplot as plt
 import librosa
 import pixeltable as pxt
 from src.db.manager import DBManager
+from src.core.progress_tracker import RowProgressTracker
 
 logger = logging.getLogger("pipeline_tools.audio")
 
 
-def load_audio_pyav(audio_path: str, target_sr: int = 22050) -> Optional[np.ndarray]:
+def load_audio_pyav(
+    audio_path: str,
+    target_sr: int = 22050,
+    max_duration: Optional[float] = 60.0
+) -> Optional[np.ndarray]:
     """Decode audio using PyAV into a 1D float32 mono array at target_sr (supports .m4a, .aac, .mp3, etc.)."""
     try:
         import av
@@ -35,22 +41,42 @@ def load_audio_pyav(audio_path: str, target_sr: int = 22050) -> Optional[np.ndar
             return None
         resampler = av.AudioResampler(format="fltp", layout="mono", rate=target_sr)
         frames = []
+        total_samples = 0
+        max_samples = int(max_duration * target_sr) if max_duration and max_duration > 0 else None
+
         for packet in container.demux(stream):
             for frame in packet.decode():
                 for rf in resampler.resample(frame):
-                    frames.append(rf.to_ndarray().reshape(-1))
+                    arr = rf.to_ndarray().reshape(-1)
+                    frames.append(arr)
+                    total_samples += len(arr)
+                    if max_samples and total_samples >= max_samples:
+                        break
+                if max_samples and total_samples >= max_samples:
+                    break
+            if max_samples and total_samples >= max_samples:
+                break
+
         for rf in resampler.resample(None):
             frames.append(rf.to_ndarray().reshape(-1))
         container.close()
         if not frames:
             return None
-        return np.concatenate(frames).astype(np.float32)
+        full = np.concatenate(frames).astype(np.float32)
+        if max_samples and len(full) > max_samples:
+            full = full[:max_samples]
+        return full
     except Exception as e:
         logger.debug(f"PyAV audio decoding failed for '{audio_path}': {e}")
         return None
 
 
-def load_audio_signal(audio_path: Optional[str], sr: int = 22050) -> Optional[Tuple[np.ndarray, int]]:
+@functools.lru_cache(maxsize=64)
+def load_audio_signal(
+    audio_path: Optional[str],
+    sr: int = 22050,
+    duration: Optional[float] = 60.0
+) -> Optional[Tuple[np.ndarray, int]]:
     """Helper to load audio using librosa with PyAV fallback, returning (y, sr) or None."""
     if not audio_path or not isinstance(audio_path, (str, Path)):
         return None
@@ -60,13 +86,14 @@ def load_audio_signal(audio_path: Optional[str], sr: int = 22050) -> Optional[Tu
 
     y = None
     sample_rate = sr
+    dur = None if (duration is None or duration <= 0) else float(duration)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            y, sample_rate = librosa.load(str(p), sr=sr, mono=True)
+            y, sample_rate = librosa.load(str(p), sr=sr, duration=dur, mono=True)
     except Exception as e:
         logger.debug(f"librosa.load failed for '{audio_path}', attempting PyAV fallback: {e}")
-        y = load_audio_pyav(str(p), target_sr=sr)
+        y = load_audio_pyav(str(p), target_sr=sr, max_duration=dur)
         sample_rate = sr
 
     if y is None or len(y) == 0:
@@ -74,15 +101,18 @@ def load_audio_signal(audio_path: Optional[str], sr: int = 22050) -> Optional[Tu
     return y, sample_rate
 
 
+@functools.lru_cache(maxsize=64)
 def compute_mel_spectrogram_core(
     audio_path: Optional[str],
     sr: int = 22050,
     n_mels: int = 128,
     n_fft: int = 2048,
-    hop_length: int = 512
+    hop_length: int = 512,
+    duration: Optional[float] = 60.0
 ) -> Optional[np.ndarray]:
     """Pure Python core for computing dB-scaled Mel Spectrogram 2D matrix."""
-    res = load_audio_signal(audio_path, sr=sr)
+    RowProgressTracker.step(row_label=str(audio_path or ""))
+    res = load_audio_signal(audio_path, sr=sr, duration=duration)
     if res is None:
         return None
     y, sample_rate = res
@@ -166,10 +196,12 @@ def render_mel_spectrogram_image_core(
     n_mels: int = 128,
     n_fft: int = 2048,
     hop_length: int = 512,
-    colormap: str = "magma"
+    colormap: str = "magma",
+    duration: Optional[float] = 60.0
 ) -> Optional[Image.Image]:
     """Pure Python core for rendering Mel Spectrogram as a colormapped PIL Image."""
-    s_db = compute_mel_spectrogram_core(audio_path, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length)
+    RowProgressTracker.step(row_label=str(audio_path or ""))
+    s_db = compute_mel_spectrogram_core(audio_path, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, duration=duration)
     if s_db is None or s_db.size == 0:
         return None
     return render_spectrogram_array_to_image(s_db, colormap=colormap)
@@ -181,10 +213,11 @@ def compute_mel_spectrogram(
     sr: int = 22050,
     n_mels: int = 128,
     n_fft: int = 2048,
-    hop_length: int = 512
+    hop_length: int = 512,
+    duration: float = 60.0
 ) -> Optional[pxt.Array]:
     """Declarative Pixeltable UDF: Compute dB-scaled Mel Spectrogram 2D matrix."""
-    return compute_mel_spectrogram_core(audio, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length)
+    return compute_mel_spectrogram_core(audio, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, duration=duration)
 
 
 @pxt.udf
@@ -194,10 +227,11 @@ def render_mel_spectrogram_image(
     n_mels: int = 128,
     n_fft: int = 2048,
     hop_length: int = 512,
-    colormap: str = "magma"
+    colormap: str = "magma",
+    duration: float = 60.0
 ) -> Optional[pxt.Image]:
     """Declarative Pixeltable UDF: Render Mel Spectrogram as a colormapped PIL Image."""
-    return render_mel_spectrogram_image_core(audio, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
+    return render_mel_spectrogram_image_core(audio, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, colormap=colormap, duration=duration)
 
 
 def attach_spectrogram_columns(
@@ -207,7 +241,8 @@ def attach_spectrogram_columns(
     n_mels: int = 128,
     n_fft: int = 2048,
     hop_length: int = 512,
-    colormap: str = "magma"
+    colormap: str = "magma",
+    duration: float = 60.0
 ) -> Dict[str, Any]:
     """
     Declaratively attach mel_spectrogram and mel_spectrogram_img computed columns to a Pixeltable table.
@@ -230,25 +265,30 @@ def attach_spectrogram_columns(
         return {"status": "error", "message": f"Table '{full_table_path}' lacks an 'audio' or 'file_path' column."}
 
     columns_added = []
+    total_rows = tbl.count()
     
     # Add numerical array computed column
     if "mel_spectrogram" not in cols:
+        RowProgressTracker.start("Mel Spectrogram Array", total_rows)
         tbl.add_computed_column(
             mel_spectrogram=compute_mel_spectrogram(
-                audio_col, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length
+                audio_col, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, duration=duration
             ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("mel_spectrogram")
 
     # Add visual image computed column
     if "mel_spectrogram_img" not in cols:
+        RowProgressTracker.start("Mel Spectrogram Image", total_rows)
         tbl.add_computed_column(
             mel_spectrogram_img=render_mel_spectrogram_image(
-                audio_col, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, colormap=colormap
+                audio_col, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, colormap=colormap, duration=duration
             ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("mel_spectrogram_img")
 
     return {
@@ -260,17 +300,21 @@ def attach_spectrogram_columns(
 
 
 # -------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 # MFCC (Mel-Frequency Cepstral Coefficients)
 # -------------------------------------------------------------------------
+@functools.lru_cache(maxsize=64)
 def compute_mfcc_core(
     audio_path: Optional[str],
     sr: int = 22050,
     n_mfcc: int = 20,
     n_fft: int = 2048,
-    hop_length: int = 512
+    hop_length: int = 512,
+    duration: Optional[float] = 60.0
 ) -> Optional[np.ndarray]:
     """Pure Python core for computing Mel-Frequency Cepstral Coefficients (MFCCs)."""
-    res = load_audio_signal(audio_path, sr=sr)
+    RowProgressTracker.step(row_label=str(audio_path or ""))
+    res = load_audio_signal(audio_path, sr=sr, duration=duration)
     if res is None:
         return None
     y, sample_rate = res
@@ -300,10 +344,12 @@ def render_mfcc_image_core(
     n_mfcc: int = 20,
     n_fft: int = 2048,
     hop_length: int = 512,
-    colormap: str = "plasma"
+    colormap: str = "plasma",
+    duration: Optional[float] = 60.0
 ) -> Optional[Image.Image]:
     """Pure Python core for rendering MFCC as a colormapped PIL Image."""
-    mfcc = compute_mfcc_core(audio_path, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
+    RowProgressTracker.step(row_label=str(audio_path or ""))
+    mfcc = compute_mfcc_core(audio_path, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, duration=duration)
     if mfcc is None or mfcc.size == 0:
         return None
     return render_spectrogram_array_to_image(mfcc, colormap=colormap)
@@ -315,10 +361,11 @@ def compute_mfcc(
     sr: int = 22050,
     n_mfcc: int = 20,
     n_fft: int = 2048,
-    hop_length: int = 512
+    hop_length: int = 512,
+    duration: float = 60.0
 ) -> Optional[pxt.Array]:
     """Declarative Pixeltable UDF: Compute Mel-Frequency Cepstral Coefficients (MFCC) 2D matrix."""
-    return compute_mfcc_core(audio, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
+    return compute_mfcc_core(audio, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, duration=duration)
 
 
 @pxt.udf
@@ -328,10 +375,11 @@ def render_mfcc_image(
     n_mfcc: int = 20,
     n_fft: int = 2048,
     hop_length: int = 512,
-    colormap: str = "plasma"
+    colormap: str = "plasma",
+    duration: float = 60.0
 ) -> Optional[pxt.Image]:
     """Declarative Pixeltable UDF: Render MFCC as a colormapped PIL Image."""
-    return render_mfcc_image_core(audio, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
+    return render_mfcc_image_core(audio, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, colormap=colormap, duration=duration)
 
 
 def attach_mfcc_columns(
@@ -341,7 +389,8 @@ def attach_mfcc_columns(
     n_mfcc: int = 20,
     n_fft: int = 2048,
     hop_length: int = 512,
-    colormap: str = "plasma"
+    colormap: str = "plasma",
+    duration: float = 60.0
 ) -> Dict[str, Any]:
     """Declaratively attach mfcc and mfcc_img computed columns to a Pixeltable table."""
     full_table_path = DBManager.resolve_table_path(domain, table_name)
@@ -360,22 +409,27 @@ def attach_mfcc_columns(
         return {"status": "error", "message": f"Table '{full_table_path}' lacks an 'audio' or 'file_path' column."}
 
     columns_added = []
+    total_rows = tbl.count()
     if "mfcc" not in cols:
+        RowProgressTracker.start("MFCC Array", total_rows)
         tbl.add_computed_column(
             mfcc=compute_mfcc(
-                audio_col, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length
+                audio_col, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, duration=duration
             ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("mfcc")
 
     if "mfcc_img" not in cols:
+        RowProgressTracker.start("MFCC Image", total_rows)
         tbl.add_computed_column(
             mfcc_img=render_mfcc_image(
-                audio_col, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, colormap=colormap
+                audio_col, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, colormap=colormap, duration=duration
             ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("mfcc_img")
 
     return {
@@ -389,15 +443,18 @@ def attach_mfcc_columns(
 # -------------------------------------------------------------------------
 # Chroma STFT (Pitch Classes)
 # -------------------------------------------------------------------------
+@functools.lru_cache(maxsize=64)
 def compute_chroma_core(
     audio_path: Optional[str],
     sr: int = 22050,
     n_chroma: int = 12,
     n_fft: int = 2048,
-    hop_length: int = 512
+    hop_length: int = 512,
+    duration: Optional[float] = 60.0
 ) -> Optional[np.ndarray]:
     """Pure Python core for computing Chroma STFT (12 semitone pitch classes)."""
-    res = load_audio_signal(audio_path, sr=sr)
+    RowProgressTracker.step(row_label=str(audio_path or ""))
+    res = load_audio_signal(audio_path, sr=sr, duration=duration)
     if res is None:
         return None
     y, sample_rate = res
@@ -427,10 +484,12 @@ def render_chroma_image_core(
     n_chroma: int = 12,
     n_fft: int = 2048,
     hop_length: int = 512,
-    colormap: str = "coolwarm"
+    colormap: str = "coolwarm",
+    duration: Optional[float] = 60.0
 ) -> Optional[Image.Image]:
     """Pure Python core for rendering Chroma STFT as a colormapped PIL Image."""
-    chroma = compute_chroma_core(audio_path, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length)
+    RowProgressTracker.step(row_label=str(audio_path or ""))
+    chroma = compute_chroma_core(audio_path, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, duration=duration)
     if chroma is None or chroma.size == 0:
         return None
     return render_spectrogram_array_to_image(chroma, colormap=colormap)
@@ -442,10 +501,11 @@ def compute_chroma(
     sr: int = 22050,
     n_chroma: int = 12,
     n_fft: int = 2048,
-    hop_length: int = 512
+    hop_length: int = 512,
+    duration: float = 60.0
 ) -> Optional[pxt.Array]:
     """Declarative Pixeltable UDF: Compute Chroma STFT 2D matrix (pitch classes)."""
-    return compute_chroma_core(audio, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length)
+    return compute_chroma_core(audio, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, duration=duration)
 
 
 @pxt.udf
@@ -455,10 +515,11 @@ def render_chroma_image(
     n_chroma: int = 12,
     n_fft: int = 2048,
     hop_length: int = 512,
-    colormap: str = "coolwarm"
+    colormap: str = "coolwarm",
+    duration: float = 60.0
 ) -> Optional[pxt.Image]:
     """Declarative Pixeltable UDF: Render Chroma STFT as a colormapped PIL Image."""
-    return render_chroma_image_core(audio, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
+    return render_chroma_image_core(audio, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, colormap=colormap, duration=duration)
 
 
 def attach_chroma_columns(
@@ -468,7 +529,8 @@ def attach_chroma_columns(
     n_chroma: int = 12,
     n_fft: int = 2048,
     hop_length: int = 512,
-    colormap: str = "coolwarm"
+    colormap: str = "coolwarm",
+    duration: float = 60.0
 ) -> Dict[str, Any]:
     """Declaratively attach chroma and chroma_img computed columns to a Pixeltable table."""
     full_table_path = DBManager.resolve_table_path(domain, table_name)
@@ -487,22 +549,27 @@ def attach_chroma_columns(
         return {"status": "error", "message": f"Table '{full_table_path}' lacks an 'audio' or 'file_path' column."}
 
     columns_added = []
+    total_rows = tbl.count()
     if "chroma" not in cols:
+        RowProgressTracker.start("Chroma Matrix", total_rows)
         tbl.add_computed_column(
             chroma=compute_chroma(
-                audio_col, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length
+                audio_col, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, duration=duration
             ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("chroma")
 
     if "chroma_img" not in cols:
+        RowProgressTracker.start("Chroma Image", total_rows)
         tbl.add_computed_column(
             chroma_img=render_chroma_image(
-                audio_col, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, colormap=colormap
+                audio_col, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, colormap=colormap, duration=duration
             ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("chroma_img")
 
     return {
@@ -516,13 +583,16 @@ def attach_chroma_columns(
 # -------------------------------------------------------------------------
 # Audio & Noise Summary Statistics
 # -------------------------------------------------------------------------
+@functools.lru_cache(maxsize=64)
 def compute_audio_stats_core(
     audio_path: Optional[str],
     sr: int = 22050,
-    hop_length: int = 512
+    hop_length: int = 512,
+    duration: Optional[float] = 60.0
 ) -> Optional[Dict[str, Any]]:
     """Pure Python core for computing audio and noise summary metrics (RMS, ZCR, Centroid, Rolloff, Silence ratio)."""
-    res = load_audio_signal(audio_path, sr=sr)
+    RowProgressTracker.step(row_label=str(audio_path or ""))
+    res = load_audio_signal(audio_path, sr=sr, duration=duration)
     if res is None:
         return None
     y, sample_rate = res
@@ -533,7 +603,7 @@ def compute_audio_stats_core(
             warnings.simplefilter("ignore")
             if len(y) < 512:
                 y = np.pad(y, (0, 512 - len(y)))
-            duration = float(len(y) / sample_rate)
+            dur_calc = float(len(y) / sample_rate)
             rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
             zcr = librosa.feature.zero_crossing_rate(y=y, hop_length=hop_length)[0]
             cent = librosa.feature.spectral_centroid(y=y, sr=sample_rate, hop_length=hop_length)[0]
@@ -544,7 +614,7 @@ def compute_audio_stats_core(
             silence_ratio = float(np.mean(rms < threshold)) if len(rms) > 0 else 0.0
 
             return {
-                "duration_sec": round(duration, 3),
+                "duration_sec": round(dur_calc, 3),
                 "sample_rate": int(sample_rate),
                 "rms_mean": round(float(np.mean(rms)), 4),
                 "rms_std": round(float(np.std(rms)), 4),
@@ -562,17 +632,19 @@ def compute_audio_stats_core(
 def compute_audio_stats(
     audio: Optional[pxt.Audio],
     sr: int = 22050,
-    hop_length: int = 512
+    hop_length: int = 512,
+    duration: float = 60.0
 ) -> Optional[pxt.Json]:
     """Declarative Pixeltable UDF: Compute audio and noise summary statistics dictionary."""
-    return compute_audio_stats_core(audio, sr=sr, hop_length=hop_length)
+    return compute_audio_stats_core(audio, sr=sr, hop_length=hop_length, duration=duration)
 
 
 def attach_audio_stats_columns(
     domain: str,
     table_name: str,
     sr: int = 22050,
-    hop_length: int = 512
+    hop_length: int = 512,
+    duration: float = 60.0
 ) -> Dict[str, Any]:
     """Declaratively attach audio_stats computed column to a Pixeltable table."""
     full_table_path = DBManager.resolve_table_path(domain, table_name)
@@ -591,13 +663,16 @@ def attach_audio_stats_columns(
         return {"status": "error", "message": f"Table '{full_table_path}' lacks an 'audio' or 'file_path' column."}
 
     columns_added = []
+    total_rows = tbl.count()
     if "audio_stats" not in cols:
+        RowProgressTracker.start("Audio Stats", total_rows)
         tbl.add_computed_column(
             audio_stats=compute_audio_stats(
-                audio_col, sr=sr, hop_length=hop_length
+                audio_col, sr=sr, hop_length=hop_length, duration=duration
             ),
             if_exists="ignore"
         )
+        RowProgressTracker.finish()
         columns_added.append("audio_stats")
 
     return {

@@ -38,6 +38,7 @@ except ImportError:
     PIXELTABLE_AVAILABLE = False
 
 from src.db.manager import DBManager
+from src.core.progress_tracker import RowProgressTracker
 
 
 def extract_json_payload(response_text: str) -> Optional[Dict[str, Any]]:
@@ -146,6 +147,7 @@ def format_prompt(template: str, row: Dict[str, Any], context_fragment: str = ""
 if PIXELTABLE_AVAILABLE and pxt is not None:
     @pxt.udf
     def pxt_generate_text(file_name: Optional[str], content: Optional[str], metadata: Optional[dict], template: str, system_prompt: str, provider: str, model: str) -> str:
+        RowProgressTracker.step(row_label=str(file_name or ""))
         row_dict = {"file_name": file_name or "", "content": content or "", "metadata": metadata or {}}
         prompt = format_prompt(template, row_dict)
         res = LLMService.generate(provider=provider, model=model, prompt=prompt, system=system_prompt, json_mode=False)
@@ -153,6 +155,7 @@ if PIXELTABLE_AVAILABLE and pxt is not None:
 
     @pxt.udf
     def pxt_generate_append(existing_text: Optional[str], file_name: Optional[str], content: Optional[str], metadata: Optional[dict], template: str, system_prompt: str, provider: str, model: str) -> str:
+        RowProgressTracker.step(row_label=str(file_name or ""))
         row_dict = {"file_name": file_name or "", "content": content or "", "metadata": metadata or {}}
         prompt = format_prompt(template, row_dict)
         new_res = str(LLMService.generate(provider=provider, model=model, prompt=prompt, system=system_prompt, json_mode=False) or "")
@@ -162,6 +165,7 @@ if PIXELTABLE_AVAILABLE and pxt is not None:
 
     @pxt.udf
     def pxt_generate_json(file_name: Optional[str], content: Optional[str], metadata: Optional[dict], template: str, system_prompt: str, provider: str, model: str) -> dict:
+        RowProgressTracker.step(row_label=str(file_name or ""))
         row_dict = {"file_name": file_name or "", "content": content or "", "metadata": metadata or {}}
         prompt = format_prompt(template, row_dict)
         res = LLMService.generate(provider=provider, model=model, prompt=prompt, system=system_prompt, json_mode=True)
@@ -284,6 +288,7 @@ class PromptExecutor:
                 progress_callback(1, 3, f"Computing declarative JSON column '{primary_col}' via [{provider}] '{model}'...")
 
             # Add declarative computed column via @pxt.udf
+            RowProgressTracker.start(f"LLM [{provider}] {model}", total_rows, callback=progress_callback)
             table.add_computed_column(**{
                 primary_col: pxt_generate_json(
                     file_name=table.file_name,
@@ -295,6 +300,7 @@ class PromptExecutor:
                     model=model
                 )
             })
+            RowProgressTracker.finish()
 
             if progress_callback:
                 progress_callback(2, 3, f"Projecting structured JSON fields into typed Pixeltable columns...")
@@ -376,6 +382,7 @@ class PromptExecutor:
                 temp_col = f"{safe_col}_appended"
                 if temp_col in existing_cols:
                     table.drop_column(temp_col)
+                RowProgressTracker.start(f"LLM [{provider}] {model}", total_rows, callback=progress_callback)
                 table.add_computed_column(**{
                     temp_col: pxt_generate_append(
                         existing_text=table[safe_col],
@@ -388,12 +395,14 @@ class PromptExecutor:
                         model=model
                     )
                 })
+                RowProgressTracker.finish()
                 table.drop_column(safe_col)
                 table.add_computed_column(**{safe_col: table[temp_col]})
                 table.drop_column(temp_col)
             else:
                 if safe_col in existing_cols:
                     table.drop_column(safe_col)
+                RowProgressTracker.start(f"LLM [{provider}] {model}", total_rows, callback=progress_callback)
                 table.add_computed_column(**{
                     safe_col: pxt_generate_text(
                         file_name=table.file_name,
@@ -405,6 +414,7 @@ class PromptExecutor:
                         model=model
                     )
                 })
+                RowProgressTracker.finish()
 
             updated_count = total_rows
 

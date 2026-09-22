@@ -384,12 +384,22 @@ class DBManager:
                 name = str(t)
                 if "/" in name:
                     name = name.split("/")[-1]
-                elif "." in name:
-                    name = name.split(".")[-1]
                 clean_names.append(name)
             return clean_names if clean_names else []
         except Exception:
             return []
+
+    @classmethod
+    def get_table_row_count(cls, dir_name: str, table_name: str) -> int:
+        """Return total row count for a table, or 0 if unavailable."""
+        if not PIXELTABLE_AVAILABLE:
+            return 0
+        try:
+            full_path = cls.resolve_table_path(dir_name, table_name)
+            table = pxt.get_table(full_path)
+            return table.count()
+        except Exception:
+            return 0
 
     @staticmethod
     def resolve_table_path(dir_name: str, table_name: str) -> str:

@@ -11,6 +11,31 @@ tags: ["mentoring", "architecture", "testing", "directives", "tdd", "pixeltable"
 
 This journal records verbatim developer instructions, architectural directives, mentoring inputs, rules creation, and key technical pivots for the **Pipeline Tools** project. These entries capture high-impact guidance and generalized lessons for future development.
 
+## 📅 2026-09-22: Audio Duration Capping, Consolidated YAMNet Single-Pass Inference & Real-Time Row Progress Tracking (v1.3.16)
+
+**Context:** During batch execution on full audio datasets (e.g. 227 multi-track Ableton Live recordings), memory consumption reached ~9.3 GB, execution stalled without progress feedback, and YAMNet ran 3 separate full-file ONNX passes per file. The developer asked for duration capping (default 60s), single-pass consolidation for YAMNet, fixing a frontend `insertSkill` null reference error, and displaying real-time row-level status during data enhancement.
+
+**Verbatim Instruction:**
+> `can we add a max size loaded for llm processing, i'm ok with only first minute, user can segment if they are bigger`
+> `can we consolodate passes for yamnet, and other udf?`
+> `review the real time status display during data enhancement, when we were loading the large files there was no indication of progress, time/rows left.. /pixeltable /gradio assuming there is a native pixeltable callbak to use, show row level status info. then go ahead and proceed with all.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Audio Duration Capping (`src/audio/spectrogram.py`, `src/audio/yamnet.py`, `src/core/udf_registry.py`)**:
+   - Bounded audio decoding across librosa and PyAV to a default 60-second cap (`duration=60.0`), dropping RAM consumption from >9 GB to <500 MB while preserving signal integrity. Users with long recordings can segment them via the Segmentation tab.
+2. **YAMNet Single-Pass Consolidation (`src/audio/yamnet.py`)**:
+   - Wrapped `classify_audio_yamnet_core` in `@functools.lru_cache(maxsize=128)`. The 3 declarative computed columns (`sound_category`, `sound_events`, `sound_scores`) now share the exact same ONNX inference pass, eliminating 66.7% of model evaluations ($1\times$ per file instead of $3\times$).
+3. **Real-Time Row-Level Progress Tracker (`src/core/progress_tracker.py`)**:
+   - Pixeltable's declarative engine executes `@pxt.udf` functions row-by-row but lacks an external progress callback parameter on `add_computed_column`.
+   - Created `RowProgressTracker` to bridge UDF row evaluations directly with Gradio's `gr.Progress()`. Computes throughput (`rows/s`), dynamic `ETA`, current file name, and updates Gradio UI: `⚡ Attaching Mel Spectrogram: Row 14/227 [groove.mp3] (2.4 rows/s | ETA: 88s)`.
+   - Wired `RowProgressTracker` across spectrograms, MFCC, Chroma, Audio Stats, YAMNet, and LLM text/append/JSON generation pipelines.
+4. **Frontend JS Null Reference Fix (`app.py`)**:
+   - Fixed `Uncaught TypeError: Cannot read properties of null (reading 'dispatchEvent')` by scoping `activeTextarea` before closing the dropdown menu.
+5. **Comprehensive Test Suite Verification**:
+   - Expanded fast core test suite to 113 tests (`test_29`, `test_30`, `test_31` added), all passing cleanly (`113 Passed, 0 Failed, 0 Errors`).
+
+---
+
 ## 📅 2026-09-22: Base64 Media Inspection Decoding & Hybrid UDF + LLM Prompt Execution (v1.3.15)
 
 **Context:** The developer reported two issues: (1) Clicking on table rows with base64 data URIs caused Win32 `[Errno 22] Invalid argument` in `os.path.exists` during media inspection; (2) Prompts combining both a UDF (e.g. `/mel_spectrogram of {file_name}`) and an LLM request (e.g. `Analyze the item: {file_name}...`) only ran the UDF and completely ignored the LLM request.

@@ -801,6 +801,88 @@ class TestAudioMelSpectrogram(unittest.TestCase):
                 f"Row {r_idx} length ({len(row)}) does not match headers length ({len(headers)})"
             )
 
+    def test_29_row_progress_tracker_lifecycle(self):
+        """[Audio] Verify RowProgressTracker lifecycle, rate calculation, ETA, and callback bridge."""
+        from src.core.progress_tracker import RowProgressTracker
+
+        progress_events = []
+
+        def tracker_cb(pct: float, msg: str):
+            progress_events.append((pct, msg))
+
+        RowProgressTracker.reset()
+        RowProgressTracker.set_callback(tracker_cb)
+        RowProgressTracker.start("Mel Spectrogram", total_rows=10)
+
+        self.assertEqual(len(progress_events), 1)
+        self.assertEqual(progress_events[0][0], 0.0)
+        self.assertIn("Preparing 0/10 rows", progress_events[0][1])
+
+        # Step 1
+        RowProgressTracker.step("sample_track.wav")
+        self.assertEqual(len(progress_events), 2)
+        pct, msg = progress_events[1]
+        self.assertAlmostEqual(pct, 0.1)
+        self.assertIn("Row 1/10", msg)
+        self.assertIn("[sample_track.wav]", msg)
+        self.assertIn("rows/s", msg)
+        self.assertIn("ETA:", msg)
+
+        # Finish
+        RowProgressTracker.finish()
+        self.assertEqual(len(progress_events), 3)
+        self.assertEqual(progress_events[-1][0], 1.0)
+        self.assertIn("Completed 1 rows", progress_events[-1][1])
+
+        # Verify callback persists across sequential starts until reset
+        RowProgressTracker.start("Next Op", total_rows=5)
+        self.assertEqual(len(progress_events), 4)
+        self.assertIn("Next Op: Preparing 0/5 rows", progress_events[-1][1])
+
+        RowProgressTracker.reset()
+        RowProgressTracker.step("track.mp3")
+        # No new event because callback was reset
+        self.assertEqual(len(progress_events), 4)
+
+    def test_30_audio_duration_cap_and_lru_cache(self):
+        """[Audio] Verify audio duration capping bounds waveform length and caching works."""
+        from src.audio.spectrogram import load_audio_signal, compute_mel_spectrogram_core
+
+        # Load with 1.0s duration cap
+        res_1s = load_audio_signal(str(self.audio_file), sr=22050, duration=1.0)
+        self.assertIsNotNone(res_1s)
+        y_1s, sr_1s = res_1s
+        self.assertLessEqual(len(y_1s), 22050)
+
+        # Load with 2.0s duration cap
+        res_2s = load_audio_signal(str(self.audio_file), sr=22050, duration=2.0)
+        self.assertIsNotNone(res_2s)
+        y_2s, sr_2s = res_2s
+        self.assertLessEqual(len(y_2s), 44100)
+
+        # Verify LRU cache on compute_mel_spectrogram_core
+        compute_mel_spectrogram_core.cache_clear()
+        mel1 = compute_mel_spectrogram_core(str(self.audio_file), duration=1.0)
+        mel2 = compute_mel_spectrogram_core(str(self.audio_file), duration=1.0)
+        self.assertIsNotNone(mel1)
+        self.assertIsNotNone(mel2)
+        info = compute_mel_spectrogram_core.cache_info()
+        self.assertGreaterEqual(info.hits, 1)
+
+    def test_31_yamnet_single_pass_caching(self):
+        """[Audio] Verify YAMNet single-pass LRU cache eliminates duplicate ONNX inference passes."""
+        from src.audio.yamnet import classify_audio_yamnet_core
+
+        classify_audio_yamnet_core.cache_clear()
+        res1 = classify_audio_yamnet_core(str(self.audio_file), duration=1.0)
+        res2 = classify_audio_yamnet_core(str(self.audio_file), duration=1.0)
+        self.assertIsNotNone(res1)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res1["primary_category"], res2["primary_category"])
+
+        info = classify_audio_yamnet_core.cache_info()
+        self.assertGreaterEqual(info.hits, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

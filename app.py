@@ -11,9 +11,11 @@ import atexit
 from pathlib import Path
 import json
 import gradio as gr
+from src.core.config import get_settings
 from src.core.skills import SkillsRegistry
 from src.ui.settings_tab import render_settings_tab
 from src.ui.ingest_tab import render_ingest_tab
+from src.ui.segmentation_tab import create_segmentation_tab, render_segmentation_tab
 from src.ui.playground_tab import render_playground_tab
 from src.ui.context_tab import render_context_tab
 from src.ui.tables_tab import render_tables_tab
@@ -552,33 +554,54 @@ def create_app():
             """
             <div class="app-header">
                 <h1>PIPELINE TOOLS v1.3 // Multimodal Workbench</h1>
-                <p>Declarative Ingestion (Pixeltable) &bull; Data Enhancement &bull; Context Knowledge &bull; View & Export</p>
+                <p>Declarative Ingestion (Pixeltable) &bull; Segmentation &bull; Data Enhancement &bull; Context Knowledge &bull; View & Export</p>
             </div>
             """
         )
         
         with gr.Tabs():
             with gr.Tab("Ingestion & Scanner") as ingest_tab:
-                print("  [1/5] Initializing Ingestion & Scanner tab...", flush=True)
+                print("  [1/6] Initializing Ingestion & Scanner tab...", flush=True)
                 render_ingest_tab(tab=ingest_tab)
+
+            with gr.Tab("Segmentation & Chunking") as seg_tab:
+                print("  [2/6] Initializing Segmentation & Chunking tab...", flush=True)
+                seg_comps = create_segmentation_tab(settings=get_settings(), tab=seg_tab)
                 
             with gr.Tab("Data Enhancement") as playground_tab:
-                print("  [2/5] Initializing Data Enhancement tab (discovering models & tables)...", flush=True)
-                render_playground_tab(tab=playground_tab)
+                print("  [3/6] Initializing Data Enhancement tab (discovering models & tables)...", flush=True)
+                playground_comps = render_playground_tab(tab=playground_tab)
 
             with gr.Tab("Context View") as context_tab:
-                print("  [3/5] Initializing Context View tab (governance & knowledge register)...", flush=True)
+                print("  [4/6] Initializing Context View tab (governance & knowledge register)...", flush=True)
                 render_context_tab(tab=context_tab)
                 
             with gr.Tab("View & Export") as tables_tab:
-                print("  [4/5] Initializing View & Export tab...", flush=True)
-                render_tables_tab(tab=tables_tab)
+                print("  [5/6] Initializing View & Export tab...", flush=True)
+                tables_comps = render_tables_tab(tab=tables_tab)
                 
             with gr.Tab("Settings & Models") as settings_tab:
-                print("  [5/5] Initializing Settings & Models tab...", flush=True)
+                print("  [6/6] Initializing Settings & Models tab...", flush=True)
                 render_settings_tab(tab=settings_tab)
 
-    print("  ✅ All 5 workbench tabs and database connections initialized!", flush=True)
+        # Wire event listeners so newly created views update the table dropdown choices in Data Enhancement and View & Export
+        if seg_comps and playground_comps and tables_comps:
+            def sync_new_view_to_other_tabs(domain, view_name):
+                from src.db.manager import DBManager
+                tables = DBManager.list_tables(domain)
+                target_val = view_name if view_name in tables else (tables[0] if tables else "")
+                return (
+                    gr.update(choices=tables, value=target_val),
+                    gr.update(choices=tables, value=target_val)
+                )
+
+            seg_comps["create_view_btn"].click(
+                fn=sync_new_view_to_other_tabs,
+                inputs=[seg_comps["domain_dropdown"], seg_comps["target_view_input"]],
+                outputs=[playground_comps["table_dropdown"], tables_comps["table_dropdown"]]
+            )
+
+    print("  ✅ All 6 workbench tabs and database connections initialized!", flush=True)
     return demo
 demo = None
 

@@ -13,6 +13,36 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
+## 📅 2026-09-21: Multimodal File Segmentation & Chunking Tab (v1.3.6)
+
+**Context:** The developer directed adding file segmentation into a dedicated tab positioned before Data Enhancement to split individual PDF/text, audio, or video files into multiple sub-rows in a new Pixeltable view (pages, paragraphs, sentences, audio time slices, video frames), controlled via UDFs, prompt-based slash commands, and quick-apply presets using native Pixeltable segmenters first.
+
+**Verbatim Instruction:**
+> `before i forget, we need to add the segmentation of files, this is probably another tab, before data enhancement. With the individual pdf/text, audio or video file, we want to segment them into multiple rows in a new table, could be pages, paragraphs, sentences. audio files would be segments by time or by some recognizer/generator, videos would be split into images every few seconds, or on transitions. too many options to start with, need easy first. Want UDFs and prompt based definitions like we did for mel spectrogram and other audio functions, except to control segmentation. use native pixeltable segmenters first`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Native Pixeltable Views (`pxt.create_view`) Over Data Duplication**:
+   - Rather than creating disconnected standalone tables and duplicating binary data, segmented datasets are created as native Pixeltable views (`pxt.create_view(view_path, source_table, iterator=...)`).
+   - Zero duplicate disk/RAM storage; views maintain automatic lineage back to parent records (`pos`, `page`, `segment_start`); and newly ingested files in parent tables automatically propagate to the segmented view.
+2. **Easy-First Segmenter Suite (`src/core/segmenter_registry.py`)**:
+   - Registered 5 core segmenters with typed parameter schemas and aliases:
+     - `split_pages` (`/split_pages`): Pixeltable native `document_splitter(t.doc, separators='page')`.
+     - `split_paragraphs` (`/split_paragraphs`): `paragraph_splitter_udf(t.content)` and `document_splitter(t.doc, separators='paragraph')`.
+     - `split_sentences` (`/split_sentences`): Native `string_splitter(t.content, separators='sentence')` with fast regex fallback.
+     - `split_audio` (`/split_audio duration=10.0`): Pixeltable native `audio_splitter(t.audio, duration=10.0)`.
+     - `extract_frames` (`/extract_frames fps=1.0`): Pixeltable native `frame_iterator(t.video, fps=1.0)`.
+3. **Decoupled Controller (`src/controllers/segmentation_controller.py`)**:
+   - Pure, testable controller handling domain table discovery, intelligent view name suggestions (`{source_table}_{segmenter}`), dry-run preview execution, and view creation.
+4. **Dedicated Workbench Tab (`src/ui/segmentation_tab.py` & `app.py`)**:
+   - Mounted as Tab 2 between *Ingestion & Scanner* and *Data Enhancement*.
+   - Includes quick preset buttons (`📄 Split Pages`, `📝 Split Paragraphs`, `🔤 Split Sentences`, `🎙️ Audio Segments (10s)`, `🎬 Video Frames (1 fps)`), slash command input, expandable in-app documentation accordion, sample rows slider, dry-run preview DataFrame, and 1-click view creation button.
+   - Wired cross-tab event listeners on view creation to dynamically update table dropdown choices and selection in Data Enhancement and View & Export.
+5. **Comprehensive Verification**:
+   - Created `tests/test_segmentation.py` with 15 test cases covering registry discovery, slash command parameter parsing, natural language triggers, markdown help generation, controller view name suggestion, dry-run preview, view creation for text, paragraphs, audio, real PDF documents (`split_pages`), real MP4 video (`extract_frames`), invalid identifier rejection, and missing-column error handling.
+   - All 96 tests in the core suite pass cleanly (`96 Passed, 0 Failed, 0 Errors`).
+
+---
+
 ## 📅 2026-09-21: Expanded Audio/Voice/Noise DSP Suite (MFCC, Chroma, Audio Stats) & In-App UDF Registry Help (v1.3.5)
 
 **Context:** The developer directed expanding the audio analysis suite with useful Librosa functions for voice, timbre, and noise analysis, integrating registry documentation in the app and docs, adding sample prompt presets, and providing comprehensive in-app help.

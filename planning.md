@@ -107,6 +107,17 @@ flowchart TD
   - Implemented `UDFRegistry` (`src/core/udf_registry.py`) providing prompt-driven slash command execution (`/mfcc n_mfcc=20`, `/chroma n_chroma=12`, `/audio_stats`, `/mel_spectrogram`) and natural language triggers with automatic parameter parsing, sample testing, and declarative batch computed column attachment.
   - Added expandable in-app UDF documentation accordion and quick-apply preset buttons in Data Enhancement tab (`src/ui/playground_tab.py`).
   - Verified with 20 dedicated end-to-end TDD test cases (`tests/test_audio_spectrogram.py`) within the 78-test clean suite.
+- [x] **Multimodal File Segmentation & Chunking Tab (v1.3.6)**
+  - Implemented dedicated **Segmentation & Chunking** tab mounted between *Ingestion & Scanner* and *Data Enhancement*.
+  - Built `SegmenterRegistry` (`src/core/segmenter_registry.py`) and `SegmentationController` (`src/controllers/segmentation_controller.py`) with 5 core segmenters:
+    - `split_pages` (`/split_pages`): Pixeltable native `document_splitter(t.doc, separators='page')`.
+    - `split_paragraphs` (`/split_paragraphs`): `paragraph_splitter_udf(t.content)` and `document_splitter(t.doc, separators='paragraph')`.
+    - `split_sentences` (`/split_sentences`): Native `string_splitter(t.content, separators='sentence')` with fast regex fallback.
+    - `split_audio` (`/split_audio duration=10.0`): Pixeltable native `audio_splitter(t.audio)`.
+    - `extract_frames` (`/extract_frames fps=1.0`): Pixeltable native `frame_iterator(t.video)`.
+  - Native Pixeltable views created via `pxt.create_view` ensure zero data duplication, full back-lineage to parent records, and automatic chunking upon new ingestions.
+  - Interactive dry-run preview DataFrame and quick preset buttons (`📄 Split Pages`, `📝 Split Paragraphs`, `🔤 Split Sentences`, `🎙️ Audio Segments`, `🎬 Video Frames`).
+  - Verified with 15 dedicated test cases (`tests/test_segmentation.py`) covering all modalities (PDF, text, audio, video) within the 96-test clean suite (`96 Passed, 0 Failed, 0 Errors`).
 
 ### Phase 4: Multimodal Vision & Entity Classification Engines (Planned)
 - [ ] **Hugging Face & YOLO Vision Classification Engines**

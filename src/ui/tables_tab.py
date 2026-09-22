@@ -645,3 +645,9 @@ def render_tables_tab(tab=None):
             inputs=[domain_dropdown, table_dropdown],
             outputs=[domain_dropdown, table_dropdown, domain_prompt_info]
         )
+
+    return {
+        "domain_dropdown": domain_dropdown,
+        "table_dropdown": table_dropdown,
+        "data_view_table": data_view_table,
+    }

@@ -224,3 +224,4 @@ config.json
 exports/
 screenshots/
 .commit_msg
+tests/fixtures/

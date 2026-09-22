@@ -23,6 +23,16 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
   - **Primary Text Column Selection**: Auto-detects primary narrative columns (`text`, `description`, `content`, `body`, `summary`) with fallback to formatted key-value summaries.
   - **Direct CSV Placeholder Resolution**: Prompt templates on the Data Enhancement tab support direct `{column}` and `{metadata.column}` placeholders for any original CSV column.
   - Intelligent filterable type-ahead dropdowns for directories, single files, domains, and tables with automatic discovery.
+- **Multimodal Segmentation & Chunking (Segmentation & Chunking Tab)**:
+  - **Native Pixeltable Views (`pxt.create_view`)**: Declaratively split parent assets into granular sub-row views with zero duplicate media, automatic parent lineage (`pos`, `page`, `segment_start`), and automatic incremental chunking upon new ingestions.
+  - **Easy-First Segmenter Suite**:
+    - **`split_pages` (`/split_pages`)**: Split PDFs into one row per page with page numbers and text using Pixeltable's native `document_splitter(t.doc, separators='page')`.
+    - **`split_paragraphs` (`/split_paragraphs`)**: Split text content or documents into one row per paragraph.
+    - **`split_sentences` (`/split_sentences`)**: Split text into one row per sentence via native `string_splitter` (or fast regex iterator).
+    - **`split_audio` (`/split_audio duration=10.0`)**: Split audio files into temporal slices with start/end timestamps via native `audio_splitter(t.audio)`.
+    - **`extract_frames` (`/extract_frames fps=1.0`)**: Extract video frames at a fixed frame rate or keyframe intervals via native `frame_iterator(t.video)`.
+  - **Interactive Dry-Run Preview**: Preview sub-row chunks from sample rows in a live DataFrame before committing views to the database.
+  - **Prompt & Slash Command Driven (`SegmenterRegistry`)**: Control segmenters via slash commands or quick preset buttons (`📄 Split Pages`, `📝 Split Paragraphs`, `🔤 Split Sentences`, `🎙️ Audio Segments`, `🎬 Video Frames`).
 - **Sample-First Prompt Playground (Data Enhancement)**:
   - Dry-run and iterate on system/user prompts with `{column}` placeholders across 1–N sample rows before running full-scale batch jobs.
   - **⚡ JSON Auto-Split Engine**: Extract structured JSON payloads from model output and dynamically create native Pixeltable schema columns (`pxt.String`, `pxt.Int`, `pxt.Float`, `pxt.Json`, `pxt.Bool`) in one pass.

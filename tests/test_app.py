@@ -621,9 +621,10 @@ class TestPipelineTools(unittest.TestCase):
             self.assertEqual(res.get("total_rows"), 0)
 
     def test_ui_components_construction(self):
-        """[UI] Verify all UI tabs (Ingest, Settings, Playground, Tables, Context) construct cleanly within Gradio Blocks."""
+        """[UI] Verify all UI tabs (Ingest, Segmentation, Settings, Playground, Tables, Context) construct cleanly within Gradio Blocks."""
         import gradio as gr
         from src.ui.ingest_tab import render_ingest_tab
+        from src.ui.segmentation_tab import create_segmentation_tab
         from src.ui.settings_tab import render_settings_tab
         from src.ui.playground_tab import render_playground_tab
         from src.ui.context_tab import render_context_tab
@@ -632,6 +633,8 @@ class TestPipelineTools(unittest.TestCase):
         with gr.Blocks() as demo:
             with gr.TabItem("📂 Ingest"):
                 render_ingest_tab()
+            with gr.TabItem("✂️ Segmentation"):
+                create_segmentation_tab()
             with gr.TabItem("🧪 Data Enhancement"):
                 render_playground_tab()
             with gr.TabItem("🧠 Context View"):
@@ -1052,6 +1055,11 @@ def run_tests(include_e2e=None):
     try:
         from tests.test_audio_spectrogram import TestAudioMelSpectrogram
         suite.addTests(loader.loadTestsFromTestCase(TestAudioMelSpectrogram))
+    except Exception:
+        pass
+    try:
+        from tests.test_segmentation import TestSegmentation
+        suite.addTests(loader.loadTestsFromTestCase(TestSegmentation))
     except Exception:
         pass
 

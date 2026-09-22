@@ -631,3 +631,12 @@ def render_playground_tab(tab=None):
             inputs=[domain_dropdown, table_dropdown, preview_mode_toggle, sample_count_slider],
             outputs=[domain_dropdown, table_dropdown, domain_prompt_banner, input_table_header, input_table, available_columns_info]
         )
+
+    return {
+        "domain_dropdown": domain_dropdown,
+        "table_dropdown": table_dropdown,
+        "provider_dropdown": provider_dropdown,
+        "model_dropdown": model_dropdown,
+        "input_table": input_table,
+        "output_table": output_table,
+    }

@@ -13,6 +13,26 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
+## 📅 2026-09-22: Unified Test Domain (pxt_tests) & Database Directory Cleanup (v1.3.7)
+
+**Context:** The developer noticed multiple lingering test directories (`test_seg`, `test_pxt`, `test_audio_suite`, etc.) cluttering up the shared Pixeltable database and instructed consolidating all tests into a single shared domain `pxt_tests` with namespaced table identifiers and performing a one-time purge of stale test domains.
+
+**Verbatim Instruction:**
+> `i see in the list of pixeltable domains many tests, test_seg, test_pxt... cluttering up the shared database. update tests to make all these tests share a single domain pxt_tests for all the necessary tables. do a one time cleanup of the old tables too`
+
+**Key Decisions & Engineering Takeaways:**
+1. **One-Time Database Directory Purge**:
+   - Dropped 11 stale test directories (`test_audio_suite`, `test_seg`, `test_pxt`, `test_seg2`, `test_audio_eval`, `test_win_path`, `test_v_cust`, `test_no_aud`, `test_seg_pdf`, `test_suite_isolated`, `test_controller_isolated`, `test_seg_isolated`, `test_e2e_isolated`), leaving only clean user domains (`default`, `personal`).
+2. **Unified `pxt_tests` Domain Across All Test Suites**:
+   - Standardized `TEST_DOMAIN = "pxt_tests"` across `test_app.py`, `test_controllers.py`, `test_audio_spectrogram.py`, `test_segmentation.py`, and `test_browser_e2e.py`.
+   - Namespaced all table identifiers (`app_*`, `ctrl_*`, `audio_*`, `seg_*`, `e2e_*`) to prevent table collision across test modules.
+3. **Pre-Flight & Post-Flight Cleanliness**:
+   - Added `setUpClass` pre-cleanup to purge lingering tables before running tests, and robust `tearDownClass` handlers using `DBManager.drop_table` to ensure zero leftover test tables or directories after test runs.
+4. **Full Test Suite Verification**:
+   - Verified that all 96 unit, controller, audio DSP, and segmentation tests pass cleanly (`96 Passed, 0 Failed, 0 Errors`), leaving only user domains in the database.
+
+---
+
 ## 📅 2026-09-21: Multimodal File Segmentation & Chunking Tab (v1.3.6)
 
 **Context:** The developer directed adding file segmentation into a dedicated tab positioned before Data Enhancement to split individual PDF/text, audio, or video files into multiple sub-rows in a new Pixeltable view (pages, paragraphs, sentences, audio time slices, video frames), controlled via UDFs, prompt-based slash commands, and quick-apply presets using native Pixeltable segmenters first.

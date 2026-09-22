@@ -41,7 +41,7 @@ from src.export.exporter import MarkdownExporter
 class TestPipelineTools(unittest.TestCase):
     """Automated test suite for Pipeline Tools with isolated setup and teardown."""
 
-    TEST_DOMAIN = "test_suite_isolated"
+    TEST_DOMAIN = "pxt_tests"
 
     @classmethod
     def setUpClass(cls):
@@ -49,16 +49,67 @@ class TestPipelineTools(unittest.TestCase):
         DBManager.heal_postgres_locks()
         if PIXELTABLE_AVAILABLE:
             try:
-                DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
+                import pixeltable as pxt
+                pxt.create_dir(cls.TEST_DOMAIN, if_exists="ignore")
+                tables_to_clean = [
+                    "app_assets",
+                    "app_to_drop_table",
+                    "app_empty_test",
+                    "app_progress_test",
+                    "app_overwrite_test",
+                    "app_json_split_test",
+                    "app_single_col_test",
+                    "app_streaming_ingest_test",
+                    "app_export_test",
+                    "app_synthesis_test",
+                    "app_sidecar_test",
+                    "app_media_preview_test",
+                    "app_fresh_dynamic_table",
+                    "app_ctx_ui_tbl",
+                    "app_csv_ingest_tbl",
+                    "app_undo_tbl",
+                ]
+                for tbl in tables_to_clean:
+                    try:
+                        DBManager.drop_table(cls.TEST_DOMAIN, tbl)
+                    except Exception:
+                        pass
+                try:
+                    DBManager.drop_dir("pxt_tests_temp_del", force=True)
+                except Exception:
+                    pass
             except Exception:
                 pass
 
     @classmethod
     def tearDownClass(cls):
-        """Reliably purge temporary test tables and clean up database locks upon completion."""
+        """Reliably purge temporary test tables upon completion."""
         if PIXELTABLE_AVAILABLE:
+            tables_to_clean = [
+                "app_assets",
+                "app_to_drop_table",
+                "app_empty_test",
+                "app_progress_test",
+                "app_overwrite_test",
+                "app_json_split_test",
+                "app_single_col_test",
+                "app_streaming_ingest_test",
+                "app_export_test",
+                "app_synthesis_test",
+                "app_sidecar_test",
+                "app_media_preview_test",
+                "app_fresh_dynamic_table",
+                "app_ctx_ui_tbl",
+                "app_csv_ingest_tbl",
+                "app_undo_tbl",
+            ]
+            for tbl in tables_to_clean:
+                try:
+                    DBManager.drop_table(cls.TEST_DOMAIN, tbl)
+                except Exception:
+                    pass
             try:
-                DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
+                DBManager.drop_dir("pxt_tests_temp_del", force=True)
             except Exception:
                 pass
 
@@ -126,25 +177,25 @@ class TestPipelineTools(unittest.TestCase):
     def test_pixeltable_manager_and_columns(self):
         """[Database] Verify Pixeltable table creation, default schema columns, and data querying."""
         if PIXELTABLE_AVAILABLE:
-            table = DBManager.get_or_create_table(self.TEST_DOMAIN, "assets")
+            table = DBManager.get_or_create_table(self.TEST_DOMAIN, "app_assets")
             self.assertIsNotNone(table)
             cols = list(table.columns())
             self.assertIn("file_name", cols)
             self.assertIn("content", cols)
             
-            res = DBManager.get_table_data(self.TEST_DOMAIN, "assets", limit=5)
+            res = DBManager.get_table_data(self.TEST_DOMAIN, "app_assets", limit=5)
             self.assertIn("columns", res)
             self.assertTrue(isinstance(res["columns"], list))
 
     def test_db_manager_drop_table_and_dir(self):
         """[Database] Verify DBManager cleanly drops individual tables and directories."""
         if PIXELTABLE_AVAILABLE:
-            DBManager.get_or_create_table(self.TEST_DOMAIN, "to_drop_table")
-            self.assertIn("to_drop_table", DBManager.list_tables(self.TEST_DOMAIN))
+            DBManager.get_or_create_table(self.TEST_DOMAIN, "app_to_drop_table")
+            self.assertIn("app_to_drop_table", DBManager.list_tables(self.TEST_DOMAIN))
             
-            dropped = DBManager.drop_table(self.TEST_DOMAIN, "to_drop_table")
+            dropped = DBManager.drop_table(self.TEST_DOMAIN, "app_to_drop_table")
             self.assertTrue(dropped)
-            self.assertNotIn("to_drop_table", DBManager.list_tables(self.TEST_DOMAIN))
+            self.assertNotIn("app_to_drop_table", DBManager.list_tables(self.TEST_DOMAIN))
 
     def test_sanitization(self):
         """[Database] Verify identifier sanitization cleans leading digits and dashes for SQL/Pixeltable compatibility."""
@@ -177,7 +228,7 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_ingest_empty_file_list(self):
         """[Ingest] Verify DBManager.ingest_files returns a clean error dictionary when given no files."""
-        res = DBManager.ingest_files(self.TEST_DOMAIN, "empty_test", [])
+        res = DBManager.ingest_files(self.TEST_DOMAIN, "app_empty_test", [])
         self.assertEqual(res.get("status"), "error")
         self.assertIn("No files provided", res.get("message", ""))
 
@@ -197,7 +248,7 @@ class TestPipelineTools(unittest.TestCase):
                 "size_bytes": 100,
                 "size": "100 B"
             }]
-            res = DBManager.ingest_files(self.TEST_DOMAIN, "progress_test", fake_files, progress_callback=cb)
+            res = DBManager.ingest_files(self.TEST_DOMAIN, "app_progress_test", fake_files, progress_callback=cb)
             self.assertEqual(res.get("status"), "success")
             self.assertTrue(len(calls) > 0)
             self.assertEqual(calls[-1][0], calls[-1][1])
@@ -215,10 +266,10 @@ class TestPipelineTools(unittest.TestCase):
                 "size": "100 B"
             }]
             # Initial Ingestion
-            res1 = DBManager.ingest_files(self.TEST_DOMAIN, "overwrite_test", fake_files, overwrite=False)
+            res1 = DBManager.ingest_files(self.TEST_DOMAIN, "app_overwrite_test", fake_files, overwrite=False)
             self.assertEqual(res1.get("status"), "success")
             # Overwrite Ingestion
-            res2 = DBManager.ingest_files(self.TEST_DOMAIN, "overwrite_test", fake_files, overwrite=True)
+            res2 = DBManager.ingest_files(self.TEST_DOMAIN, "app_overwrite_test", fake_files, overwrite=True)
             self.assertEqual(res2.get("status"), "success")
             self.assertTrue(res2.get("overwritten"))
 
@@ -316,7 +367,7 @@ class TestPipelineTools(unittest.TestCase):
                 "size_bytes": 100,
                 "size": "100 B"
             }]
-            DBManager.ingest_files(self.TEST_DOMAIN, "json_split_test", fake_files, overwrite=True)
+            DBManager.ingest_files(self.TEST_DOMAIN, "app_json_split_test", fake_files, overwrite=True)
 
             mock_json_response = '{"doc_summary": "Test summary", "doc_haiku": "Lines of code arise", "confidence": 0.98}'
             with patch("src.core.llm_service.LLMService.generate", return_value=mock_json_response):
@@ -325,7 +376,7 @@ class TestPipelineTools(unittest.TestCase):
                     prompt_template="Analyze {file_name}",
                     system_prompt="Return JSON",
                     table_dir=self.TEST_DOMAIN,
-                    table_name="json_split_test",
+                    table_name="app_json_split_test",
                     auto_split=True
                 )
                 self.assertEqual(res.get("status"), "success")
@@ -334,7 +385,7 @@ class TestPipelineTools(unittest.TestCase):
                 self.assertIn("confidence", res.get("columns", []))
 
                 # Verify columns exist in Pixeltable table data
-                table_data = DBManager.get_table_data(self.TEST_DOMAIN, "json_split_test", limit=5)
+                table_data = DBManager.get_table_data(self.TEST_DOMAIN, "app_json_split_test", limit=5)
                 self.assertIn("doc_summary", table_data.get("columns", []))
                 self.assertIn("doc_haiku", table_data.get("columns", []))
                 self.assertIn("confidence", table_data.get("columns", []))
@@ -352,7 +403,7 @@ class TestPipelineTools(unittest.TestCase):
                 "size_bytes": 120,
                 "size": "120 B"
             }]
-            DBManager.ingest_files(self.TEST_DOMAIN, "single_col_test", fake_files, overwrite=True)
+            DBManager.ingest_files(self.TEST_DOMAIN, "app_single_col_test", fake_files, overwrite=True)
 
             with patch("src.core.llm_service.LLMService.generate", return_value="Declarative computed summary output"):
                 res = PromptExecutor.apply_prompt_to_table(
@@ -360,7 +411,7 @@ class TestPipelineTools(unittest.TestCase):
                     prompt_template="Summarize: {file_name}",
                     system_prompt="Be concise",
                     table_dir=self.TEST_DOMAIN,
-                    table_name="single_col_test",
+                    table_name="app_single_col_test",
                     target_column="c_summary",
                     auto_split=False
                 )
@@ -368,13 +419,13 @@ class TestPipelineTools(unittest.TestCase):
                 self.assertEqual(res.get("column"), "c_summary")
 
                 # Verify column exists on Pixeltable table
-                table_data = DBManager.get_table_data(self.TEST_DOMAIN, "single_col_test", limit=5)
+                table_data = DBManager.get_table_data(self.TEST_DOMAIN, "app_single_col_test", limit=5)
                 self.assertIn("c_summary", table_data.get("columns", []))
 
                 # Verify 1-click Undo drops the computed column cleanly
-                undo_res = DBManager.undo_last_operation(self.TEST_DOMAIN, "single_col_test")
+                undo_res = DBManager.undo_last_operation(self.TEST_DOMAIN, "app_single_col_test")
                 self.assertEqual(undo_res.get("status"), "success")
-                table_data_after = DBManager.get_table_data(self.TEST_DOMAIN, "single_col_test", limit=5)
+                table_data_after = DBManager.get_table_data(self.TEST_DOMAIN, "app_single_col_test", limit=5)
                 self.assertNotIn("c_summary", table_data_after.get("columns", []))
 
     def test_chunked_streaming_ingestion(self):
@@ -392,11 +443,11 @@ class TestPipelineTools(unittest.TestCase):
                 }
                 for i in range(25)
             ]
-            res = DBManager.ingest_files(self.TEST_DOMAIN, "streaming_ingest_test", fake_files, overwrite=True)
+            res = DBManager.ingest_files(self.TEST_DOMAIN, "app_streaming_ingest_test", fake_files, overwrite=True)
             self.assertEqual(res.get("status"), "success")
             self.assertEqual(res.get("inserted_count"), 25)
 
-            table_data = DBManager.get_table_data(self.TEST_DOMAIN, "streaming_ingest_test", limit=50)
+            table_data = DBManager.get_table_data(self.TEST_DOMAIN, "app_streaming_ingest_test", limit=50)
             self.assertEqual(table_data.get("total_rows"), 25)
 
     def test_markdown_export_direct_template(self):
@@ -411,12 +462,12 @@ class TestPipelineTools(unittest.TestCase):
                 "size_bytes": 250,
                 "size": "250 B"
             }]
-            DBManager.ingest_files(self.TEST_DOMAIN, "export_test", fake_files, overwrite=True)
+            DBManager.ingest_files(self.TEST_DOMAIN, "app_export_test", fake_files, overwrite=True)
 
             template = "### Item: {file_name}\n- Modality: {modality}\n- Size: {file_size}"
             res = MarkdownExporter.generate_report(
                 domain=self.TEST_DOMAIN,
-                table_name="export_test",
+                table_name="app_export_test",
                 prompt_template=template,
                 mode="direct",
                 max_rows=10,
@@ -441,13 +492,13 @@ class TestPipelineTools(unittest.TestCase):
                 "size_bytes": 300,
                 "size": "300 B"
             }]
-            DBManager.ingest_files(self.TEST_DOMAIN, "synthesis_test", fake_files, overwrite=True)
+            DBManager.ingest_files(self.TEST_DOMAIN, "app_synthesis_test", fake_files, overwrite=True)
 
             mock_synthesis = "## Executive Summary\nAll documents show consistent data pipeline integration."
             with patch("src.core.llm_service.LLMService.generate", return_value=mock_synthesis):
                 res = MarkdownExporter.generate_report(
                     domain=self.TEST_DOMAIN,
-                    table_name="synthesis_test",
+                    table_name="app_synthesis_test",
                     prompt_template="Synthesize {total_rows} items from {domain}.{table}",
                     system_prompt="Executive analyst role",
                     provider="Ollama",
@@ -459,7 +510,7 @@ class TestPipelineTools(unittest.TestCase):
                 self.assertEqual(res.get("status"), "success")
                 self.assertTrue(os.path.exists(res.get("file_path")))
                 self.assertIn("Executive Summary", res.get("markdown_content"))
-                self.assertIn("synthesis_test", res.get("markdown_content"))
+                self.assertIn("app_synthesis_test", res.get("markdown_content"))
                 self.assertIn("test_synthesis_export", res.get("file_name"))
 
     def test_markdown_export_sidecars(self):
@@ -487,13 +538,13 @@ class TestPipelineTools(unittest.TestCase):
                     "size": "2 KB"
                 }
             ]
-            DBManager.ingest_files(self.TEST_DOMAIN, "sidecar_test", fake_files, overwrite=True)
+            DBManager.ingest_files(self.TEST_DOMAIN, "app_sidecar_test", fake_files, overwrite=True)
 
             mock_story = "# Coastal Twilight\nThe golden sun illuminates the tranquil waves with vivid color."
             with patch("src.export.exporter.LLMService.generate", return_value=mock_story):
                 res = MarkdownExporter.generate_report(
                     domain=self.TEST_DOMAIN,
-                    table_name="sidecar_test",
+                    table_name="app_sidecar_test",
                     prompt_template="Write a story about {file_name}",
                     system_prompt="Photojournalist",
                     provider="Ollama",
@@ -579,16 +630,16 @@ class TestPipelineTools(unittest.TestCase):
                         "size": "2 KB"
                     }
                 ]
-                DBManager.ingest_files(self.TEST_DOMAIN, "media_preview_test", fake_files, overwrite=True)
+                DBManager.ingest_files(self.TEST_DOMAIN, "app_media_preview_test", fake_files, overwrite=True)
 
                 # 1. Lightweight mode: media_preview omitted, binary columns hidden
-                light_res = DBManager.get_table_data(self.TEST_DOMAIN, "media_preview_test", limit=5, lightweight=True)
+                light_res = DBManager.get_table_data(self.TEST_DOMAIN, "app_media_preview_test", limit=5, lightweight=True)
                 self.assertNotIn("media_preview", light_res.get("columns", []))
                 self.assertNotIn("image", light_res.get("columns", []))
                 self.assertNotIn("doc", light_res.get("columns", []))
 
                 # 2. Full mode: media_preview present, datatypes contain 'html'
-                full_res = DBManager.get_table_data(self.TEST_DOMAIN, "media_preview_test", limit=5, lightweight=False)
+                full_res = DBManager.get_table_data(self.TEST_DOMAIN, "app_media_preview_test", limit=5, lightweight=False)
                 self.assertIn("media_preview", full_res.get("columns", []))
                 self.assertIn("html", full_res.get("datatypes", []))
                 
@@ -608,7 +659,7 @@ class TestPipelineTools(unittest.TestCase):
     def test_tab_dynamic_dropdown_refresh(self):
         """[UI] Verify newly created tables are dynamically discovered and selected across tabs."""
         if PIXELTABLE_AVAILABLE:
-            new_table_name = "fresh_dynamic_table"
+            new_table_name = "app_fresh_dynamic_table"
             DBManager.create_or_get_table(self.TEST_DOMAIN, new_table_name)
 
             # 1. Verify DBManager lists the newly created table under the domain
@@ -670,12 +721,12 @@ class TestPipelineTools(unittest.TestCase):
         from src.core.ingestion_context import IngestionContextManager
 
         # Seed context data
-        ctx = IngestionContextManager.get_context(self.TEST_DOMAIN, "ctx_ui_tbl")
+        ctx = IngestionContextManager.get_context(self.TEST_DOMAIN, "app_ctx_ui_tbl")
         ctx.normalize_entity("PyMuPDF", "library")
         ctx.normalize_entity("PostgreSQL", "database")
 
         # Directly invoke ContextController methods wired to UI
-        state = ContextController.load_context_state(self.TEST_DOMAIN, "ctx_ui_tbl")
+        state = ContextController.load_context_state(self.TEST_DOMAIN, "app_ctx_ui_tbl")
         self.assertEqual(state["status"], "success")
         self.assertIn("Ingestion Context Knowledge Register", state["markdown_register"])
         self.assertEqual(len(state["entity_rows"]), 2)
@@ -683,7 +734,7 @@ class TestPipelineTools(unittest.TestCase):
         save_res = ContextController.save_domain_system_prompt(self.TEST_DOMAIN, "You are an AI research assistant.")
         self.assertEqual(save_res["status"], "success")
 
-        export_res = ContextController.export_context_markdown(self.TEST_DOMAIN, "ctx_ui_tbl")
+        export_res = ContextController.export_context_markdown(self.TEST_DOMAIN, "app_ctx_ui_tbl")
         self.assertEqual(export_res["status"], "success")
         self.assertTrue(Path(export_res["file_path"]).exists())
         Path(export_res["file_path"]).unlink(missing_ok=True)
@@ -716,7 +767,7 @@ class TestPipelineTools(unittest.TestCase):
     def test_ingest_csv_rows_streaming(self):
         """[Ingest] Verify DBManager.ingest_csv_rows parses each CSV row into an individual document record."""
         if PIXELTABLE_AVAILABLE:
-            tbl_name = "test_csv_ingest_tbl"
+            tbl_name = "app_csv_ingest_tbl"
             temp_csv = Path(self.TEST_DOMAIN + "_ingest.csv")
             try:
                 # Write 5 rows
@@ -777,7 +828,7 @@ class TestPipelineTools(unittest.TestCase):
     def test_undo_last_operation(self):
         """[Database] Verify 1-click Undo drops newly added LLM columns and reverts table schema."""
         if PIXELTABLE_AVAILABLE:
-            tbl_name = "test_undo_tbl"
+            tbl_name = "app_undo_tbl"
             table = DBManager.create_or_get_table(self.TEST_DOMAIN, tbl_name)
             
             # Add custom columns
@@ -808,22 +859,25 @@ class TestPipelineTools(unittest.TestCase):
     def test_delete_table_and_domain_with_details(self):
         """[Database] Verify delete_table_with_details and delete_domain_with_details remove resources cleanly."""
         if PIXELTABLE_AVAILABLE:
-            dom = "test_del_domain"
+            dom = "pxt_tests_temp_del"
             t1 = "temp_del_t1"
             t2 = "temp_del_t2"
-            DBManager.create_or_get_table(dom, t1)
-            DBManager.create_or_get_table(dom, t2)
+            try:
+                DBManager.create_or_get_table(dom, t1)
+                DBManager.create_or_get_table(dom, t2)
 
-            # 1. Delete single table
-            res_t1 = DBManager.delete_table_with_details(dom, t1)
-            self.assertEqual(res_t1.get("status"), "success")
-            self.assertNotIn(t1, DBManager.list_tables(dom))
-            self.assertIn(t2, DBManager.list_tables(dom))
+                # 1. Delete single table
+                res_t1 = DBManager.delete_table_with_details(dom, t1)
+                self.assertEqual(res_t1.get("status"), "success")
+                self.assertNotIn(t1, DBManager.list_tables(dom))
+                self.assertIn(t2, DBManager.list_tables(dom))
 
-            # 2. Delete entire domain
-            res_dom = DBManager.delete_domain_with_details(dom)
-            self.assertEqual(res_dom.get("status"), "success")
-            self.assertNotIn(dom, DBManager.list_dirs())
+                # 2. Delete entire domain
+                res_dom = DBManager.delete_domain_with_details(dom)
+                self.assertEqual(res_dom.get("status"), "success")
+                self.assertNotIn(dom, DBManager.list_dirs())
+            finally:
+                DBManager.drop_dir(dom, force=True)
 
     def test_embedded_postgres_lock_self_healing(self):
         """[Database] Verify DBManager.heal_postgres_locks safely cleans up stale postmaster.pid and orphaned locks."""

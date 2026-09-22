@@ -52,7 +52,7 @@ from app import create_app, custom_css, get_custom_head
 class TestBrowserE2E(unittest.TestCase):
     """End-to-End Playwright test suite for the Pipeline Tools Gradio application."""
 
-    TEST_DOMAIN = "test_e2e_isolated"
+    TEST_DOMAIN = "pxt_tests"
     TEST_TABLE = "e2e_documents"
     demo = None
     server_port = None
@@ -69,8 +69,9 @@ class TestBrowserE2E(unittest.TestCase):
         # Seed isolated test domain and table
         if PIXELTABLE_AVAILABLE:
             try:
-                if cls.TEST_DOMAIN in (DBManager.list_dirs() or []):
-                    DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
+                import pixeltable as pxt
+                pxt.create_dir(cls.TEST_DOMAIN, if_exists="ignore")
+                DBManager.drop_table(cls.TEST_DOMAIN, cls.TEST_TABLE)
             except Exception:
                 pass
 
@@ -142,7 +143,7 @@ class TestBrowserE2E(unittest.TestCase):
                 pass
         if PIXELTABLE_AVAILABLE:
             try:
-                DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
+                DBManager.drop_table(cls.TEST_DOMAIN, cls.TEST_TABLE)
             except Exception:
                 pass
 

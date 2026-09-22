@@ -17,21 +17,50 @@ from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
 class TestControllers(unittest.TestCase):
     """Automated unit test suite for Pipeline Tools controller layer."""
 
-    TEST_DOMAIN = "test_controller_isolated"
+    TEST_DOMAIN = "pxt_tests"
 
     @classmethod
     def setUpClass(cls):
         if PIXELTABLE_AVAILABLE:
             try:
-                DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
+                import pixeltable as pxt
+                pxt.create_dir(cls.TEST_DOMAIN, if_exists="ignore")
+                tables_to_clean = [
+                    "ctrl_test_tbl",
+                    "ctrl_preview_test",
+                    "ctrl_tables_test",
+                    "ctrl_export_tbl",
+                    "ctrl_ctx_test_table",
+                ]
+                for tbl in tables_to_clean:
+                    try:
+                        DBManager.drop_table(cls.TEST_DOMAIN, tbl)
+                    except Exception:
+                        pass
+                try:
+                    DBManager.drop_dir("pxt_tests_del_ctrl", force=True)
+                except Exception:
+                    pass
             except Exception:
                 pass
 
     @classmethod
     def tearDownClass(cls):
         if PIXELTABLE_AVAILABLE:
+            tables_to_clean = [
+                "ctrl_test_tbl",
+                "ctrl_preview_test",
+                "ctrl_tables_test",
+                "ctrl_export_tbl",
+                "ctrl_ctx_test_table",
+            ]
+            for tbl in tables_to_clean:
+                try:
+                    DBManager.drop_table(cls.TEST_DOMAIN, tbl)
+                except Exception:
+                    pass
             try:
-                DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
+                DBManager.drop_dir("pxt_tests_del_ctrl", force=True)
             except Exception:
                 pass
 
@@ -69,7 +98,7 @@ class TestControllers(unittest.TestCase):
     def test_ingest_controller_ingest_flow_validation(self):
         """[Controller] Verify IngestController validates empty scanned files and target identifiers."""
         # 1. Empty scanned files list
-        res = IngestController.ingest_files_flow(self.TEST_DOMAIN, "test_tbl", [])
+        res = IngestController.ingest_files_flow(self.TEST_DOMAIN, "ctrl_test_tbl", [])
         self.assertEqual(res["status"], "error")
         self.assertIn("No files scanned yet", res["message"])
 
@@ -88,8 +117,8 @@ class TestControllers(unittest.TestCase):
     def test_playground_controller_table_preview(self):
         """[Controller] Verify PlaygroundController loads preview stats, datatypes, and placeholders."""
         if PIXELTABLE_AVAILABLE:
-            DBManager.get_or_create_table(self.TEST_DOMAIN, "preview_test")
-            preview = PlaygroundController.load_table_preview(self.TEST_DOMAIN, "preview_test", lightweight=True)
+            DBManager.get_or_create_table(self.TEST_DOMAIN, "ctrl_preview_test")
+            preview = PlaygroundController.load_table_preview(self.TEST_DOMAIN, "ctrl_preview_test", lightweight=True)
             self.assertEqual(preview["status"], "success")
             self.assertIn("file_name", preview["columns"])
             self.assertIn("Available Column Placeholders", preview["placeholders_text"])
@@ -165,14 +194,14 @@ class TestControllers(unittest.TestCase):
     def test_tables_controller_load_table_and_domain_change(self):
         """[Controller] Verify TablesController loads table data and formats stats summary."""
         if PIXELTABLE_AVAILABLE:
-            DBManager.get_or_create_table(self.TEST_DOMAIN, "tables_ctrl_test")
-            res = TablesController.handle_load_table(self.TEST_DOMAIN, "tables_ctrl_test", limit=5, is_lightweight=True)
+            DBManager.get_or_create_table(self.TEST_DOMAIN, "ctrl_tables_test")
+            res = TablesController.handle_load_table(self.TEST_DOMAIN, "ctrl_tables_test", limit=5, is_lightweight=True)
             self.assertEqual(res["status"], "success")
             self.assertIn("file_name", res["columns"])
-            self.assertIn("Table `test_controller_isolated.tables_ctrl_test`", res["stats_text"])
+            self.assertIn(f"Table `{self.TEST_DOMAIN}.ctrl_tables_test`", res["stats_text"])
 
             dom_res = TablesController.handle_domain_change(self.TEST_DOMAIN)
-            self.assertIn("tables_ctrl_test", dom_res["choices"])
+            self.assertIn("ctrl_tables_test", dom_res["choices"])
 
     def test_tables_controller_row_inspection(self):
         """[Controller] Verify TablesController inspects row data, formats details, and detects media types."""
@@ -197,19 +226,23 @@ class TestControllers(unittest.TestCase):
     def test_tables_controller_delete_table_and_domain(self):
         """[Controller] Verify TablesController executes safe table and domain deletion with updated choices."""
         if PIXELTABLE_AVAILABLE:
-            # Create isolated tables
-            DBManager.get_or_create_table(self.TEST_DOMAIN, "to_delete_tbl")
-            self.assertIn("to_delete_tbl", DBManager.list_tables(self.TEST_DOMAIN))
+            temp_dom = "pxt_tests_del_ctrl"
+            try:
+                # Create isolated tables
+                DBManager.get_or_create_table(temp_dom, "to_delete_tbl")
+                self.assertIn("to_delete_tbl", DBManager.list_tables(temp_dom))
 
-            # Delete table
-            del_tbl_res = TablesController.handle_delete_table(self.TEST_DOMAIN, "to_delete_tbl")
-            self.assertEqual(del_tbl_res["status"], "success")
-            self.assertNotIn("to_delete_tbl", del_tbl_res["table_choices"])
+                # Delete table
+                del_tbl_res = TablesController.handle_delete_table(temp_dom, "to_delete_tbl")
+                self.assertEqual(del_tbl_res["status"], "success")
+                self.assertNotIn("to_delete_tbl", del_tbl_res["table_choices"])
 
-            # Delete domain
-            del_dom_res = TablesController.handle_delete_domain(self.TEST_DOMAIN)
-            self.assertEqual(del_dom_res["status"], "success")
-            self.assertNotIn(self.TEST_DOMAIN, del_dom_res["domain_choices"])
+                # Delete domain
+                del_dom_res = TablesController.handle_delete_domain(temp_dom)
+                self.assertEqual(del_dom_res["status"], "success")
+                self.assertNotIn(temp_dom, del_dom_res["domain_choices"])
+            finally:
+                DBManager.drop_dir(temp_dom, force=True)
 
     def test_tables_controller_export_single_and_sidecar(self):
         """[Controller] Verify TablesController handles single and per-row sidecar export workflows."""
@@ -224,14 +257,14 @@ class TestControllers(unittest.TestCase):
                 "size_bytes": 1024,
                 "size": "1 KB"
             }]
-            DBManager.ingest_files(self.TEST_DOMAIN, "export_ctrl_tbl", fake_files, overwrite=True)
+            DBManager.ingest_files(self.TEST_DOMAIN, "ctrl_export_tbl", fake_files, overwrite=True)
 
             mock_story = "# Frontpage Story\nA detailed newspaper feature on the captured scene."
             with patch("src.export.exporter.LLMService.generate", return_value=mock_story):
                 # 1. Single report mode
                 single_res = TablesController.handle_export_report(
                     domain=self.TEST_DOMAIN,
-                    table_name="export_ctrl_tbl",
+                    table_name="ctrl_export_tbl",
                     provider="Ollama",
                     model="test-model",
                     max_rows=5,
@@ -245,7 +278,7 @@ class TestControllers(unittest.TestCase):
                 # 2. Sidecar mode
                 sidecar_res = TablesController.handle_export_report(
                     domain=self.TEST_DOMAIN,
-                    table_name="export_ctrl_tbl",
+                    table_name="ctrl_export_tbl",
                     provider="Ollama",
                     model="test-model",
                     max_rows=5,
@@ -323,7 +356,7 @@ class TestControllers(unittest.TestCase):
         self.assertEqual(prompt, "You are a test researcher.")
 
         # 3. Activity summary for Data Enhancement minimal accordion
-        summary = ContextController.get_minimal_activity_summary(self.TEST_DOMAIN, "export_ctrl_tbl")
+        summary = ContextController.get_minimal_activity_summary(self.TEST_DOMAIN, "ctrl_export_tbl")
         self.assertIn("Entities Tracked", summary)
 
     def test_context_controller_load_context_state_and_export(self):
@@ -331,16 +364,16 @@ class TestControllers(unittest.TestCase):
         from src.controllers.context_controller import ContextController
         from src.core.ingestion_context import IngestionContextManager
         
-        ctx = IngestionContextManager.get_context(self.TEST_DOMAIN, "ctx_test_table")
+        ctx = IngestionContextManager.get_context(self.TEST_DOMAIN, "ctrl_ctx_test_table")
         ctx.normalize_entity("PostgreSQL", "database")
         ctx.normalize_entity("Pixeltable", "database")
         
-        state = ContextController.load_context_state(self.TEST_DOMAIN, "ctx_test_table")
+        state = ContextController.load_context_state(self.TEST_DOMAIN, "ctrl_ctx_test_table")
         self.assertEqual(state["status"], "success")
         self.assertIn("Ingestion Context Knowledge Register", state["markdown_register"])
         self.assertEqual(len(state["entity_rows"]), 2)
         
-        export_res = ContextController.export_context_markdown(self.TEST_DOMAIN, "ctx_test_table")
+        export_res = ContextController.export_context_markdown(self.TEST_DOMAIN, "ctrl_ctx_test_table")
         self.assertEqual(export_res["status"], "success")
         self.assertTrue(Path(export_res["file_path"]).exists())
         self.assertIn("Ingestion Context Knowledge Register", export_res["content"])

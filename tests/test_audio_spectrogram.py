@@ -56,15 +56,24 @@ class TestAudioMelSpectrogram(unittest.TestCase):
         cls.text_file.write_text("This is not an audio file.", encoding="utf-8")
 
         # 3. Setup test database domain and table
-        cls.domain = "test_audio_suite"
+        cls.domain = "pxt_tests"
         cls.table = "audio_assets"
         import pixeltable as pxt
         pxt.create_dir(cls.domain, if_exists="ignore")
+        for tbl in [cls.table, "audio_custom_arrays"]:
+            try:
+                DBManager.drop_table(cls.domain, tbl)
+            except Exception:
+                pass
 
     @classmethod
     def tearDownClass(cls):
         try:
-            DBManager.delete_table(cls.domain, cls.table)
+            DBManager.drop_table(cls.domain, cls.table)
+        except Exception:
+            pass
+        try:
+            DBManager.drop_table(cls.domain, "audio_custom_arrays")
         except Exception:
             pass
         cls.test_dir.cleanup()
@@ -505,7 +514,7 @@ class TestAudioMelSpectrogram(unittest.TestCase):
         """[Audio] Verify DBManager renders custom 2D array shapes and detects html datatypes for mfcc/chroma."""
         import pixeltable as pxt
 
-        table_path = f"{self.domain}.test_custom_arrays"
+        table_path = f"{self.domain}.audio_custom_arrays"
         schema = {
             "file_name": pxt.String,
             "mfcc_custom": pxt.Array,
@@ -519,7 +528,7 @@ class TestAudioMelSpectrogram(unittest.TestCase):
             {"file_name": "custom.wav", "mfcc_custom": np.random.randn(25, 50).astype(np.float32), "chroma_custom": np.random.randn(12, 50).astype(np.float32)}
         ])
 
-        res = DBManager.get_table_data(self.domain, "test_custom_arrays", limit=10, lightweight=False)
+        res = DBManager.get_table_data(self.domain, "audio_custom_arrays", limit=10, lightweight=False)
         cols = res["columns"]
         datatypes = res["datatypes"]
         data = res["data"]
@@ -536,7 +545,7 @@ class TestAudioMelSpectrogram(unittest.TestCase):
 
         # Cleanup
         try:
-            DBManager.delete_table(self.domain, "test_custom_arrays")
+            DBManager.drop_table(self.domain, "audio_custom_arrays")
         except Exception:
             pass
 

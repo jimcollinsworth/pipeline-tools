@@ -32,7 +32,7 @@ except ImportError:
 class TestSegmentation(unittest.TestCase):
     """Test suite for declarative segmentation, prompt matching, preview, and view creation."""
 
-    TEST_DOMAIN = "test_seg_isolated"
+    TEST_DOMAIN = "pxt_tests"
 
     @classmethod
     def setUpClass(cls):
@@ -83,20 +83,50 @@ class TestSegmentation(unittest.TestCase):
         except Exception:
             pass
 
-        # Clean any leftover test directory
+        # Clean any leftover test tables in shared pxt_tests domain
         if PIXELTABLE_AVAILABLE and pxt:
             try:
-                DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
+                pxt.create_dir(cls.TEST_DOMAIN, if_exists="ignore")
+                for tbl in [
+                    "seg_sample_text_paras",
+                    "seg_sample_text_sents",
+                    "seg_sample_audio_segments",
+                    "seg_sample_doc_pages",
+                    "seg_sample_video_frames",
+                    "seg_invalid_audio_view",
+                    "seg_sample_text_tbl",
+                    "seg_sample_audio_tbl",
+                    "seg_sample_doc_tbl",
+                    "seg_sample_video_tbl",
+                    "seg_table_without_audio"
+                ]:
+                    try:
+                        DBManager.drop_table(cls.TEST_DOMAIN, tbl)
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
     @classmethod
     def tearDownClass(cls):
         if PIXELTABLE_AVAILABLE and pxt:
-            try:
-                DBManager.drop_dir(cls.TEST_DOMAIN, force=True)
-            except Exception:
-                pass
+            for tbl in [
+                "seg_sample_text_paras",
+                "seg_sample_text_sents",
+                "seg_sample_audio_segments",
+                "seg_sample_doc_pages",
+                "seg_sample_video_frames",
+                "seg_invalid_audio_view",
+                "seg_sample_text_tbl",
+                "seg_sample_audio_tbl",
+                "seg_sample_doc_tbl",
+                "seg_sample_video_tbl",
+                "seg_table_without_audio"
+            ]:
+                try:
+                    DBManager.drop_table(cls.TEST_DOMAIN, tbl)
+                except Exception:
+                    pass
         if cls.test_dir.exists():
             shutil.rmtree(cls.test_dir, ignore_errors=True)
 
@@ -192,7 +222,7 @@ class TestSegmentation(unittest.TestCase):
             self.skipTest("Pixeltable not available")
 
         # Create isolated table with sample text
-        tbl = DBManager.get_or_create_table(self.TEST_DOMAIN, "sample_text_tbl")
+        tbl = DBManager.get_or_create_table(self.TEST_DOMAIN, "seg_sample_text_tbl")
         self.assertIsNotNone(tbl)
 
         sample_content = (
@@ -209,7 +239,7 @@ class TestSegmentation(unittest.TestCase):
         # Preview paragraphs
         res_para = SegmentationController.handle_preview_segmentation(
             domain=self.TEST_DOMAIN,
-            table_name="sample_text_tbl",
+            table_name="seg_sample_text_tbl",
             prompt_or_preset="/split_paragraphs",
             sample_rows=1
         )
@@ -220,7 +250,7 @@ class TestSegmentation(unittest.TestCase):
         # Preview sentences
         res_sent = SegmentationController.handle_preview_segmentation(
             domain=self.TEST_DOMAIN,
-            table_name="sample_text_tbl",
+            table_name="seg_sample_text_tbl",
             prompt_or_preset="/split_sentences",
             sample_rows=1
         )
@@ -235,16 +265,16 @@ class TestSegmentation(unittest.TestCase):
 
         res_create = SegmentationController.handle_create_view(
             domain=self.TEST_DOMAIN,
-            source_table="sample_text_tbl",
-            view_name="sample_text_paras",
+            source_table="seg_sample_text_tbl",
+            view_name="seg_sample_text_paras",
             prompt_or_preset="/split_paragraphs"
         )
         self.assertEqual(res_create["status"], "success")
         self.assertTrue(res_create["count"] >= 3)
-        self.assertIn("sample_text_paras", res_create["table_choices"])
+        self.assertIn("seg_sample_text_paras", res_create["table_choices"])
 
         # Query the view directly
-        full_view = f"{self.TEST_DOMAIN}.sample_text_paras"
+        full_view = f"{self.TEST_DOMAIN}.seg_sample_text_paras"
         v = pxt.get_table(full_view)
         cols = [str(c) for c in v.columns()]
         self.assertIn("pos", cols)
@@ -260,14 +290,14 @@ class TestSegmentation(unittest.TestCase):
 
         res_create = SegmentationController.handle_create_view(
             domain=self.TEST_DOMAIN,
-            source_table="sample_text_tbl",
-            view_name="sample_text_sents",
+            source_table="seg_sample_text_tbl",
+            view_name="seg_sample_text_sents",
             prompt_or_preset="/split_sentences"
         )
         self.assertEqual(res_create["status"], "success")
         self.assertTrue(res_create["count"] >= 5)
 
-        full_view = f"{self.TEST_DOMAIN}.sample_text_sents"
+        full_view = f"{self.TEST_DOMAIN}.seg_sample_text_sents"
         v = pxt.get_table(full_view)
         cols = [str(c) for c in v.columns()]
         self.assertIn("pos", cols)
@@ -278,7 +308,7 @@ class TestSegmentation(unittest.TestCase):
         if not PIXELTABLE_AVAILABLE or not pxt:
             self.skipTest("Pixeltable not available")
 
-        aud_tbl = DBManager.get_or_create_table(self.TEST_DOMAIN, "sample_audio_tbl")
+        aud_tbl = DBManager.get_or_create_table(self.TEST_DOMAIN, "seg_sample_audio_tbl")
         aud_tbl.insert([{
             "file_name": "test_audio.wav",
             "file_path": str(self.audio_file.resolve()),
@@ -288,14 +318,14 @@ class TestSegmentation(unittest.TestCase):
 
         res_create = SegmentationController.handle_create_view(
             domain=self.TEST_DOMAIN,
-            source_table="sample_audio_tbl",
-            view_name="sample_audio_segments",
+            source_table="seg_sample_audio_tbl",
+            view_name="seg_sample_audio_segments",
             prompt_or_preset="/split_audio duration=1.0"
         )
         self.assertEqual(res_create["status"], "success")
         self.assertTrue(res_create["count"] >= 2)
 
-        full_view = f"{self.TEST_DOMAIN}.sample_audio_segments"
+        full_view = f"{self.TEST_DOMAIN}.seg_sample_audio_segments"
         v = pxt.get_table(full_view)
         cols = [str(c) for c in v.columns()]
         self.assertIn("pos", cols)
@@ -310,7 +340,7 @@ class TestSegmentation(unittest.TestCase):
         if not hasattr(self, "pdf_file") or not self.pdf_file.exists():
             self.skipTest("PyMuPDF / PDF test fixture not available")
 
-        doc_tbl = DBManager.get_or_create_table(self.TEST_DOMAIN, "sample_doc_tbl")
+        doc_tbl = DBManager.get_or_create_table(self.TEST_DOMAIN, "seg_sample_doc_tbl")
         doc_tbl.insert([{
             "file_name": "test_doc.pdf",
             "file_path": str(self.pdf_file.resolve()),
@@ -320,14 +350,14 @@ class TestSegmentation(unittest.TestCase):
 
         res_create = SegmentationController.handle_create_view(
             domain=self.TEST_DOMAIN,
-            source_table="sample_doc_tbl",
-            view_name="sample_doc_pages",
+            source_table="seg_sample_doc_tbl",
+            view_name="seg_sample_doc_pages",
             prompt_or_preset="/split_pages"
         )
         self.assertEqual(res_create["status"], "success")
         self.assertEqual(res_create["count"], 2)
 
-        full_view = f"{self.TEST_DOMAIN}.sample_doc_pages"
+        full_view = f"{self.TEST_DOMAIN}.seg_sample_doc_pages"
         v = pxt.get_table(full_view)
         cols = [str(c) for c in v.columns()]
         self.assertIn("pos", cols)
@@ -341,7 +371,7 @@ class TestSegmentation(unittest.TestCase):
         if not hasattr(self, "video_file") or not self.video_file.exists():
             self.skipTest("PyAV / Video test fixture not available")
 
-        vid_tbl = DBManager.get_or_create_table(self.TEST_DOMAIN, "sample_video_tbl")
+        vid_tbl = DBManager.get_or_create_table(self.TEST_DOMAIN, "seg_sample_video_tbl")
         vid_tbl.insert([{
             "file_name": "test_video.mp4",
             "file_path": str(self.video_file.resolve()),
@@ -351,14 +381,14 @@ class TestSegmentation(unittest.TestCase):
 
         res_create = SegmentationController.handle_create_view(
             domain=self.TEST_DOMAIN,
-            source_table="sample_video_tbl",
-            view_name="sample_video_frames",
+            source_table="seg_sample_video_tbl",
+            view_name="seg_sample_video_frames",
             prompt_or_preset="/extract_frames fps=2.0"
         )
         self.assertEqual(res_create["status"], "success")
         self.assertTrue(res_create["count"] >= 2)
 
-        full_view = f"{self.TEST_DOMAIN}.sample_video_frames"
+        full_view = f"{self.TEST_DOMAIN}.seg_sample_video_frames"
         v = pxt.get_table(full_view)
         cols = [str(c) for c in v.columns()]
         self.assertIn("pos", cols)
@@ -370,7 +400,7 @@ class TestSegmentation(unittest.TestCase):
         # Empty view name
         res_empty = SegmentationController.handle_create_view(
             domain=self.TEST_DOMAIN,
-            source_table="sample_text_tbl",
+            source_table="seg_sample_text_tbl",
             view_name="",
             prompt_or_preset="/split_paragraphs"
         )
@@ -379,7 +409,7 @@ class TestSegmentation(unittest.TestCase):
         # Punctuation-only view name
         res_invalid = SegmentationController.handle_create_view(
             domain=self.TEST_DOMAIN,
-            source_table="sample_text_tbl",
+            source_table="seg_sample_text_tbl",
             view_name="???",
             prompt_or_preset="/split_paragraphs"
         )
@@ -388,8 +418,8 @@ class TestSegmentation(unittest.TestCase):
         # View name identical to source table
         res_ident = SegmentationController.handle_create_view(
             domain=self.TEST_DOMAIN,
-            source_table="sample_text_tbl",
-            view_name="sample_text_tbl",
+            source_table="seg_sample_text_tbl",
+            view_name="seg_sample_text_tbl",
             prompt_or_preset="/split_paragraphs"
         )
         self.assertEqual(res_ident["status"], "error")
@@ -400,13 +430,13 @@ class TestSegmentation(unittest.TestCase):
             self.skipTest("Pixeltable not available")
 
         # Create table with only text/content (no audio column)
-        pxt.create_table(f"{self.TEST_DOMAIN}.table_without_audio", {"content": pxt.String}, if_exists="ignore")
+        pxt.create_table(f"{self.TEST_DOMAIN}.seg_table_without_audio", {"content": pxt.String}, if_exists="ignore")
 
         # Attempt to split audio on a table with no audio column
         res = SegmentationController.handle_create_view(
             domain=self.TEST_DOMAIN,
-            source_table="table_without_audio",
-            view_name="invalid_audio_view",
+            source_table="seg_table_without_audio",
+            view_name="seg_invalid_audio_view",
             prompt_or_preset="/split_audio"
         )
         self.assertEqual(res["status"], "error")

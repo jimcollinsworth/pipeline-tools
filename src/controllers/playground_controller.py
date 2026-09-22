@@ -156,26 +156,28 @@ class PlaygroundController:
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
 
-        # Check if prompt triggers a registered declarative UDF (single or multiple)
+        # Check if prompt triggers a registered declarative UDF (single, multiple, or hybrid with LLM)
         from src.core.udf_registry import UDFRegistry
         udf_matches = UDFRegistry.match_all_prompts(prompt_template)
+        remaining_prompt = UDFRegistry.strip_udf_triggers(prompt_template) if udf_matches else prompt_template
+        has_llm = bool(remaining_prompt.strip())
+
+        udf_headers: List[str] = []
+        udf_datatypes: List[str] = []
+        udf_rows: List[List[Any]] = []
+
         if udf_matches:
-            if len(udf_matches) == 1:
+            if len(udf_matches) == 1 and not has_llm:
                 udf_def, udf_kwargs = udf_matches[0]
                 if progress_callback:
                     progress_callback(0.5, f"Evaluating declarative UDF '{udf_def.name}' on {sample_count} sample rows...")
                 return udf_def.sample_eval_fn(clean_dir, clean_tbl, sample_count=sample_count, **udf_kwargs)
 
-            # Multiple UDFs: evaluate each and merge non-lead columns into a unified preview table
             total_udfs = len(udf_matches)
-            merged_headers = ["Status", "Row ID", "File Name"]
-            merged_datatypes = ["str", "str", "str"]
-            merged_rows: List[List[Any]] = []
-
             for u_idx, (udf_def, udf_kwargs) in enumerate(udf_matches):
                 if progress_callback:
                     progress_callback(
-                        u_idx / total_udfs,
+                        u_idx / (total_udfs + (1 if has_llm else 0)),
                         f"Evaluating declarative UDF '{udf_def.name}' ({u_idx + 1}/{total_udfs}) on {sample_count} sample rows..."
                     )
                 res = udf_def.sample_eval_fn(clean_dir, clean_tbl, sample_count=sample_count, **udf_kwargs)
@@ -186,65 +188,62 @@ class PlaygroundController:
                 res_datatypes = res.get("datatypes", ["str"] * len(res_headers))
                 res_data = res.get("data", [])
 
+                if not udf_headers:
+                    udf_headers = ["Status", "Row ID", "File Name"]
+                    udf_datatypes = ["str", "str", "str"]
+
                 extra_indices = []
-                extra_headers = []
-                extra_types = []
                 for i, h in enumerate(res_headers):
                     if h in ("Status", "Row ID", "File Name"):
                         continue
                     final_h = h
-                    if final_h in merged_headers:
+                    if final_h in udf_headers:
                         final_h = f"{udf_def.name}_{h}"
                     extra_indices.append(i)
-                    extra_headers.append(final_h)
-                    extra_types.append(res_datatypes[i] if i < len(res_datatypes) else "str")
+                    udf_headers.append(final_h)
+                    udf_datatypes.append(res_datatypes[i] if i < len(res_datatypes) else "str")
 
-                if not merged_rows:
+                if not udf_rows:
                     for row in res_data:
                         lead = [
                             row[0] if len(row) > 0 else "🧪 UDF Sample Test",
                             row[1] if len(row) > 1 else "",
                             row[2] if len(row) > 2 else ""
                         ]
-                        merged_rows.append(lead)
+                        udf_rows.append(lead)
 
-                # Ensure merged_rows has enough rows if res_data has more rows
-                while len(merged_rows) < len(res_data):
-                    r_idx = len(merged_rows)
+                while len(udf_rows) < len(res_data):
+                    r_idx = len(udf_rows)
                     row = res_data[r_idx]
                     lead = [
                         row[0] if len(row) > 0 else "🧪 UDF Sample Test",
                         row[1] if len(row) > 1 else "",
                         row[2] if len(row) > 2 else ""
                     ]
-                    lead.extend([""] * (len(merged_headers) - 3))
-                    merged_rows.append(lead)
+                    lead.extend([""] * (len(udf_headers) - 3))
+                    udf_rows.append(lead)
 
-                merged_headers.extend(extra_headers)
-                merged_datatypes.extend(extra_types)
-
-                # Append column values to each row, or pad with empty strings
-                for r_idx in range(len(merged_rows)):
+                for r_idx in range(len(udf_rows)):
                     if r_idx < len(res_data):
                         row = res_data[r_idx]
                         for c_idx in extra_indices:
                             val = row[c_idx] if c_idx < len(row) else ""
-                            merged_rows[r_idx].append(val)
+                            udf_rows[r_idx].append(val)
                     else:
                         for _ in extra_indices:
-                            merged_rows[r_idx].append("")
+                            udf_rows[r_idx].append("")
 
-            if progress_callback:
-                progress_callback(1.0, f"Evaluated {total_udfs} UDFs on {len(merged_rows)} sample rows.")
-
-            return {
-                "status": "success",
-                "headers": merged_headers,
-                "datatypes": merged_datatypes,
-                "data": merged_rows,
-                "count": len(merged_rows),
-                "is_udf": True
-            }
+            if not has_llm:
+                if progress_callback:
+                    progress_callback(1.0, f"Evaluated {total_udfs} UDFs on {len(udf_rows)} sample rows.")
+                return {
+                    "status": "success",
+                    "headers": udf_headers,
+                    "datatypes": udf_datatypes,
+                    "data": udf_rows,
+                    "count": len(udf_rows),
+                    "is_udf": True
+                }
 
         resolved_sys_prompt = system_prompt.strip() if system_prompt and system_prompt.strip() else get_domain_system_prompt(clean_dir)
         is_auto_split = (output_mode == "⚡ Auto-Split JSON Keys into Columns")
@@ -261,7 +260,7 @@ class PlaygroundController:
         try:
             results = PromptExecutor.run_sample_test(
                 model=model,
-                prompt_template=prompt_template,
+                prompt_template=remaining_prompt,
                 system_prompt=resolved_sys_prompt,
                 table_dir=clean_dir,
                 table_name=clean_tbl,
@@ -271,40 +270,68 @@ class PlaygroundController:
                 progress_callback=progress_callback
             )
 
+            all_keys = []
             if is_auto_split:
-                all_keys = []
                 for r in results:
                     for k in r.get("extracted_columns", []):
                         if k not in all_keys:
                             all_keys.append(k)
 
                 if all_keys:
-                    headers = ["Status", "Row ID", "File Name"] + all_keys
-                    rows = []
+                    llm_cols = all_keys
+                    llm_types = ["str"] * len(all_keys)
+                    llm_data_cells = []
                     for r in results:
                         parsed = r.get("parsed_json", {})
-                        row_vals = ["🧪 Test Preview", str(r.get("row_id", "")), str(r.get("file_name", ""))] + [str(parsed.get(k, "")) for k in all_keys]
-                        rows.append(row_vals)
-                    return {
-                        "status": "success",
-                        "headers": headers,
-                        "datatypes": ["str"] * len(headers),
-                        "data": rows,
-                        "count": len(rows),
-                        "keys": all_keys
-                    }
+                        llm_data_cells.append([str(parsed.get(k, "")) for k in all_keys])
+                else:
+                    llm_cols = ["Model Output"]
+                    llm_types = ["str"]
+                    llm_data_cells = [[str(r.get("llm_output", r.get("model_output", "")))] for r in results]
+            else:
+                llm_cols = ["Source Snippet", "Rendered Prompt", "Model Output"]
+                llm_types = ["str", "str", "str"]
+                llm_data_cells = [
+                    [str(r.get("source_content", "")), str(r.get("prompt_rendered", "")), str(r.get("llm_output", r.get("model_output", "")))]
+                    for r in results
+                ]
 
-            headers = ["Status", "Row ID", "File Name", "Source Snippet", "Rendered Prompt", "Model Output"]
-            rows = [
-                ["🧪 Test Preview", str(r.get("row_id", "")), str(r.get("file_name", "")), str(r.get("source_content", "")), str(r.get("prompt_rendered", "")), str(r.get("llm_output", r.get("model_output", "")))]
-                for r in results
-            ]
+            if udf_headers:
+                merged_headers = list(udf_headers) + llm_cols
+                merged_datatypes = list(udf_datatypes) + llm_types
+                merged_rows = []
+                for r_idx in range(max(len(udf_rows), len(llm_data_cells))):
+                    u_part = udf_rows[r_idx] if r_idx < len(udf_rows) else (["🧪 Sample Test", "", ""] + [""] * (len(udf_headers) - 3))
+                    l_part = llm_data_cells[r_idx] if r_idx < len(llm_data_cells) else [""] * len(llm_cols)
+                    merged_rows.append(list(u_part) + list(l_part))
+
+                if progress_callback:
+                    progress_callback(1.0, f"Evaluated {len(udf_matches)} UDFs and LLM on {len(merged_rows)} sample rows.")
+
+                return {
+                    "status": "success",
+                    "headers": merged_headers,
+                    "datatypes": merged_datatypes,
+                    "data": merged_rows,
+                    "count": len(merged_rows),
+                    "is_udf": True
+                }
+
+            full_headers = ["Status", "Row ID", "File Name"] + llm_cols
+            full_datatypes = ["str", "str", "str"] + llm_types
+            full_rows = []
+            for idx, r in enumerate(results):
+                lead = ["🧪 Test Preview", str(r.get("row_id", "")), str(r.get("file_name", ""))]
+                row_vals = llm_data_cells[idx] if idx < len(llm_data_cells) else [""] * len(llm_cols)
+                full_rows.append(lead + row_vals)
+
             return {
                 "status": "success",
-                "headers": headers,
-                "datatypes": ["str"] * len(headers),
-                "data": rows,
-                "count": len(rows)
+                "headers": full_headers,
+                "datatypes": full_datatypes,
+                "data": full_rows,
+                "count": len(full_rows),
+                "keys": all_keys if is_auto_split else []
             }
         except Exception as e:
             return {
@@ -339,18 +366,20 @@ class PlaygroundController:
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
 
-        # Check if prompt triggers registered declarative UDFs (single or multiple)
         from src.core.udf_registry import UDFRegistry
         udf_matches = UDFRegistry.match_all_prompts(prompt_template)
+        remaining_prompt = UDFRegistry.strip_udf_triggers(prompt_template) if udf_matches else prompt_template
+        has_llm = bool(remaining_prompt.strip())
+
+        all_cols_created = []
+        udf_summary_lines = []
+
         if udf_matches:
             total_udfs = len(udf_matches)
-            all_cols_created = []
-            successful_udfs = []
-
             for u_idx, (udf_def, udf_kwargs) in enumerate(udf_matches):
                 if progress_callback:
                     progress_callback(
-                        u_idx / total_udfs,
+                        u_idx / (total_udfs + (1 if has_llm else 0)),
                         f"Declaratively attaching UDF '{udf_def.name}' ({u_idx + 1}/{total_udfs}) computed columns to table..."
                     )
                 attach_res = udf_def.attach_fn(clean_dir, clean_tbl, **udf_kwargs)
@@ -363,12 +392,14 @@ class PlaygroundController:
                 for c in cols:
                     if c not in all_cols_created:
                         all_cols_created.append(c)
-                successful_udfs.append((udf_def, udf_kwargs, cols))
+                udf_summary_lines.append(
+                    f"- **UDF:** `{udf_def.name}` ({', '.join(f'{k}={v}' for k, v in udf_kwargs.items())}) -> Columns: `{', '.join(cols)}`"
+                )
 
+        if not has_llm:
             if progress_callback:
-                progress_callback(1.0, f"Successfully attached {len(all_cols_created)} columns from {total_udfs} UDFs.")
+                progress_callback(1.0, f"Successfully attached {len(all_cols_created)} columns from {len(udf_matches)} UDFs.")
 
-            # Fetch updated table data with newly created columns highlighted
             raw_preview = DBManager.get_table_data(clean_dir, clean_tbl, limit=25, lightweight=is_lightweight)
             raw_cols = raw_preview.get("columns", [])
             raw_data = raw_preview.get("data", [])
@@ -389,10 +420,6 @@ class PlaygroundController:
             dt_map = dict(zip(raw_cols, raw_dt))
             out_datatypes = ["str"] + [dt_map.get(c, "str") for c in ordered_cols]
 
-            udf_summary_lines = [
-                f"- **UDF:** `{u.name}` ({', '.join(f'{k}={v}' for k, v in kw.items())}) -> Columns: `{', '.join(cols)}`"
-                for u, kw, cols in successful_udfs
-            ]
             status_msg = (
                 f"### ✅ UDF Batch Execution Successful!\n"
                 f"- **Table:** `{clean_dir}.{clean_tbl}`\n"
@@ -434,7 +461,7 @@ class PlaygroundController:
 
         res = PromptExecutor.apply_prompt_to_table(
             model=model.strip(),
-            prompt_template=prompt_template,
+            prompt_template=remaining_prompt,
             system_prompt=resolved_sys_prompt,
             table_dir=clean_dir,
             table_name=clean_tbl,
@@ -447,13 +474,19 @@ class PlaygroundController:
         )
 
         if res.get("status") == "success":
-            cols_created = res.get("columns", [clean_col])
+            llm_cols_created = res.get("columns", [clean_col])
             rows_done = res.get("rows_processed", 0)
+            for c in llm_cols_created:
+                if c not in all_cols_created:
+                    all_cols_created.append(c)
+
+            summary_header = "### ✅ Hybrid (UDF + LLM) Batch Execution Successful!" if udf_matches else "### ✅ Batch Execution Successful!"
             status_msg = (
-                f"### ✅ Batch Execution Successful!\n"
+                f"{summary_header}\n"
                 f"- **Table:** `{clean_dir}.{clean_tbl}`\n"
-                f"- **Rows Enriched:** {rows_done}\n"
-                f"- **Columns Created / Updated:** `{', '.join(cols_created)}`\n"
+                + (("\n".join(udf_summary_lines) + "\n") if udf_summary_lines else "")
+                + f"- **Rows Enriched:** {rows_done}\n"
+                f"- **All Columns Created / Updated:** `{', '.join(all_cols_created)}`\n"
                 f"- **Model / Provider:** `{provider}` ({model})"
             )
             # Fetch updated table data with newly created columns highlighted
@@ -463,7 +496,7 @@ class PlaygroundController:
 
             # Prioritize newly created columns so they appear immediately after row identifier columns
             lead_cols = [c for c in ["id", "file_name"] if c in raw_cols]
-            created_in_raw = [c for c in cols_created if c in raw_cols and c not in lead_cols]
+            created_in_raw = [c for c in all_cols_created if c in raw_cols and c not in lead_cols]
             other_cols = [c for c in raw_cols if c not in lead_cols and c not in created_in_raw]
             ordered_cols = lead_cols + created_in_raw + other_cols
 
@@ -487,7 +520,7 @@ class PlaygroundController:
                 "output_headers": out_headers,
                 "output_datatypes": out_datatypes,
                 "output_data": out_rows,
-                "columns_created": cols_created,
+                "columns_created": all_cols_created,
                 "rows_processed": rows_done
             }
         else:

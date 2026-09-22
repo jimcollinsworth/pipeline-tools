@@ -11,6 +11,24 @@ tags: ["mentoring", "architecture", "testing", "directives", "tdd", "pixeltable"
 
 This journal records verbatim developer instructions, architectural directives, mentoring inputs, rules creation, and key technical pivots for the **Pipeline Tools** project. These entries capture high-impact guidance and generalized lessons for future development.
 
+## 📅 2026-09-22: Base64 Media Inspection Decoding & Hybrid UDF + LLM Prompt Execution (v1.3.15)
+
+**Context:** The developer reported two issues: (1) Clicking on table rows with base64 data URIs caused Win32 `[Errno 22] Invalid argument` in `os.path.exists` during media inspection; (2) Prompts combining both a UDF (e.g. `/mel_spectrogram of {file_name}`) and an LLM request (e.g. `Analyze the item: {file_name}...`) only ran the UDF and completely ignored the LLM request.
+
+**Verbatim Instruction:**
+> `1 error clicking on file names`
+> `2 analyze works fine on it's own, adds the json columns, but when i add a mel_spectrogram it only does the spectrogram, ignores the analyze/json`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Base64 Media Inspection Decoding (`src/controllers/tables_controller.py`)**:
+   - Prevented Windows `[Errno 22] Invalid argument` errors by checking string length (`len < 260`) and URI scheme before calling `os.path.exists`.
+   - Directly decoded `data:image/...` base64 data URIs into in-memory `PIL.Image.Image` objects via `base64.b64decode` and `io.BytesIO`. This allows Gradio's `gr.Image` component to display the image preview in the drawer without attempting to resolve filesystem paths against CWD.
+2. **Hybrid UDF + LLM Prompt Execution (`src/core/udf_registry.py`, `src/controllers/playground_controller.py`)**:
+   - Implemented `UDFRegistry.strip_udf_triggers` to cleanly parse and isolate remaining LLM prompt instructions when prompts combine both UDF invocations and natural language instructions.
+   - Enhanced `PlaygroundController.test_sample_flow` and `commit_batch_flow` to execute both declarative UDFs (evaluating audio DSP / classification features) and LLM completions simultaneously, merging side-by-side image columns and extracted JSON columns into unified preview tables and declarative table schemas.
+3. **Comprehensive Test Suite Verification**:
+   - All 110 automated tests pass cleanly (`110 Passed, 0 Failed, 0 Errors`).
+
 ---
 
 ## 📅 2026-09-22: Context-Aware Intellisense & Tabular Key Alignment Clarifications (v1.3.14)

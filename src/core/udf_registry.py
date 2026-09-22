@@ -140,6 +140,75 @@ class UDFRegistry:
         return matches[0] if matches else None
 
     @classmethod
+    def strip_udf_triggers(cls, prompt: str) -> str:
+        """
+        Remove UDF trigger commands/phrases from prompt to isolate any remaining LLM prompt text.
+        If the prompt only contains UDF triggers, returns an empty string.
+        """
+        if not prompt or not prompt.strip():
+            return ""
+
+        text = prompt.strip()
+        lines = text.splitlines()
+        remaining_lines = []
+
+        udf_names = set()
+        for u in cls._registry.values():
+            udf_names.add(u.name.lower())
+            udf_names.add(u.name.lower().replace("_", " "))
+            for a in u.aliases:
+                clean_a = a.lower().lstrip("/")
+                udf_names.add(clean_a)
+                udf_names.add(clean_a.replace(" ", "_"))
+                udf_names.add(clean_a.replace("_", " "))
+
+        for line in lines:
+            line_str = line.strip()
+            # If line is a slash command invocation (e.g. /mel_spectrogram [args] [of {file_name}])
+            if line_str.startswith("/"):
+                cmd_word = line_str.split()[0].lstrip("/").lower()
+                if cmd_word in udf_names:
+                    continue  # Drop this UDF line entirely
+
+            # Check if line is solely a standalone natural language UDF invocation (e.g. "mel_spectrogram of {file_name}")
+            cleaned_line = re.sub(r'^(?:compute|generate|render|show|extract|run)\s+', '', line_str, flags=re.IGNORECASE).strip()
+            cleaned_line = re.sub(r'\s+(?:of|for|on|from)\s+\{[a-zA-Z0-9_]+\}$', '', cleaned_line, flags=re.IGNORECASE).strip()
+            if cleaned_line.lower() in udf_names or cleaned_line.lower().replace(" ", "_") in udf_names:
+                continue
+
+            remaining_lines.append(line)
+
+        remaining_text = "\n".join(remaining_lines).strip()
+
+        candidates = []
+        for clean_a in sorted(udf_names, key=len, reverse=True):
+            for pat in [
+                rf"(?<!\S)/{re.escape(clean_a)}(?:\s+[\w=.:-]+)*(?:\s+(?:of|for|on)\s+\S+)?",
+                rf"(?<![\w/]){re.escape(clean_a)}(?:\s+(?:of|for|on)\s+\S+)?"
+            ]:
+                for m in re.finditer(pat, remaining_text, re.IGNORECASE):
+                    candidates.append((m.start(), m.end()))
+
+        candidates.sort(key=lambda x: (x[0], -(x[1] - x[0])))
+        merged = []
+        last_end = -1
+        for s, e in candidates:
+            if s >= last_end:
+                merged.append((s, e))
+                last_end = e
+
+        merged.sort(key=lambda x: x[0], reverse=True)
+        for s, e in merged:
+            remaining_text = remaining_text[:s] + " " + remaining_text[e:]
+
+        remaining_text = re.sub(r'^(?:\s*(?:and|with|then|also|,)\s*)+', '', remaining_text.strip(), flags=re.IGNORECASE)
+        remaining_text = re.sub(r'(?:\s*(?:and|with|then|also|,)\s*)+$', '', remaining_text.strip(), flags=re.IGNORECASE)
+        remaining_text = re.sub(r'\s+', ' ', remaining_text).strip()
+        if re.fullmatch(r'(?:of|for|on|and|with|then|also|,|\s)*(?:\{[a-zA-Z0-9_]+\})?', remaining_text, re.IGNORECASE):
+            return ""
+        return remaining_text
+
+    @classmethod
     def _parse_params(
         cls,
         text: str,

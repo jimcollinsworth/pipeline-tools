@@ -173,10 +173,30 @@ class TablesController:
                     m = re.search(r'src=["\']([^"\']+)["\']', spec_img)
                     if m:
                         spec_val = m.group(1)
-                elif os.path.exists(spec_img) or spec_img.startswith("data:"):
+                elif spec_img.startswith("data:"):
                     spec_val = spec_img
+                elif len(spec_img) < 260:
+                    try:
+                        if os.path.exists(spec_img):
+                            spec_val = spec_img
+                    except Exception:
+                        pass
             elif hasattr(spec_img, "save"):  # PIL.Image.Image
                 spec_val = spec_img
+
+        # If spec_val is a base64 data URI string, decode it into a PIL.Image so Gradio gr.Image renders without OS path errors
+        if isinstance(spec_val, str) and spec_val.startswith("data:image"):
+            try:
+                import base64
+                import io
+                from PIL import Image
+                _, b64_data = spec_val.split(",", 1)
+                raw_bytes = base64.b64decode(b64_data)
+                spec_val = Image.open(io.BytesIO(raw_bytes))
+            except Exception as e:
+                logger.debug(f"Could not decode base64 spectrogram image: {e}")
+                spec_val = None
+
         has_spectrogram = bool(spec_val is not None)
 
         return {

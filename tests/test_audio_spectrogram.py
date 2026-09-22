@@ -112,6 +112,7 @@ class TestAudioMelSpectrogram(unittest.TestCase):
         # Create base table schema if not exists
         schema = {
             "file_name": pxt.String,
+            "file_path": pxt.String,
             "modality": pxt.String,
             "audio": pxt.Audio,
         }
@@ -119,8 +120,8 @@ class TestAudioMelSpectrogram(unittest.TestCase):
 
         # Insert 1 audio row and 1 non-audio row
         tbl.insert([
-            {"file_name": "test_tone.wav", "modality": "audio", "audio": str(self.audio_file)},
-            {"file_name": "readme.txt", "modality": "document", "audio": None}
+            {"file_name": "test_tone.wav", "file_path": str(self.audio_file), "modality": "audio", "audio": str(self.audio_file)},
+            {"file_name": "readme.txt", "file_path": str(self.text_file), "modality": "document", "audio": None}
         ])
 
         # Attach computed columns
@@ -549,6 +550,255 @@ class TestAudioMelSpectrogram(unittest.TestCase):
         except Exception:
             pass
 
+    def test_24_udf_registry_match_multiple_udfs(self):
+        """[Audio] Verify UDFRegistry matches multiple UDFs from natural language and slash commands."""
+        from src.core.udf_registry import UDFRegistry
+
+        # 1. User's exact prompt: "mel_spectrograph and chroma for {file_name}"
+        matches_nl = UDFRegistry.match_all_prompts("mel_spectrograph and chroma for {file_name}")
+        self.assertEqual(len(matches_nl), 2)
+        self.assertEqual(matches_nl[0][0].name, "mel_spectrogram")
+        self.assertEqual(matches_nl[1][0].name, "chroma")
+        # Defaults populated
+        self.assertEqual(matches_nl[0][1]["n_mels"], 128)
+        self.assertEqual(matches_nl[1][1]["n_chroma"], 12)
+
+        # 2. Multi-slash command with parameters (verifying command isolation)
+        matches_slash = UDFRegistry.match_all_prompts("/mel_spectrogram hop_length=256 /chroma n_chroma=16 colormap=coolwarm")
+        self.assertEqual(len(matches_slash), 2)
+        self.assertEqual(matches_slash[0][0].name, "mel_spectrogram")
+        self.assertEqual(matches_slash[0][1]["hop_length"], 256)
+        self.assertEqual(matches_slash[0][1]["colormap"], "magma")  # Command isolation: mel should not inherit chroma's colormap
+        self.assertEqual(matches_slash[1][0].name, "chroma")
+        self.assertEqual(matches_slash[1][1]["n_chroma"], 16)
+        self.assertEqual(matches_slash[1][1]["colormap"], "coolwarm")
+        self.assertEqual(matches_slash[1][1]["hop_length"], 512)  # Chroma should not inherit mel's hop_length
+
+        # 3. Comma-separated parameter parsing
+        matches_comma = UDFRegistry.match_all_prompts("/mel_spectrogram hop_length=256, n_mels=64 /chroma n_chroma=16, colormap=coolwarm")
+        self.assertEqual(len(matches_comma), 2)
+        self.assertEqual(matches_comma[0][1]["hop_length"], 256)
+        self.assertEqual(matches_comma[0][1]["n_mels"], 64)
+        self.assertEqual(matches_comma[1][1]["n_chroma"], 16)
+        self.assertEqual(matches_comma[1][1]["colormap"], "coolwarm")
+
+        # 4. Parenthesized parameter syntax
+        matches_parens = UDFRegistry.match_all_prompts("mel_spectrogram(hop_length=256, n_mels=64) and chroma(n_chroma=16)")
+        self.assertEqual(len(matches_parens), 2)
+        self.assertEqual(matches_parens[0][1]["hop_length"], 256)
+        self.assertEqual(matches_parens[0][1]["n_mels"], 64)
+        self.assertEqual(matches_parens[1][1]["n_chroma"], 16)
+
+        # 5. Natural language with shared trailing parameter
+        matches_shared = UDFRegistry.match_all_prompts("mel_spectrograph and chroma with colormap=coolwarm")
+        self.assertEqual(len(matches_shared), 2)
+        self.assertEqual(matches_shared[0][1]["colormap"], "coolwarm")
+        self.assertEqual(matches_shared[1][1]["colormap"], "coolwarm")
+
+        # 6. Triple UDF match
+        matches_triple = UDFRegistry.match_all_prompts("generate mel_spectrogram, mfcc, and chroma for {file_name}")
+        self.assertEqual(len(matches_triple), 3)
+        names = [u[0].name for u in matches_triple]
+        self.assertEqual(names, ["mel_spectrogram", "mfcc", "chroma"])
+
+        # 7. Backward compatibility of match_prompt (returns first match)
+        first_match = UDFRegistry.match_prompt("mel_spectrograph and chroma for {file_name}")
+        self.assertIsNotNone(first_match)
+        self.assertEqual(first_match[0].name, "mel_spectrogram")
+
+    def test_25_test_sample_flow_multiple_udfs_merge(self):
+        """[Audio] Verify PlaygroundController merges multiple UDF outputs into unified sample test preview."""
+        from src.controllers.playground_controller import PlaygroundController
+
+        progress_calls = []
+        def test_cb(pct, desc):
+            progress_calls.append((pct, desc))
+
+        res = PlaygroundController.test_sample_flow(
+            domain=self.domain,
+            table_name=self.table,
+            provider="Ollama",
+            model="llama3.2",
+            prompt_template="mel_spectrograph and chroma for {file_name}",
+            sample_count=2,
+            progress_callback=test_cb
+        )
+
+        self.assertEqual(res["status"], "success")
+        headers = res["headers"]
+        datatypes = res["datatypes"]
+        data = res["data"]
+
+        # Verify side-by-side output columns exist for both UDFs
+        self.assertIn("mel_spectrogram_img", headers)
+        self.assertIn("chroma_img", headers)
+        self.assertIn("mel_spectrogram_shape", headers)
+        self.assertIn("chroma_shape", headers)
+
+        # Verify HTML datatypes for both images
+        mel_img_idx = headers.index("mel_spectrogram_img")
+        chroma_img_idx = headers.index("chroma_img")
+        self.assertEqual(datatypes[mel_img_idx], "html")
+        self.assertEqual(datatypes[chroma_img_idx], "html")
+
+        # Verify audio row contains both image previews
+        audio_row = [r for r in data if r[2] == "test_tone.wav"][0]
+        self.assertIn("<img", audio_row[mel_img_idx])
+        self.assertIn("<img", audio_row[chroma_img_idx])
+
+        # Verify progress callback was triggered
+        self.assertGreater(len(progress_calls), 0)
+
+    def test_26_commit_batch_flow_multiple_udfs(self):
+        """[Audio] Verify PlaygroundController.commit_batch_flow declaratively attaches multiple UDFs in sequence."""
+        import pixeltable as pxt
+        from src.controllers.playground_controller import PlaygroundController
+
+        # Create isolated table for multi-UDF attachment test
+        table_path = f"{self.domain}.audio_multi_batch_test"
+        schema = {
+            "file_name": pxt.String,
+            "file_path": pxt.String,
+            "modality": pxt.String,
+            "audio": pxt.Audio
+        }
+        tbl = pxt.create_table(table_path, schema=schema, if_exists="replace")
+        tbl.insert([
+            {
+                "file_name": "test_tone.wav",
+                "file_path": str(self.audio_file),
+                "modality": "audio",
+                "audio": str(self.audio_file)
+            }
+        ])
+
+        res = PlaygroundController.commit_batch_flow(
+            domain=self.domain,
+            table_name="audio_multi_batch_test",
+            provider="Ollama",
+            model="llama3.2",
+            prompt_template="mel_spectrograph and chroma for {file_name}"
+        )
+
+        self.assertEqual(res["status"], "success")
+        cols_created = res.get("columns_created", [])
+        self.assertIn("mel_spectrogram", cols_created)
+        self.assertIn("mel_spectrogram_img", cols_created)
+        self.assertIn("chroma", cols_created)
+        self.assertIn("chroma_img", cols_created)
+
+        # Verify columns exist on the table in Pixeltable
+        updated_tbl = pxt.get_table(table_path)
+        tbl_cols = list(updated_tbl.columns()) if callable(updated_tbl.columns) else list(updated_tbl._schema.keys())
+        self.assertIn("mel_spectrogram", tbl_cols)
+        self.assertIn("mel_spectrogram_img", tbl_cols)
+        self.assertIn("chroma", tbl_cols)
+        self.assertIn("chroma_img", tbl_cols)
+
+        # Cleanup
+        try:
+            DBManager.drop_table(self.domain, "audio_multi_batch_test")
+        except Exception:
+            pass
+
+    def test_27_playground_callback_signatures(self):
+        """[UI] Verify Playground flexible progress callback handles 1, 2, and 3 arguments without TypeError."""
+        records = []
+
+        def mock_progress(pct, desc=None):
+            records.append((pct, desc))
+
+        def cb(*args, **kwargs):
+            pct = 0.5
+            desc = None
+            if len(args) >= 3:
+                cur, total, detail = args[0], args[1], args[2]
+                pct = (cur / total) if total else 0.5
+                desc = str(detail) if detail is not None else None
+            elif len(args) == 2:
+                first, second = args[0], args[1]
+                if isinstance(first, (int, float)) and isinstance(second, str):
+                    pct = float(first) if first <= 1.0 else 0.5
+                    desc = second
+                elif isinstance(first, (int, float)) and isinstance(second, (int, float)):
+                    pct = (first / second) if second else 0.5
+                else:
+                    desc = str(second)
+            elif len(args) == 1:
+                if isinstance(args[0], (int, float)):
+                    pct = float(args[0])
+                else:
+                    desc = str(args[0])
+            desc = kwargs.get("desc") or kwargs.get("detail") or kwargs.get("message") or desc
+            if "step" in kwargs and "total" in kwargs and kwargs["total"]:
+                pct = kwargs["step"] / kwargs["total"]
+            elif "cur" in kwargs and "total" in kwargs and kwargs["total"]:
+                pct = kwargs["cur"] / kwargs["total"]
+            elif "pct" in kwargs:
+                pct = kwargs["pct"]
+            if pct is not None:
+                try:
+                    pct = max(0.0, min(1.0, float(pct)))
+                except (ValueError, TypeError):
+                    pct = 0.5
+            mock_progress(pct, desc=desc)
+
+        # 3 args: cur, total, detail
+        cb(1, 10, "Step 1 of 10")
+        self.assertEqual(records[-1], (0.1, "Step 1 of 10"))
+
+        # 2 args: float pct, string detail
+        cb(0.5, "Evaluating UDF...")
+        self.assertEqual(records[-1], (0.5, "Evaluating UDF..."))
+
+        # 2 args: int cur, int total
+        cb(4, 8)
+        self.assertEqual(records[-1], (0.5, None))
+
+        # 1 arg: string message
+        cb("Processing table...")
+        self.assertEqual(records[-1], (0.5, "Processing table..."))
+
+        # 1 arg: float pct
+        cb(0.75)
+        self.assertEqual(records[-1], (0.75, None))
+
+        # kwargs: step, total, detail
+        cb(step=3, total=10, detail="Computing embeddings...")
+        self.assertEqual(records[-1], (0.3, "Computing embeddings..."))
+
+        # kwargs: message
+        cb(message="Done computing!")
+        self.assertEqual(records[-1], (0.5, "Done computing!"))
+
+    def test_28_sample_flow_jagged_row_padding(self):
+        """[Audio] Verify multi-UDF test_sample_flow guarantees uniform row lengths matching headers."""
+        from src.controllers.playground_controller import PlaygroundController
+
+        # Test sample flow with triple UDF prompt
+        res = PlaygroundController.test_sample_flow(
+            domain=self.domain,
+            table_name=self.table,
+            provider="Ollama",
+            model="llama3.2",
+            prompt_template="mel_spectrograph, mfcc, and chroma for {file_name}",
+            sample_count=2
+        )
+
+        self.assertEqual(res["status"], "success")
+        headers = res["headers"]
+        data = res["data"]
+        datatypes = res["datatypes"]
+
+        # Uniform row length invariant: every row must have exactly len(headers) columns
+        self.assertEqual(len(headers), len(datatypes))
+        for r_idx, row in enumerate(data):
+            self.assertEqual(
+                len(row), len(headers),
+                f"Row {r_idx} length ({len(row)}) does not match headers length ({len(headers)})"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
+

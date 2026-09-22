@@ -1025,6 +1025,45 @@ class TestPipelineTools(unittest.TestCase):
         self.assertIn("Using , summarize the table.", cleaned_user.replace("Using  ,", "Using ,"))
         self.assertIn("pixeltable", applied)
 
+    def test_unified_slash_commands_intellisense(self):
+        """[UI] Verify get_all_slash_commands combines Skills, UDFs, and Segmenters alphabetically with type badges."""
+        from app import get_all_slash_commands
+
+        commands = get_all_slash_commands()
+        self.assertTrue(len(commands) > 0)
+
+        # Check required fields
+        for c in commands:
+            self.assertIn("name", c)
+            self.assertIn("slash_command", c)
+            self.assertTrue(c["slash_command"].startswith("/"))
+            self.assertIn("type", c)
+            self.assertIn(c["type"], ["Skill", "UDF", "Segmenter"])
+            self.assertIn("description", c)
+
+        # Check alphabetical ordering
+        cmds_lower = [c["slash_command"].lower() for c in commands]
+        self.assertEqual(cmds_lower, sorted(cmds_lower))
+
+        # Check presence of all three types
+        types = {c["type"] for c in commands}
+        self.assertIn("Skill", types)
+        self.assertIn("UDF", types)
+        self.assertIn("Segmenter", types)
+
+        # Check specific key commands
+        slash_set = {c["slash_command"] for c in commands}
+        self.assertIn("/entity-recognition", slash_set)
+        self.assertIn("/mel_spectrogram", slash_set)
+        self.assertIn("/mfcc", slash_set)
+        self.assertIn("/chroma", slash_set)
+        self.assertIn("/audio_stats", slash_set)
+        self.assertIn("/split_pages", slash_set)
+        self.assertIn("/split_paragraphs", slash_set)
+        self.assertIn("/split_audio", slash_set)
+        self.assertIn("/extract_frames", slash_set)
+
+
 
 
 

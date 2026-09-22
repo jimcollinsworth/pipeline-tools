@@ -13,6 +13,30 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
+## 📅 2026-09-22: Unified Slash Intellisense (Skills, UDFs, Segmenters), Multi-UDF Prompts & Callback Hardening (v1.3.8)
+
+**Context:** The developer requested adding registered UDFs and Segmenters to the in-textbox slash Intellisense popup, sorted alphabetically with distinct type badges (`[Skill]`, `[UDF]`, `[Segmenter]`) and descriptions. Additionally, during a live test of multi-UDF prompts (`"mel_spectrograph and chroma for {file_name}"`), a `progress_callback` argument mismatch (`cb() missing 1 required positional argument: 'detail'`) was discovered and fixed.
+
+**Verbatim Instruction:**
+> `need to add registered UDFs to the intellisense since they are accessible using slash, can probably make the list alphabetical and identify the type (skill, UDF, ...) with description`
+> `for the first test i used the prompt "mel_spectrograph and chroma for {file_name}" not sure if multiple udfs can be used`
+> `TypeError: render_playground_tab.<locals>.on_test_sample.<locals>.cb() missing 1 required positional argument: 'detail' - failed on test`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Unified Slash Intellisense with Type Badges**:
+   - `get_all_slash_commands()` in `app.py` unifies `SkillsRegistry`, `UDFRegistry`, and `SegmenterRegistry` into a single alphabetically sorted collection.
+   - Popups render command names, descriptions, and color-coded type badges (`[Skill]`, `[UDF]`, `[Segmenter]`) with matching filter queries across command names, types, and descriptions.
+2. **Multi-UDF Prompt Execution**:
+   - Expanded `UDFRegistry.match_all_prompts` to extract and isolate multiple UDFs from a single prompt (e.g. `"mel_spectrograph and chroma for {file_name}"`).
+   - In `PlaygroundController.test_sample_flow`, multiple UDF evaluations are merged side-by-side into a unified preview table with guaranteed uniform row lengths.
+   - In `PlaygroundController.commit_batch_flow`, all matched UDFs are attached sequentially as computed columns in Pixeltable.
+3. **Progress Callback Signature Hardening**:
+   - Updated `cb(*args, **kwargs)` in `playground_tab.py` to flexibly accept `(pct, msg)`, `(step, total, detail)`, or keyword arguments, clamping progress values safely to `[0.0, 1.0]`.
+4. **Full Test Suite Verification**:
+   - All 102 automated tests pass cleanly (`102 Passed, 0 Failed, 0 Errors`).
+
+---
+
 ## 📅 2026-09-22: Unified Test Domain (pxt_tests) & Database Directory Cleanup (v1.3.7)
 
 **Context:** The developer noticed multiple lingering test directories (`test_seg`, `test_pxt`, `test_audio_suite`, etc.) cluttering up the shared Pixeltable database and instructed consolidating all tests into a single shared domain `pxt_tests` with namespaced table identifiers and performing a one-time purge of stale test domains.

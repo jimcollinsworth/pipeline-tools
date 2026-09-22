@@ -156,14 +156,95 @@ class PlaygroundController:
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
 
-        # Check if prompt triggers a registered declarative UDF (e.g. /mel_spectrogram or "mel spectrogram")
+        # Check if prompt triggers a registered declarative UDF (single or multiple)
         from src.core.udf_registry import UDFRegistry
-        udf_match = UDFRegistry.match_prompt(prompt_template)
-        if udf_match is not None:
-            udf_def, udf_kwargs = udf_match
+        udf_matches = UDFRegistry.match_all_prompts(prompt_template)
+        if udf_matches:
+            if len(udf_matches) == 1:
+                udf_def, udf_kwargs = udf_matches[0]
+                if progress_callback:
+                    progress_callback(0.5, f"Evaluating declarative UDF '{udf_def.name}' on {sample_count} sample rows...")
+                return udf_def.sample_eval_fn(clean_dir, clean_tbl, sample_count=sample_count, **udf_kwargs)
+
+            # Multiple UDFs: evaluate each and merge non-lead columns into a unified preview table
+            total_udfs = len(udf_matches)
+            merged_headers = ["Status", "Row ID", "File Name"]
+            merged_datatypes = ["str", "str", "str"]
+            merged_rows: List[List[Any]] = []
+
+            for u_idx, (udf_def, udf_kwargs) in enumerate(udf_matches):
+                if progress_callback:
+                    progress_callback(
+                        u_idx / total_udfs,
+                        f"Evaluating declarative UDF '{udf_def.name}' ({u_idx + 1}/{total_udfs}) on {sample_count} sample rows..."
+                    )
+                res = udf_def.sample_eval_fn(clean_dir, clean_tbl, sample_count=sample_count, **udf_kwargs)
+                if res.get("status") != "success":
+                    return res
+
+                res_headers = res.get("headers", [])
+                res_datatypes = res.get("datatypes", ["str"] * len(res_headers))
+                res_data = res.get("data", [])
+
+                extra_indices = []
+                extra_headers = []
+                extra_types = []
+                for i, h in enumerate(res_headers):
+                    if h in ("Status", "Row ID", "File Name"):
+                        continue
+                    final_h = h
+                    if final_h in merged_headers:
+                        final_h = f"{udf_def.name}_{h}"
+                    extra_indices.append(i)
+                    extra_headers.append(final_h)
+                    extra_types.append(res_datatypes[i] if i < len(res_datatypes) else "str")
+
+                if not merged_rows:
+                    for row in res_data:
+                        lead = [
+                            row[0] if len(row) > 0 else "🧪 UDF Sample Test",
+                            row[1] if len(row) > 1 else "",
+                            row[2] if len(row) > 2 else ""
+                        ]
+                        merged_rows.append(lead)
+
+                # Ensure merged_rows has enough rows if res_data has more rows
+                while len(merged_rows) < len(res_data):
+                    r_idx = len(merged_rows)
+                    row = res_data[r_idx]
+                    lead = [
+                        row[0] if len(row) > 0 else "🧪 UDF Sample Test",
+                        row[1] if len(row) > 1 else "",
+                        row[2] if len(row) > 2 else ""
+                    ]
+                    lead.extend([""] * (len(merged_headers) - 3))
+                    merged_rows.append(lead)
+
+                merged_headers.extend(extra_headers)
+                merged_datatypes.extend(extra_types)
+
+                # Append column values to each row, or pad with empty strings
+                for r_idx in range(len(merged_rows)):
+                    if r_idx < len(res_data):
+                        row = res_data[r_idx]
+                        for c_idx in extra_indices:
+                            val = row[c_idx] if c_idx < len(row) else ""
+                            merged_rows[r_idx].append(val)
+                    else:
+                        for _ in extra_indices:
+                            merged_rows[r_idx].append("")
+
             if progress_callback:
-                progress_callback(0.5, f"Evaluating declarative UDF '{udf_def.name}' on {sample_count} sample rows...")
-            return udf_def.sample_eval_fn(clean_dir, clean_tbl, sample_count=sample_count, **udf_kwargs)
+                progress_callback(1.0, f"Evaluated {total_udfs} UDFs on {len(merged_rows)} sample rows.")
+
+            return {
+                "status": "success",
+                "headers": merged_headers,
+                "datatypes": merged_datatypes,
+                "data": merged_rows,
+                "count": len(merged_rows),
+                "is_udf": True
+            }
 
         resolved_sys_prompt = system_prompt.strip() if system_prompt and system_prompt.strip() else get_domain_system_prompt(clean_dir)
         is_auto_split = (output_mode == "⚡ Auto-Split JSON Keys into Columns")
@@ -258,57 +339,76 @@ class PlaygroundController:
         clean_dir = domain.strip()
         clean_tbl = table_name.strip()
 
-        # Check if prompt triggers a registered declarative UDF
+        # Check if prompt triggers registered declarative UDFs (single or multiple)
         from src.core.udf_registry import UDFRegistry
-        udf_match = UDFRegistry.match_prompt(prompt_template)
-        if udf_match is not None:
-            udf_def, udf_kwargs = udf_match
+        udf_matches = UDFRegistry.match_all_prompts(prompt_template)
+        if udf_matches:
+            total_udfs = len(udf_matches)
+            all_cols_created = []
+            successful_udfs = []
+
+            for u_idx, (udf_def, udf_kwargs) in enumerate(udf_matches):
+                if progress_callback:
+                    progress_callback(
+                        u_idx / total_udfs,
+                        f"Declaratively attaching UDF '{udf_def.name}' ({u_idx + 1}/{total_udfs}) computed columns to table..."
+                    )
+                attach_res = udf_def.attach_fn(clean_dir, clean_tbl, **udf_kwargs)
+                if attach_res.get("status") != "success":
+                    return {
+                        "status": "error",
+                        "message": f"### ❌ UDF '{udf_def.name}' Execution Failed\n```\n{attach_res.get('message', 'Unknown error')}\n```"
+                    }
+                cols = attach_res.get("columns", [])
+                for c in cols:
+                    if c not in all_cols_created:
+                        all_cols_created.append(c)
+                successful_udfs.append((udf_def, udf_kwargs, cols))
+
             if progress_callback:
-                progress_callback(0.5, f"Declaratively attaching UDF '{udf_def.name}' computed columns to table...")
-            attach_res = udf_def.attach_fn(clean_dir, clean_tbl, **udf_kwargs)
-            if attach_res.get("status") == "success":
-                cols_created = attach_res.get("columns", ["mel_spectrogram", "mel_spectrogram_img"])
-                raw_preview = DBManager.get_table_data(clean_dir, clean_tbl, limit=25, lightweight=is_lightweight)
-                raw_cols = raw_preview.get("columns", [])
-                raw_data = raw_preview.get("data", [])
+                progress_callback(1.0, f"Successfully attached {len(all_cols_created)} columns from {total_udfs} UDFs.")
 
-                lead_cols = [c for c in ["id", "file_name"] if c in raw_cols]
-                created_in_raw = [c for c in cols_created if c in raw_cols and c not in lead_cols]
-                other_cols = [c for c in raw_cols if c not in lead_cols and c not in created_in_raw]
-                ordered_cols = lead_cols + created_in_raw + other_cols
+            # Fetch updated table data with newly created columns highlighted
+            raw_preview = DBManager.get_table_data(clean_dir, clean_tbl, limit=25, lightweight=is_lightweight)
+            raw_cols = raw_preview.get("columns", [])
+            raw_data = raw_preview.get("data", [])
 
-                col_indices = [raw_cols.index(c) for c in ordered_cols]
-                out_headers = ["Status"] + ordered_cols
-                out_rows = []
-                for idx, r in enumerate(raw_data):
-                    reordered_row = [r[i] for i in col_indices]
-                    out_rows.append([f"💾 Saved ({idx + 1})"] + reordered_row)
+            lead_cols = [c for c in ["id", "file_name"] if c in raw_cols]
+            created_in_raw = [c for c in all_cols_created if c in raw_cols and c not in lead_cols]
+            other_cols = [c for c in raw_cols if c not in lead_cols and c not in created_in_raw]
+            ordered_cols = lead_cols + created_in_raw + other_cols
 
-                raw_dt = raw_preview.get("datatypes", ["str"] * len(raw_cols))
-                dt_map = dict(zip(raw_cols, raw_dt))
-                out_datatypes = ["str"] + [dt_map.get(c, "str") for c in ordered_cols]
+            col_indices = [raw_cols.index(c) for c in ordered_cols]
+            out_headers = ["Status"] + ordered_cols
+            out_rows = []
+            for idx, r in enumerate(raw_data):
+                reordered_row = [r[i] for i in col_indices]
+                out_rows.append([f"💾 Saved ({idx + 1})"] + reordered_row)
 
-                status_msg = (
-                    f"### ✅ UDF Batch Execution Successful!\n"
-                    f"- **Table:** `{clean_dir}.{clean_tbl}`\n"
-                    f"- **UDF:** `{udf_def.name}` ({', '.join(f'{k}={v}' for k, v in udf_kwargs.items())})\n"
-                    f"- **Columns Attached:** `{', '.join(cols_created)}`\n"
-                    f"- **Execution Model:** Declarative Pixeltable Computed Columns (zero row loops)"
-                )
-                return {
-                    "status": "success",
-                    "message": status_msg,
-                    "output_headers": out_headers,
-                    "output_datatypes": out_datatypes,
-                    "output_data": out_rows,
-                    "columns_created": cols_created,
-                    "rows_processed": len(raw_data)
-                }
-            else:
-                return {
-                    "status": "error",
-                    "message": f"### ❌ UDF Execution Failed\n```\n{attach_res.get('message', 'Unknown error')}\n```"
-                }
+            raw_dt = raw_preview.get("datatypes", ["str"] * len(raw_cols))
+            dt_map = dict(zip(raw_cols, raw_dt))
+            out_datatypes = ["str"] + [dt_map.get(c, "str") for c in ordered_cols]
+
+            udf_summary_lines = [
+                f"- **UDF:** `{u.name}` ({', '.join(f'{k}={v}' for k, v in kw.items())}) -> Columns: `{', '.join(cols)}`"
+                for u, kw, cols in successful_udfs
+            ]
+            status_msg = (
+                f"### ✅ UDF Batch Execution Successful!\n"
+                f"- **Table:** `{clean_dir}.{clean_tbl}`\n"
+                + "\n".join(udf_summary_lines) + "\n"
+                f"- **Total Columns Attached:** `{', '.join(all_cols_created)}`\n"
+                f"- **Execution Model:** Declarative Pixeltable Computed Columns (zero row loops)"
+            )
+            return {
+                "status": "success",
+                "message": status_msg,
+                "output_headers": out_headers,
+                "output_datatypes": out_datatypes,
+                "output_data": out_rows,
+                "columns_created": all_cols_created,
+                "rows_processed": len(raw_data)
+            }
 
         is_auto_split = (output_mode == "⚡ Auto-Split JSON Keys into Columns")
         clean_col = target_column.strip() if target_column and target_column.strip() else "llm_summary"

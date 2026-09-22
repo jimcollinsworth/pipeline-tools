@@ -13,6 +13,8 @@ import json
 import gradio as gr
 from src.core.config import get_settings
 from src.core.skills import SkillsRegistry
+from src.core.udf_registry import UDFRegistry
+from src.core.segmenter_registry import SegmenterRegistry
 from src.ui.settings_tab import render_settings_tab
 from src.ui.ingest_tab import render_ingest_tab
 from src.ui.segmentation_tab import create_segmentation_tab, render_segmentation_tab
@@ -331,12 +333,41 @@ code {
 .slash-menu-item.active, .slash-menu-item:hover {
     background-color: #eff6ff;
 }
+.slash-menu-cmd-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 2px;
+}
 .slash-menu-cmd {
     font-family: "JetBrains Mono", monospace;
     font-size: 0.85rem;
     font-weight: 600;
     color: #2563eb;
-    margin-bottom: 2px;
+}
+.slash-menu-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+.badge-udf {
+    background: #fdf2f8;
+    color: #db2777;
+    border: 1px solid #fbcfe8;
+}
+.badge-skill {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+}
+.badge-segmenter {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
 }
 .slash-menu-desc {
     font-size: 0.76rem;
@@ -371,12 +402,50 @@ code {
 }
 """
 
+def get_all_slash_commands() -> list[dict[str, str]]:
+    """Assemble a unified, alphabetically sorted list of all slash commands: Skills, UDFs, Segmenters."""
+    commands: list[dict[str, str]] = []
+    
+    # 1. Agent Skills
+    for s in SkillsRegistry.list_skills():
+        cmd = s.get("slash_command") or f"/{s['name']}"
+        commands.append({
+            "name": s["name"],
+            "slash_command": cmd,
+            "type": "Skill",
+            "description": s.get("description", "")
+        })
+        
+    # 2. Declarative UDFs
+    for u in UDFRegistry.list_udfs():
+        commands.append({
+            "name": u.name,
+            "slash_command": f"/{u.name}",
+            "type": "UDF",
+            "description": u.description
+        })
+        
+    # 3. Native Segmenters
+    for seg in SegmenterRegistry.list_segmenters():
+        commands.append({
+            "name": seg.name,
+            "slash_command": f"/{seg.name}",
+            "type": "Segmenter",
+            "description": seg.description
+        })
+        
+    # Alphabetical sorting by slash command name (case-insensitive)
+    commands.sort(key=lambda x: x["slash_command"].lower())
+    return commands
+
 def get_custom_head() -> str:
-    """Generate HTML head script injecting discovered skills and in-textbox slash Intellisense."""
-    skills_json = json.dumps(SkillsRegistry.list_skills())
+    """Generate HTML head script injecting discovered skills, UDFs, and segmenters into slash Intellisense."""
+    commands_json = json.dumps(get_all_slash_commands())
     return f"""
 <script>
-window.PIPELINE_SKILLS = {skills_json};
+window.PIPELINE_COMMANDS = {commands_json};
+window.PIPELINE_SKILLS = window.PIPELINE_COMMANDS;
+
 
 const initSlashIntellisense = () => {{
     const disableAutofill = () => {{
@@ -452,12 +521,17 @@ const initSlashIntellisense = () => {{
             hideMenu();
             return;
         }}
-        let html = '<div class="slash-menu-header">⚡ Agent Skills & Directives</div><div class="slash-menu-list">';
+        let html = '<div class="slash-menu-header">⚡ Slash Commands (Skills, UDFs, Segmenters)</div><div class="slash-menu-list">';
         currentMatches.forEach((s, idx) => {{
             const isSelected = idx === selectedIndex;
             const cmd = s.slash_command || `/${{s.name}}`;
+            const type = s.type || "Skill";
+            const typeClass = type.toLowerCase();
             html += `<div class="slash-menu-item ${{isSelected ? 'active' : ''}}" role="option" aria-selected="${{isSelected}}" data-index="${{idx}}">
-                <div class="slash-menu-cmd">${{cmd}}</div>
+                <div class="slash-menu-cmd-row">
+                    <span class="slash-menu-cmd">${{cmd}}</span>
+                    <span class="slash-menu-badge badge-${{typeClass}}">${{type}}</span>
+                </div>
                 <div class="slash-menu-desc">${{s.description || ''}}</div>
             </div>`;
         }});
@@ -492,10 +566,11 @@ const initSlashIntellisense = () => {{
             queryStartIndex = cursorPos - match[1].length - 1;
             const query = match[1].toLowerCase();
 
-            const allSkills = window.PIPELINE_SKILLS || [];
-            currentMatches = allSkills.filter(s => 
+            const allCommands = window.PIPELINE_COMMANDS || window.PIPELINE_SKILLS || [];
+            currentMatches = allCommands.filter(s => 
                 s.name.toLowerCase().includes(query) ||
                 (s.slash_command && s.slash_command.toLowerCase().includes(query)) ||
+                (s.type && s.type.toLowerCase().includes(query)) ||
                 (s.description && s.description.toLowerCase().includes(query))
             );
             selectedIndex = 0;

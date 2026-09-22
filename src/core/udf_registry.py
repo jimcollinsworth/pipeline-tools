@@ -7,7 +7,7 @@ Provides metadata, parameter parsing, sample test evaluation, and declarative ba
 
 import os
 import re
-from typing import Dict, Any, Optional, List, Callable, Tuple
+from typing import Dict, Any, Optional, List, Callable, Tuple, Set, Union
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -39,81 +39,149 @@ class UDFRegistry:
         return list(cls._registry.values())
 
     @classmethod
-    def match_prompt(cls, prompt: str) -> Optional[Tuple[UDFDefinition, Dict[str, Any]]]:
+    def match_all_prompts(cls, prompt: str) -> List[Tuple[UDFDefinition, Dict[str, Any]]]:
         """
-        Check if a prompt invokes a registered UDF via:
-        1. Slash command: e.g. `/mel_spectrogram hop_length=256 colormap=magma`
-        2. Natural language trigger: e.g. `mel spectrogram of {file_name}`, `generate mel spectrogram`
-        Returns (UDFDefinition, parsed_kwargs) or None.
+        Check if a prompt invokes one or more registered UDFs via:
+        1. Slash commands: e.g. `/mel_spectrogram hop_length=256 /chroma colormap=coolwarm`
+        2. Natural language triggers: e.g. `mel_spectrograph and chroma for {file_name}`
+        Returns a list of (UDFDefinition, parsed_kwargs) in order of appearance in prompt.
         """
         if not prompt or not prompt.strip():
-            return None
+            return []
         clean_p = prompt.strip()
-        lower_p = clean_p.lower()
 
-        # Check all registered UDFs
+        candidates = []
         for udf in cls._registry.values():
-            matched = False
-            remaining_text = ""
+            triggers = set()
+            # 1. Slash commands (/name or /alias)
+            triggers.add(f"/{udf.name}")
+            for a in udf.aliases:
+                if a.startswith("/"):
+                    triggers.add(a)
 
-            # 1. Slash command matching (/name or /alias)
-            slash_cmd = f"/{udf.name}".lower()
-            if lower_p.startswith(slash_cmd):
-                matched = True
-                remaining_text = clean_p[len(slash_cmd):].strip()
-            else:
-                for alias in udf.aliases:
-                    alias_lower = alias.lower()
-                    if alias_lower.startswith("/") and lower_p.startswith(alias_lower):
-                        matched = True
-                        remaining_text = clean_p[len(alias_lower):].strip()
-                        break
+            # 2. Natural language triggers (name or aliases, with spaces or underscores)
+            triggers.add(udf.name)
+            triggers.add(udf.name.replace("_", " "))
+            for a in udf.aliases:
+                if not a.startswith("/"):
+                    triggers.add(a)
+                    triggers.add(a.replace(" ", "_"))
+                    triggers.add(a.replace("_", " "))
 
-            # 2. Natural language trigger matching
-            if not matched:
-                for alias in udf.aliases:
-                    alias_lower = alias.lower()
-                    if not alias_lower.startswith("/") and alias_lower in lower_p:
-                        matched = True
-                        remaining_text = clean_p
-                        break
+            sorted_triggers = sorted(triggers, key=lambda x: len(x), reverse=True)
 
-            if matched:
-                parsed_kwargs = cls._parse_params(remaining_text, udf.parameters)
-                return udf, parsed_kwargs
+            for t in sorted_triggers:
+                if t.startswith("/"):
+                    pat = rf"(?<!\S){re.escape(t)}(?![\w/])"
+                else:
+                    pat = rf"(?<![\w/]){re.escape(t)}(?![\w/])"
+                for m in re.finditer(pat, clean_p, re.IGNORECASE):
+                    candidates.append((m.start(), m.end(), udf, t))
 
-        return None
+        # Sort candidate matches by start position ascending, then longest match descending
+        candidates.sort(key=lambda c: (c[0], -(c[1] - c[0])))
+
+        accepted = []
+        seen_udfs = set()
+        for start, end, udf, t in candidates:
+            if udf.name in seen_udfs:
+                continue
+            # Check overlap with any already accepted match span
+            overlap = False
+            for a_start, a_end, _, _ in accepted:
+                if start < a_end and end > a_start:
+                    overlap = True
+                    break
+            if not overlap:
+                accepted.append((start, end, udf, t))
+                seen_udfs.add(udf.name)
+
+        # Re-sort accepted matches by start index
+        accepted.sort(key=lambda c: c[0])
+
+        if not accepted:
+            return []
+
+        trailing_text = clean_p[accepted[-1][1]:].strip() if len(accepted) > 1 else ""
+        is_any_slash = any(t.startswith("/") for _, _, _, t in accepted)
+
+        results = []
+        for i, (start, end, udf, t) in enumerate(accepted):
+            next_start = accepted[i + 1][0] if i + 1 < len(accepted) else len(clean_p)
+            segment = clean_p[end:next_start].strip()
+            kwargs, explicit_keys = cls._parse_params(segment, udf.parameters, return_explicit=True)
+
+            # In natural language mode (when no slash commands are involved), allow shared trailing
+            # parameters (e.g. "mel_spectrogram and chroma with colormap=coolwarm") to populate
+            # parameters that were not explicitly set in the UDF's local segment.
+            # Slash commands are strictly scoped and never inherit trailing text.
+            if not is_any_slash and trailing_text and segment != trailing_text:
+                trailing_kwargs, trailing_explicit = cls._parse_params(trailing_text, udf.parameters, return_explicit=True)
+                for k in trailing_explicit:
+                    if k not in explicit_keys:
+                        kwargs[k] = trailing_kwargs[k]
+
+            results.append((udf, kwargs))
+
+        return results
 
     @classmethod
-    def _parse_params(cls, text: str, param_schema: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def match_all(cls, prompt: str) -> List[Tuple[UDFDefinition, Dict[str, Any]]]:
+        """Alias for match_all_prompts."""
+        return cls.match_all_prompts(prompt)
+
+    @classmethod
+    def match_prompt(cls, prompt: str) -> Optional[Tuple[UDFDefinition, Dict[str, Any]]]:
+        """
+        Check if a prompt invokes a registered UDF.
+        Returns the first matched (UDFDefinition, parsed_kwargs) or None.
+        """
+        matches = cls.match_all_prompts(prompt)
+        return matches[0] if matches else None
+
+    @classmethod
+    def _parse_params(
+        cls,
+        text: str,
+        param_schema: Dict[str, Dict[str, Any]],
+        return_explicit: bool = False
+    ) -> Union[Dict[str, Any], Tuple[Dict[str, Any], Set[str]]]:
         """Extract typed parameters from text matching key=value, key: value, or schema defaults."""
         kwargs = {}
         for param, meta in param_schema.items():
             kwargs[param] = meta.get("default")
 
+        explicit_keys: Set[str] = set()
         if not text:
-            return kwargs
+            return (kwargs, explicit_keys) if return_explicit else kwargs
 
-        # Match key=val or key: val or key="val"
+        # Match key=val or key: val or key="val" or key='val'
         pattern = r'(?:(\w+)\s*[:=]\s*(?:"([^"]*)"|\'([^\']*)\'|(\S+)))'
         matches = re.findall(pattern, text)
         for m in matches:
             k = m[0].lower()
-            val_str = m[1] or m[2] or m[3]
             if k in param_schema:
+                val_str = (m[1] or m[2] or m[3]).strip()
+                if not m[1] and not m[2]:
+                    val_str = val_str.rstrip(",);]")
                 param_type = param_schema[k].get("type", str)
                 try:
                     if param_type == int:
                         kwargs[k] = int(val_str)
+                        explicit_keys.add(k)
                     elif param_type == float:
                         kwargs[k] = float(val_str)
+                        explicit_keys.add(k)
                     elif param_type == bool:
                         kwargs[k] = val_str.lower() in ("true", "1", "yes")
+                        explicit_keys.add(k)
                     else:
                         kwargs[k] = str(val_str)
+                        explicit_keys.add(k)
                 except (ValueError, TypeError):
                     pass
-        return kwargs
+
+        return (kwargs, explicit_keys) if return_explicit else kwargs
 
     @classmethod
     def generate_markdown_help(cls) -> str:
@@ -193,6 +261,38 @@ class UDFRegistry:
         return "\n".join(lines)
 
 
+def _resolve_sample_audio_paths(domain: str, table_name: str, cols: List[str], sample_count: int) -> Dict[str, str]:
+    """Helper to retrieve audio paths from table when 'file_path' is not in projected columns."""
+    if "file_path" in cols:
+        return {}
+    try:
+        import pixeltable as pxt
+        from src.db.manager import DBManager
+        full_table_path = DBManager.resolve_table_path(domain, table_name)
+        tbl = pxt.get_table(full_table_path)
+        tbl_cols = list(tbl.columns()) if callable(tbl.columns) else list(tbl._schema.keys())
+        if "audio" in tbl_cols:
+            fallback = {}
+            aud_rows = tbl.select(tbl.audio).limit(sample_count).collect()
+            for idx, ar in enumerate(aud_rows):
+                v = ar.get("audio")
+                if v is not None:
+                    fallback[f"idx_{idx}"] = str(v)
+            key_col = tbl.id if "id" in tbl_cols else tbl.file_name if "file_name" in tbl_cols else None
+            if key_col is not None:
+                key_name = "id" if "id" in tbl_cols else "file_name"
+                aud_keyed = tbl.select(key_col, tbl.audio).limit(sample_count).collect()
+                for ar in aud_keyed:
+                    k = ar.get(key_name)
+                    v = ar.get("audio")
+                    if k is not None and v is not None:
+                        fallback[str(k)] = str(v)
+            return fallback
+    except Exception:
+        pass
+    return {}
+
+
 # -------------------------------------------------------------------------
 # Default UDF Definitions: Mel Spectrogram
 # -------------------------------------------------------------------------
@@ -222,11 +322,13 @@ def _eval_mel_spectrogram_sample(domain: str, table_name: str, sample_count: int
     hop_length = kwargs.get("hop_length", 512)
     colormap = kwargs.get("colormap", "magma")
 
+    audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
+
     for idx, row in enumerate(data):
         row_dict = dict(zip(cols, row))
         row_id = row_dict.get("id", str(idx + 1))
         file_name = row_dict.get("file_name", f"Row {idx + 1}")
-        file_path = str(row_dict.get("file_path", ""))
+        file_path = str(row_dict.get("file_path") or audio_fallback.get(str(row_id)) or audio_fallback.get(str(file_name)) or audio_fallback.get(f"idx_{idx}") or "")
         modality = str(row_dict.get("modality", "")).lower()
 
         spec = None
@@ -320,11 +422,13 @@ def _eval_mfcc_sample(domain: str, table_name: str, sample_count: int = 2, **kwa
     hop_length = kwargs.get("hop_length", 512)
     colormap = kwargs.get("colormap", "plasma")
 
+    audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
+
     for idx, row in enumerate(data):
         row_dict = dict(zip(cols, row))
         row_id = row_dict.get("id", str(idx + 1))
         file_name = row_dict.get("file_name", f"Row {idx + 1}")
-        file_path = str(row_dict.get("file_path", ""))
+        file_path = str(row_dict.get("file_path") or audio_fallback.get(str(row_id)) or audio_fallback.get(str(file_name)) or audio_fallback.get(f"idx_{idx}") or "")
         modality = str(row_dict.get("modality", "")).lower()
 
         mfcc_arr = None
@@ -412,11 +516,13 @@ def _eval_chroma_sample(domain: str, table_name: str, sample_count: int = 2, **k
     hop_length = kwargs.get("hop_length", 512)
     colormap = kwargs.get("colormap", "coolwarm")
 
+    audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
+
     for idx, row in enumerate(data):
         row_dict = dict(zip(cols, row))
         row_id = row_dict.get("id", str(idx + 1))
         file_name = row_dict.get("file_name", f"Row {idx + 1}")
-        file_path = str(row_dict.get("file_path", ""))
+        file_path = str(row_dict.get("file_path") or audio_fallback.get(str(row_id)) or audio_fallback.get(str(file_name)) or audio_fallback.get(f"idx_{idx}") or "")
         modality = str(row_dict.get("modality", "")).lower()
 
         chroma_arr = None
@@ -503,11 +609,13 @@ def _eval_audio_stats_sample(domain: str, table_name: str, sample_count: int = 2
     sr = kwargs.get("sr", 22050)
     hop_length = kwargs.get("hop_length", 512)
 
+    audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
+
     for idx, row in enumerate(data):
         row_dict = dict(zip(cols, row))
         row_id = row_dict.get("id", str(idx + 1))
         file_name = row_dict.get("file_name", f"Row {idx + 1}")
-        file_path = str(row_dict.get("file_path", ""))
+        file_path = str(row_dict.get("file_path") or audio_fallback.get(str(row_id)) or audio_fallback.get(str(file_name)) or audio_fallback.get(f"idx_{idx}") or "")
         modality = str(row_dict.get("modality", "")).lower()
 
         dur_s = "—"

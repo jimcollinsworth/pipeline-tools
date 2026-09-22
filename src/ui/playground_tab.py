@@ -386,9 +386,40 @@ def render_playground_tab(tab=None):
 
         sys_prompt = get_domain_system_prompt(domain)
 
-        def cb(cur, total, detail):
-            pct = (cur / total) if total else 0.5
-            progress(pct, desc=detail)
+        def cb(*args, **kwargs):
+            pct = 0.5
+            desc = None
+            if len(args) >= 3:
+                cur, total, detail = args[0], args[1], args[2]
+                pct = (cur / total) if total else 0.5
+                desc = str(detail) if detail is not None else None
+            elif len(args) == 2:
+                first, second = args[0], args[1]
+                if isinstance(first, (int, float)) and isinstance(second, str):
+                    pct = float(first) if first <= 1.0 else 0.5
+                    desc = second
+                elif isinstance(first, (int, float)) and isinstance(second, (int, float)):
+                    pct = (first / second) if second else 0.5
+                else:
+                    desc = str(second)
+            elif len(args) == 1:
+                if isinstance(args[0], (int, float)):
+                    pct = float(args[0])
+                else:
+                    desc = str(args[0])
+            desc = kwargs.get("desc") or kwargs.get("detail") or kwargs.get("message") or desc
+            if "step" in kwargs and "total" in kwargs and kwargs["total"]:
+                pct = kwargs["step"] / kwargs["total"]
+            elif "cur" in kwargs and "total" in kwargs and kwargs["total"]:
+                pct = kwargs["cur"] / kwargs["total"]
+            elif "pct" in kwargs:
+                pct = kwargs["pct"]
+            if pct is not None:
+                try:
+                    pct = max(0.0, min(1.0, float(pct)))
+                except (ValueError, TypeError):
+                    pct = 0.5
+            progress(pct, desc=desc)
 
         progress(0.1, desc=f"Evaluating prompt on {sample_count} sample rows with [{provider}] {model}...")
         res = PlaygroundController.test_sample_flow(
@@ -443,9 +474,40 @@ def render_playground_tab(tab=None):
 
         sys_prompt = get_domain_system_prompt(domain)
 
-        def cb(cur, total, detail):
-            pct = (cur / total) if total else 0.5
-            progress(pct, desc=detail)
+        def cb(*args, **kwargs):
+            pct = 0.5
+            desc = None
+            if len(args) >= 3:
+                cur, total, detail = args[0], args[1], args[2]
+                pct = (cur / total) if total else 0.5
+                desc = str(detail) if detail is not None else None
+            elif len(args) == 2:
+                first, second = args[0], args[1]
+                if isinstance(first, (int, float)) and isinstance(second, str):
+                    pct = float(first) if first <= 1.0 else 0.5
+                    desc = second
+                elif isinstance(first, (int, float)) and isinstance(second, (int, float)):
+                    pct = (first / second) if second else 0.5
+                else:
+                    desc = str(second)
+            elif len(args) == 1:
+                if isinstance(args[0], (int, float)):
+                    pct = float(args[0])
+                else:
+                    desc = str(args[0])
+            desc = kwargs.get("desc") or kwargs.get("detail") or kwargs.get("message") or desc
+            if "step" in kwargs and "total" in kwargs and kwargs["total"]:
+                pct = kwargs["step"] / kwargs["total"]
+            elif "cur" in kwargs and "total" in kwargs and kwargs["total"]:
+                pct = kwargs["cur"] / kwargs["total"]
+            elif "pct" in kwargs:
+                pct = kwargs["pct"]
+            if pct is not None:
+                try:
+                    pct = max(0.0, min(1.0, float(pct)))
+                except (ValueError, TypeError):
+                    pct = 0.5
+            progress(pct, desc=desc)
 
         res = PlaygroundController.commit_batch_flow(
             domain=domain,

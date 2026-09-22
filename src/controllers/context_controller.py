@@ -62,7 +62,7 @@ class ContextController:
             sample_entities = list(ctx.entities.keys())[:5]
             summary_lines.append(f"🏷️ **Recent Entities:** {', '.join(f'`{e}`' for e in sample_entities)}")
         else:
-            summary_lines.append("ℹ️ *No entities accumulated yet for this table. Run ingestion or batch enhancement to populate.*")
+            summary_lines.append("ℹ️ *No entities accumulated yet for this table. Execute prompt enhancements on this table to populate.*")
 
         return "\n\n".join(summary_lines)
 

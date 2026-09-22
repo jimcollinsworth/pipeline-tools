@@ -130,7 +130,7 @@ class TablesController:
         excluded_keys = {
             "id", "file_name", "file_path", "rel_path", "modality", "file_type", "file_size",
             "content", "media_preview", "doc", "image", "audio", "video", "metadata", "created_at",
-            "mel_spectrogram", "mel_spectrogram_img"
+            "mel_spectrogram", "mel_spectrogram_img", "mfcc", "mfcc_img", "chroma", "chroma_img"
         }
         for k, v in row_dict.items():
             if k not in excluded_keys and v is not None:
@@ -146,8 +146,21 @@ class TablesController:
         video_val = file_path if (modality == "video" or file_type in [".mp4", ".webm", ".mov", ".avi", ".mkv"]) and file_exists else None
         has_content = bool(content and content.strip())
 
-        # Inspect Mel Spectrogram preview image if generated
-        spec_img = row_dict.get("mel_spectrogram_img") or row_dict.get("mel_spectrogram")
+        # Inspect Mel Spectrogram / MFCC / Chroma preview image if generated
+        spec_img = None
+        spec_label = "🎵 Mel Spectrogram"
+        for key in ("mel_spectrogram_img", "mel_spectrogram", "mfcc_img", "mfcc", "chroma_img", "chroma"):
+            val = row_dict.get(key)
+            if val is not None:
+                spec_img = val
+                if "mfcc" in key:
+                    spec_label = "🎙️ MFCC (Vocal Timbre)"
+                elif "chroma" in key:
+                    spec_label = "🎼 Chroma (Pitch Classes)"
+                else:
+                    spec_label = "🎵 Mel Spectrogram"
+                break
+
         spec_val = None
         if spec_img is not None:
             import numpy as np
@@ -174,6 +187,7 @@ class TablesController:
             "video_path": video_val,
             "has_video": bool(video_val),
             "spectrogram_path": spec_val,
+            "spectrogram_label": spec_label,
             "has_spectrogram": has_spectrogram,
             "details_markdown": details_md,
             "content_text": content if has_content else "",

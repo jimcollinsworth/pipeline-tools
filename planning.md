@@ -102,11 +102,11 @@ flowchart TD
   - Continuous live row-by-row streaming preview in the UI using Python generators.
   - Added binary media safeguards in `DBManager.ingest_files` to prevent table insertion errors on missing files.
   - Verified with 38 unit tests (`38 Passed, 0 Failed, 0 Errors`).
-- [x] **Declarative Audio Mel Spectrogram Pipeline (v1.3.3)**
-  - Implemented dual-representation audio DSP pipeline via `@pxt.udf` computed columns: `mel_spectrogram` (`pxt.Array` numerical 2D matrix) and `mel_spectrogram_img` (`pxt.Image` visual spectrogram using `magma` colormap).
-  - Integrated librosa, soundfile, and matplotlib with null-safe handling on non-audio rows and minimum width upscaling for short audio clips.
-  - Added "🎵 Mel Spectrogram" button in Data Enhancement and integrated spectrogram preview in Media Inspector drawer.
-  - Verified with dedicated end-to-end TDD test suite (`tests/test_audio_spectrogram.py`).
+- [x] **Declarative Audio DSP & Prompt-Driven UDF Suite (v1.3.4)**
+  - Implemented dual-representation audio DSP pipeline via `@pxt.udf` computed columns: `mel_spectrogram` (`pxt.Array` matrix + `pxt.Image` preview), `mfcc` (Mel-Frequency Cepstral Coefficients for voice timbre), `chroma` (12 semitone pitch classes for musical pitch/tonality), and `audio_stats` (`pxt.Json` summary metrics: RMS energy, ZCR, spectral centroid, rolloff, silence ratio, duration).
+  - Implemented `UDFRegistry` (`src/core/udf_registry.py`) providing prompt-driven slash command execution (`/mfcc n_mfcc=20`, `/chroma n_chroma=12`, `/audio_stats`, `/mel_spectrogram`) and natural language triggers with automatic parameter parsing, sample testing, and declarative batch computed column attachment.
+  - Added expandable in-app UDF documentation accordion and quick-apply preset buttons in Data Enhancement tab (`src/ui/playground_tab.py`).
+  - Verified with 20 dedicated end-to-end TDD test cases (`tests/test_audio_spectrogram.py`) within the 78-test clean suite.
 
 ### Phase 4: Multimodal Vision & Entity Classification Engines (Planned)
 - [ ] **Hugging Face & YOLO Vision Classification Engines**
@@ -242,6 +242,7 @@ flowchart TD
 | RES-24 | Hugging Face Spaces Cloud Adaptation & Website Embed | Complete | Added cloud container server binding (0.0.0.0 for SPACE_ID), Gemini default provider fallback, packages.txt with ffmpeg, pruned test dependencies, and embedded interactive app switcher into jimcollinsworth.github.io. |
 | RES-25 | Dual Ingestion Modes (Directory Multi-Asset vs CSV Row Documents) | Complete | Added single row-oriented file (CSV/TSV) ingestion parsing each row into individual document records with chunked batch streaming, primary text column selection, and automatic metadata placeholder resolution in prompts (resolves Issue #6). |
 | RES-26 | Declarative Audio DSP & Mel Spectrogram Pipeline | Complete | Implemented dual-representation audio Mel Spectrogram extraction via `@pxt.udf` computed columns (`pxt.Array` matrix + `pxt.Image` visual spectrogram), null-safe handling, and interactive Media Inspector rendering. |
+| RES-27 | Audio DSP Suite & Prompt-Driven Declarative UDFs (MFCC, Chroma, Audio Stats) | Complete | Expanded Librosa audio analysis with MFCC (vocal timbre), Chroma STFT (12 pitch classes), and Audio & Noise Stats (RMS, ZCR, centroid, rolloff, silence ratio). Added prompt-driven slash commands, UDFRegistry schema help, and sample presets. |
 
 
 

@@ -170,7 +170,16 @@ def render_playground_tab(tab=None):
                     preset_meta_btn = gr.Button("🔍 Precision Metadata", size="sm")
                     preset_art_btn = gr.Button("🎨 Creative Curator", size="sm")
                     preset_doc_btn = gr.Button("📄 Document Intelligence", size="sm")
-                    preset_spectrogram_btn = gr.Button("🎵 Mel Spectrogram UDF", size="sm")
+
+                with gr.Row():
+                    preset_spectrogram_btn = gr.Button("🎵 Mel Spectrogram", size="sm")
+                    preset_mfcc_btn = gr.Button("🎙️ Voice Timbre (MFCC)", size="sm")
+                    preset_chroma_btn = gr.Button("🎼 Pitch & Chroma", size="sm")
+                    preset_stats_btn = gr.Button("📊 Audio & Noise Stats", size="sm")
+
+            with gr.Accordion("📚 Audio DSP & UDF Function Help & Registry", open=False):
+                from src.core.udf_registry import UDFRegistry
+                gr.Markdown(UDFRegistry.generate_markdown_help())
 
             available_columns_info = gr.Markdown(initial_cols_text)
             prompt_template_input = gr.Textbox(
@@ -340,7 +349,7 @@ def render_playground_tab(tab=None):
             gr.update(visible=True),
             gr.update(value=insp["image_path"], visible=insp["has_image"]),
             gr.update(value=insp["audio_path"], visible=insp["has_audio"]),
-            gr.update(value=insp.get("spectrogram_path"), visible=insp.get("has_spectrogram", False)),
+            gr.update(value=insp.get("spectrogram_path"), label=insp.get("spectrogram_label", "🎵 Mel Spectrogram"), visible=insp.get("has_spectrogram", False)),
             gr.update(value=insp["video_path"], visible=insp["has_video"]),
             insp["details_markdown"],
             gr.update(value=insp["content_text"], visible=insp["has_content"])
@@ -402,7 +411,7 @@ def render_playground_tab(tab=None):
             headers = res["headers"]
             datatypes = res.get("datatypes") or [
                 "html" if (
-                    c == "media_preview" or "img" in c.lower() or "spectrogram" in c.lower() or "spectrograph" in c.lower() or "preview" in c.lower()
+                    c == "media_preview" or "img" in c.lower() or "spectrogram" in c.lower() or "spectrograph" in c.lower() or "preview" in c.lower() or "mfcc" in c.lower() or "chroma" in c.lower()
                     or any(isinstance(r[i], str) and any(tag in r[i] for tag in ("<img", "<audio", "<video", "<div", "<a ")) for r in res.get("data", [])[:3] if i < len(r))
                 ) else "str"
                 for i, c in enumerate(headers)
@@ -465,7 +474,7 @@ def render_playground_tab(tab=None):
             out_headers = res.get("output_headers", [])
             out_datatypes = res.get("output_datatypes") or [
                 "html" if (
-                    c == "media_preview" or "img" in c.lower() or "spectrogram" in c.lower() or "spectrograph" in c.lower() or "preview" in c.lower()
+                    c == "media_preview" or "img" in c.lower() or "spectrogram" in c.lower() or "spectrograph" in c.lower() or "preview" in c.lower() or "mfcc" in c.lower() or "chroma" in c.lower()
                     or any(isinstance(r[i], str) and any(tag in r[i] for tag in ("<img", "<audio", "<video", "<div", "<a ")) for r in res.get("output_data", [])[:3] if i < len(r))
                 ) else "str"
                 for i, c in enumerate(out_headers)
@@ -548,6 +557,15 @@ def render_playground_tab(tab=None):
     def on_apply_preset_spectrogram():
         return "/mel_spectrogram hop_length=512 colormap=magma", "⚡ Auto-Split JSON Keys into Columns"
 
+    def on_apply_preset_mfcc():
+        return "/mfcc n_mfcc=20 colormap=plasma", "⚡ Auto-Split JSON Keys into Columns"
+
+    def on_apply_preset_chroma():
+        return "/chroma n_chroma=12 colormap=coolwarm", "⚡ Auto-Split JSON Keys into Columns"
+
+    def on_apply_preset_stats():
+        return "/audio_stats", "⚡ Auto-Split JSON Keys into Columns"
+
     preset_cv_btn.click(
         fn=on_apply_preset_cv,
         outputs=[prompt_template_input, output_mode_radio]
@@ -566,6 +584,18 @@ def render_playground_tab(tab=None):
     )
     preset_spectrogram_btn.click(
         fn=on_apply_preset_spectrogram,
+        outputs=[prompt_template_input, output_mode_radio]
+    )
+    preset_mfcc_btn.click(
+        fn=on_apply_preset_mfcc,
+        outputs=[prompt_template_input, output_mode_radio]
+    )
+    preset_chroma_btn.click(
+        fn=on_apply_preset_chroma,
+        outputs=[prompt_template_input, output_mode_radio]
+    )
+    preset_stats_btn.click(
+        fn=on_apply_preset_stats,
         outputs=[prompt_template_input, output_mode_radio]
     )
 

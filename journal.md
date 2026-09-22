@@ -13,6 +13,33 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
+## 📅 2026-09-21: Expanded Audio/Voice/Noise DSP Suite (MFCC, Chroma, Audio Stats) & In-App UDF Registry Help (v1.3.5)
+
+**Context:** The developer directed expanding the audio analysis suite with useful Librosa functions for voice, timbre, and noise analysis, integrating registry documentation in the app and docs, adding sample prompt presets, and providing comprehensive in-app help.
+
+**Verbatim Instruction:**
+> `ok, look at librosa api and add some of the more useful functions for audio/voice/noise analysis. include information about the registry in the doc files and in the app, use one in a sample prompt, and have help for all somewhere (help icon, accordian..`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Audio/Voice/Noise DSP Suite (`src/audio/spectrogram.py`)**:
+   - **`mfcc`**: Mel-Frequency Cepstral Coefficients (default `n_mfcc=20`) for vocal timbre, speaker identity, and speech characteristics. Produces dual output: 2D feature matrix `mfcc` (`pxt.Array`) and colormapped image `mfcc_img` (`pxt.Image`, `plasma` colormap).
+   - **`chroma`**: Chroma STFT (12 semitone pitch classes) for harmonic, tonality, and musical pitch analysis. Produces dual output: 2D feature matrix `chroma` (`pxt.Array`) and colormapped image `chroma_img` (`pxt.Image`, `coolwarm` colormap).
+   - **`audio_stats`**: Summary statistics dictionary (`duration_sec`, `sample_rate`, `rms_mean`, `rms_std`, `zcr_mean`, `spectral_centroid_mean`, `spectral_rolloff_mean`, `silence_ratio`) for Voice Activity Detection (VAD) and noise floor analysis (`pxt.Json`).
+   - Factored out `load_audio_signal` helper with automatic PyAV fallback (`.m4a`, `.aac`, `.mp3`) for clean DRY audio decoding.
+2. **Central Registry & Dynamic Help (`src/core/udf_registry.py`)**:
+   - Registered `mfcc`, `chroma`, and `audio_stats` alongside `mel_spectrogram` with typed parameter schemas and sample evaluation functions.
+   - Implemented `UDFRegistry.generate_markdown_help()` generating dynamic documentation tables with parameter types, default values, descriptions, and prompt examples.
+3. **In-App Help & Sample Presets (`src/ui/playground_tab.py`)**:
+   - Added preset buttons: `🎙️ Voice Timbre (MFCC)` (`/mfcc n_mfcc=20 colormap=plasma`), `🎼 Pitch & Chroma` (`/chroma n_chroma=12 colormap=coolwarm`), and `📊 Audio & Noise Stats` (`/audio_stats`).
+   - Added expandable `📚 Audio DSP & UDF Function Help & Registry` accordion directly under the Prompt Guide.
+4. **Media Inspector & Table Rendering**:
+   - Updated `TablesController.handle_row_inspection` to inspect and preview `mfcc_img` and `chroma_img` in the Media Inspector drawer.
+   - Updated `DBManager.get_table_data` to render 2D numpy arrays with 12 (chroma) and 20 (mfcc) rows as base64 preview thumbnails.
+5. **Comprehensive TDD Verification (`tests/test_audio_spectrogram.py`)**:
+   - Added 9 new unit tests verifying direct calculation, null safety, Pixeltable table column attachment, prompt matching with parameter overrides, markdown help generation, and sample/batch execution (78/78 tests passing).
+
+---
+
 ## 📅 2026-09-21: Prompt-Driven Declarative UDFs, Media Players Across All Tables & DataFrame Crash Fix (v1.3.4)
 
 **Context:** The developer reported a Gradio DataFrame `ValueError` when clicking the `id` column pill to hide it, noted missing spectrogram rendering and media players in table views, and directed that UDF execution should not use hardcoded buttons but be driven through prompting (e.g. `"mel spectrograph of filename"` or `/mel_spectrogram`) with default and custom parameter overrides.

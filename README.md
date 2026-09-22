@@ -29,10 +29,15 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
 - **Incremental & Cached Execution**:
   - Leverages Pixeltable declarative computed columns to ensure LLM operations are cached, incremental, and version-controlled.
   - Minimizes redundant LLM calls per row, and accepts structured typed output inserted/appended into table columns.
-- **Audio DSP & Declarative Mel Spectrogram Pipeline**:
-  - Declarative `@pxt.udf` computation of dual-representation audio features: a 2D numerical feature matrix (`mel_spectrogram`, type `pxt.Array`) and visual colormapped spectrogram images (`mel_spectrogram_img`, type `pxt.Image`).
-  - Automatic minimum width upscaling for short audio clips and null-safe execution on mixed-modality datasets.
-  - 1-click "🎵 Mel Spectrogram" generation in Data Enhancement and integrated visual spectrogram viewer in the Media Inspector drawer.
+- **Audio DSP & Declarative UDF Suite (Librosa & Pixeltable)**:
+  - **Declarative `@pxt.udf` Pipeline**: Native vectorized audio feature computation attached as computed columns with zero row loops and $O(1)$ memory streaming.
+  - **`mel_spectrogram`**: Dual representation with 2D numerical matrix (`mel_spectrogram`, type `pxt.Array`) and colormapped preview image (`mel_spectrogram_img`, type `pxt.Image`).
+  - **`mfcc` (Mel-Frequency Cepstral Coefficients)**: Vocal timbre, speaker identity, and speech characteristics (`mfcc` array and `mfcc_img` preview).
+  - **`chroma` (Chroma STFT)**: 12 semitone pitch classes for musical pitch, harmonic analysis, and vowel tonality (`chroma` array and `chroma_img` preview).
+  - **`audio_stats`**: Audio and noise summary metrics (RMS energy, Zero Crossing Rate, Spectral Centroid, Rolloff, silence ratio, duration) stored as `pxt.Json` for Voice Activity Detection (VAD) and noise floor analysis.
+  - **Prompt-Driven Execution (`UDFRegistry`)**: Call any UDF via slash commands (e.g. `/mfcc n_mfcc=20 colormap=plasma`, `/chroma n_chroma=12`, `/audio_stats`) or natural language triggers (e.g. `"mel spectrogram of {file_name}"`), test on 1–N sample rows, and declaratively batch-commit.
+  - **In-App Registry Help**: Full searchable documentation accordion in Data Enhancement with schemas, parameter types, defaults, and usage examples.
+  - Automatic minimum width upscaling for short clips, PyAV audio fallback (`.m4a`, `.aac`, `.mp3`), and null-safe execution on mixed-modality datasets.
 - **Embedded Multimodal Media & Interactive Inspector**:
   - Fast **⚡ Lightweight Mode** (skips binary deserialization, reducing Python RAM by >95%) and **🔍 Full Media Mode** with inline HTML thumbnails (`<img>`), audio players (`<audio>`), video players (`<video>`), and PDF badges.
   - Interactive **🔬 Selected Record Media Inspector** drawer opens on row selection for deep inspection of full-resolution images, audio playback, video playback, and extracted text.

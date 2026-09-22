@@ -261,6 +261,8 @@ def render_tables_tab(tab=None):
                 or "img" in c.lower()
                 or "spectrogram" in c.lower()
                 or "spectrograph" in c.lower()
+                or "mfcc" in c.lower()
+                or "chroma" in c.lower()
                 or any(isinstance(r[i], str) and any(tag in r[i] for tag in ("<img", "<audio", "<video", "<div", "<a ")) for r in filtered_data[:3] if i < len(r))
             ) else "str"
             for i, c in enumerate(filtered_cols)
@@ -282,6 +284,8 @@ def render_tables_tab(tab=None):
                 or "img" in c.lower()
                 or "spectrogram" in c.lower()
                 or "spectrograph" in c.lower()
+                or "mfcc" in c.lower()
+                or "chroma" in c.lower()
                 or any(isinstance(r[i], str) and any(tag in r[i] for tag in ("<img", "<audio", "<video", "<div", "<a ")) for r in (data or [])[:3] if i < len(r))
             ) else "str"
             for i, c in enumerate(cols)
@@ -323,7 +327,7 @@ def render_tables_tab(tab=None):
             gr.update(visible=True),
             gr.update(value=insp["image_path"], visible=insp["has_image"]),
             gr.update(value=insp["audio_path"], visible=insp["has_audio"]),
-            gr.update(value=insp.get("spectrogram_path"), visible=insp.get("has_spectrogram", False)),
+            gr.update(value=insp.get("spectrogram_path"), label=insp.get("spectrogram_label", "🎵 Mel Spectrogram"), visible=insp.get("has_spectrogram", False)),
             gr.update(value=insp["video_path"], visible=insp["has_video"]),
             insp["details_markdown"],
             gr.update(value=insp["content_text"], visible=insp["has_content"])

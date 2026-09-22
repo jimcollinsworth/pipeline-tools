@@ -1028,9 +1028,9 @@ class DBManager:
                     if uri:
                         return f'<img src="{uri}" alt="spectrogram" style="height:48px; max-width:120px; border-radius:4px; object-fit:contain; display:block; margin:auto;" />'
                     return ""
-                # If cell is a 2D numpy array (such as mel_spectrogram), render as compact base64 HTML img
+                # If cell is a 2D numpy array (such as mel_spectrogram, mfcc, chroma), render as compact base64 HTML img
                 import numpy as np
-                if isinstance(val, np.ndarray) and val.ndim == 2 and val.shape[0] in (64, 128, 256, 512):
+                if isinstance(val, np.ndarray) and val.ndim == 2 and 2 <= val.shape[0] <= 1024 and val.shape[1] >= 2 and np.issubdtype(val.dtype, np.number):
                     from src.audio.spectrogram import render_spectrogram_array_to_image
                     img = render_spectrogram_array_to_image(val)
                     if img:
@@ -1054,7 +1054,9 @@ class DBManager:
                     or "img" in c_low
                     or "spectrogram" in c_low
                     or "spectrograph" in c_low
-                    or (len(df) > 0 and isinstance(df[c].iloc[0], str) and any(tag in df[c].iloc[0] for tag in ("<img", "<audio", "<video", "<div", "<a ")))
+                    or "mfcc" in c_low
+                    or "chroma" in c_low
+                    or any(isinstance(val, str) and any(tag in val for tag in ("<img", "<audio", "<video", "<div", "<a ")) for val in df[c])
                 )
                 datatypes.append("html" if is_html else "str")
 

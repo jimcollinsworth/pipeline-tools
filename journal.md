@@ -13,6 +13,26 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
+## 📅 2026-09-22: Context-Aware Intellisense & Tabular Key Alignment Clarifications (v1.3.14)
+
+**Context:** The developer noted that Segmenter commands (`/split_pages`, `/split_paragraphs`, `/audio_splitter`) appeared in the Data Enhancement slash popup even though segmenters belong to the Segmentation & Chunking tab. Additionally, clarifications were provided for JSON Auto-Split row key variance and UDF vs LLM prompt execution routing.
+
+**Verbatim Instruction:**
+> `why are segmenters listed with slash in data enhancement prompt, those aren't udfs i can use here are they? seems only for the segmentation page`
+> `when i run analyze {file_name} on 3 test rows, not all the rows have data for all columns, same bug with 2 rows.`
+> `when i run "analyze and chroma on {file_name} only chroma works (i think)`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Tab-Aware Slash Intellisense Filtering (`app.py`)**:
+   - Updated frontend Intellisense filtering in `app.py` so that when a user types `/` in the **Data Enhancement** prompt textarea (`.prompt-slash-input`), `Segmenter` commands are automatically excluded, presenting only applicable **Skills** and **UDFs**.
+2. **Tabular Key Alignment Guidance**:
+   - Documented that free-form LLM prompts without explicit JSON key schema definitions produce distinct top-level keys across different rows, resulting in sparse columns when merged in `Auto-Split` mode.
+   - Recommended specifying explicit key lists (e.g. *"Return JSON with keys: summary, genre, duration_seconds, bpm"*) or applying preset prompt templates.
+3. **UDF Execution vs LLM Routing**:
+   - Clarified that when a prompt contains registered UDF triggers (like `chroma`, `yamnet`, `mel_spectrogram`), native Pixeltable UDF execution takes precedence to run fast, on-device feature extraction at zero token cost.
+
+---
+
 ## 📅 2026-09-22: PIL Image Dimension Clamping & Librosa Warning Suppression (v1.3.13)
 
 **Context:** The developer reported that batch execution on table `personal.documents_audio` failed with `OSError: Maximum supported image dimension is 65500 pixels` inside PIL `_encode_tile` during `attach_chroma_columns`. Additionally, short/corrupt audio files emitted `UserWarning: n_fft=2048 is too large for input signal`.

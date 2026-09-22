@@ -566,13 +566,17 @@ const initSlashIntellisense = () => {{
             queryStartIndex = cursorPos - match[1].length - 1;
             const query = match[1].toLowerCase();
 
+            const isDataEnhancement = target.closest(".prompt-slash-input") !== null;
             const allCommands = window.PIPELINE_COMMANDS || window.PIPELINE_SKILLS || [];
-            currentMatches = allCommands.filter(s => 
-                s.name.toLowerCase().includes(query) ||
-                (s.slash_command && s.slash_command.toLowerCase().includes(query)) ||
-                (s.type && s.type.toLowerCase().includes(query)) ||
-                (s.description && s.description.toLowerCase().includes(query))
-            );
+            currentMatches = allCommands.filter(s => {{
+                const matchesQuery = s.name.toLowerCase().includes(query) ||
+                    (s.slash_command && s.slash_command.toLowerCase().includes(query)) ||
+                    (s.type && s.type.toLowerCase().includes(query)) ||
+                    (s.description && s.description.toLowerCase().includes(query));
+                if (!matchesQuery) return false;
+                if (isDataEnhancement && s.type === "Segmenter") return false;
+                return true;
+            }});
             selectedIndex = 0;
             renderMenu();
         }} else {{

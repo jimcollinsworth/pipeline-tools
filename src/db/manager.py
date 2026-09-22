@@ -160,17 +160,9 @@ class DBManager:
             if not pgdata.exists():
                 continue
 
-            # Remove stale log file if present to eliminate sharing violation on restart
-            log_file = pgdata / "log"
-            if log_file.exists():
-                try:
-                    log_file.unlink(missing_ok=True)
-                    logger.info(f"Self-healed: Removed stale log file {log_file}")
-                except Exception as e:
-                    logger.warning(f"Could not remove log file {log_file}: {e}")
-
             pid_file = pgdata / "postmaster.pid"
             had_stale_lock = False
+            is_active_server = False
             if pid_file.exists():
                 stale = False
                 found_pid = None
@@ -207,6 +199,7 @@ class DBManager:
                             stale = True
                         else:
                             stale = False
+                            is_active_server = True
                     else:
                         stale = True
                 except Exception as e:
@@ -222,6 +215,16 @@ class DBManager:
                         logger.info(f"Self-healed: Removed stale postmaster.pid ({found_pid}) from {pgdata}")
                     except Exception as e:
                         logger.warning(f"Could not remove stale {pid_file}: {e}")
+
+            # Remove stale log file only if the database is not actively running
+            if not is_active_server:
+                log_file = pgdata / "log"
+                if log_file.exists():
+                    try:
+                        log_file.unlink(missing_ok=True)
+                        logger.info(f"Self-healed: Removed stale log file {log_file}")
+                    except Exception as e:
+                        logger.debug(f"Could not remove log file {log_file}: {e}")
 
             # Also check for stale socket lock or socket files
             for socket_lock in pgdata.glob(".s.PGSQL.*"):

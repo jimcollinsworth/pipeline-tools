@@ -866,3 +866,23 @@ This journal records verbatim developer instructions, architectural directives, 
    - Created comprehensive test suite `tests/test_yamnet.py` (8 tests) and updated `tests/test_audio_spectrogram.py` and `tests/test_app.py`.
    - Full test suite verified: **110 Passed, 0 Failed, 0 Errors** in 23s.
    - Incremented version to `1.3.10` in `pyproject.toml`.
+
+---
+
+## 📅 2026-09-22: Embedded PostgreSQL Lock Self-Healing & Log Sharing Guard (v1.3.11)
+
+**Context:** Eliminating noisy Windows file sharing violation warnings (`[WinError 32] The process cannot access the file because it is being used by another process: '...pgdata\log'`) during pre-flight database lock healing when PostgreSQL is already active.
+
+**Verbatim Instruction:**
+> `whats the log conflict from?`
+> `yes`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Active Server Detection & Log Guard (`src/db/manager.py`)**:
+   - In `DBManager.heal_postgres_locks()`, re-sequenced cleanup so `postmaster.pid` is checked first.
+   - If an active PostgreSQL process is verified running and healthy (`is_active_server=True`), `heal_postgres_locks` skips attempting to unlink `pgdata / "log"` (which is actively write-locked by the running database engine on Windows).
+   - Any residual log unlinking errors during crash recovery are logged at `logger.debug` instead of `logger.warning`.
+2. **Verification & Versioning**:
+   - Verified clean zero-warning startup via `uv run python -c "from src.db.manager import DBManager; DBManager.heal_postgres_locks()"`.
+   - All 110 automated tests pass cleanly (`110 Passed, 0 Failed, 0 Errors`).
+   - Bumped patch version to `1.3.11` in `pyproject.toml`.

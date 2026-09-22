@@ -11,6 +11,29 @@ tags: ["mentoring", "architecture", "testing", "directives", "tdd", "pixeltable"
 
 This journal records verbatim developer instructions, architectural directives, mentoring inputs, rules creation, and key technical pivots for the **Pipeline Tools** project. These entries capture high-impact guidance and generalized lessons for future development.
 
+## 📅 2026-09-22: Modality Separation for Tabular Data (`data`), Dedicated `other` Category & Accurate Media Preview Badges (v1.3.17)
+
+**Context:** The developer directed that CSV/tabular files should be removed from `docs` and placed under a new `data` modality category (for row-type files like `.csv`, `.tsv`, `.tab`). Additionally, an `other` modality button was requested to select all files not included in the other categories, and the scanned table media preview badge was corrected so CSV files no longer render as `📄 View PDF`.
+
+**Verbatim Instruction:**
+> `lets remove csv's from the docs file types, csv's only show when data is selected (new button for row type files) and then other will select all files not included with any other cateories`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Modality Schema & Scanner Separation (`src/ingest/scanner.py`)**:
+   - Split `SUPPORTED_EXTENSIONS` into clean semantic domains: `"data": {".csv", ".tsv", ".tab"}` and `"docs": {".pdf", ".md", ".markdown", ".txt", ".json", ".yaml", ".yml"}`.
+   - Updated `classify_modality` to categorize tabular extensions as `"data"` and any unknown extension or extensionless file as `"other"`.
+   - Updated `scan_directory` default modalities to `["docs", "data", "images", "audio", "video", "other"]` and ensured `scan_single_file` tags `.csv`/`.tsv` files as `"data"`.
+2. **Ingest UI & Controller Updates (`src/ui/ingest_tab.py`, `src/controllers/ingest_controller.py`)**:
+   - Added `"data"` and `"other"` to the `modality_filters` checkbox group choices: `["docs", "data", "images", "audio", "video", "other"]`.
+   - Defaulted pre-selected modalities to `["docs", "data", "images", "audio", "video"]` so common assets are scanned while `other` is opt-in for unclassified formats.
+3. **Accurate Media Preview HTML Badges (`src/db/manager.py`)**:
+   - Updated `format_media_preview_html` so `.pdf` renders `📄 View PDF` (blue), `.csv`/`data` renders `📊 View Data` (green), text/docs render `📝 View Doc` (amber), and unclassified files render `📎 View File` (neutral gray).
+4. **Test Suite Verification (`tests/test_app.py`)**:
+   - Added unit test `test_scanner_modality_filtering` to verify that `docs` excludes CSV, `data` includes CSV, and `other` catches unlisted file extensions.
+   - Expanded `test_format_media_preview_html` to assert correct HTML link badges across `pdf`, `data`, `docs`, and `other`. All 114 tests pass cleanly.
+
+---
+
 ## 📅 2026-09-22: Audio Duration Capping, Consolidated YAMNet Single-Pass Inference & Real-Time Row Progress Tracking (v1.3.16)
 
 **Context:** During batch execution on full audio datasets (e.g. 227 multi-track Ableton Live recordings), memory consumption reached ~9.3 GB, execution stalled without progress feedback, and YAMNet ran 3 separate full-file ONNX passes per file. The developer asked for duration capping (default 60s), single-pass consolidation for YAMNet, fixing a frontend `insertSkill` null reference error, and displaying real-time row-level status during data enhancement.

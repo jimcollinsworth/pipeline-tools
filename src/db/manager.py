@@ -792,17 +792,17 @@ class DBManager:
                     # Record row in dynamic context accumulator
                     ctx.record_row(
                         file_name=f"{csv_name} #Row {row_idx + 1}",
-                        modality="docs",
+                        modality="data",
                         file_type=ext,
                         content_snippet=content_str[:200],
-                        extracted_tags=["csv", "row"]
+                        extracted_tags=["data", "csv", "row"]
                     )
 
                     row_record = {
                         "file_name": f"{csv_name} #Row {row_idx + 1}",
                         "file_path": abs_path,
                         "rel_path": csv_name,
-                        "modality": "docs",
+                        "modality": "data",
                         "file_type": ext,
                         "file_size": len(content_str.encode("utf-8")),
                         "content": content_str,
@@ -943,8 +943,14 @@ class DBManager:
             return f'<audio controls preload="none" src="/gradio_api/file={safe_path}" style="height:28px; width:150px; vertical-align:middle;"></audio>'
         elif mod == "video" or ext in [".mp4", ".webm", ".mov", ".avi", ".mkv"]:
             return f'<video controls preload="none" src="/gradio_api/file={safe_path}" style="height:54px; width:84px; border-radius:6px; object-fit:cover; vertical-align:middle;"></video>'
-        elif ext == ".pdf" or mod == "docs":
+        elif ext == ".pdf":
             return f'<a href="/gradio_api/file={safe_path}" target="_blank" style="text-decoration:none; padding:4px 8px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:4px; font-size:12px; font-weight:500;">📄 View PDF</a>'
+        elif mod == "data" or ext in [".csv", ".tsv", ".tab"]:
+            return f'<a href="/gradio_api/file={safe_path}" target="_blank" style="text-decoration:none; padding:4px 8px; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; border-radius:4px; font-size:12px; font-weight:500;">📊 View Data</a>'
+        elif mod == "docs" or ext in [".md", ".markdown", ".txt", ".json", ".yaml", ".yml"]:
+            return f'<a href="/gradio_api/file={safe_path}" target="_blank" style="text-decoration:none; padding:4px 8px; background:#fefce8; color:#a16207; border:1px solid #fef08a; border-radius:4px; font-size:12px; font-weight:500;">📝 View Doc</a>'
+        elif mod == "other":
+            return f'<a href="/gradio_api/file={safe_path}" target="_blank" style="text-decoration:none; padding:4px 8px; background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb; border-radius:4px; font-size:12px; font-weight:500;">📎 View File</a>'
         return ""
 
     @classmethod

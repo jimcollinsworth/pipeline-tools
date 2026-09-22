@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 SUPPORTED_EXTENSIONS = {
-    "docs": {".pdf", ".md", ".markdown", ".txt", ".json", ".yaml", ".yml", ".csv"},
+    "docs": {".pdf", ".md", ".markdown", ".txt", ".json", ".yaml", ".yml"},
+    "data": {".csv", ".tsv", ".tab"},
     "images": {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"},
     "audio": {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"},
     "video": {".mp4", ".mkv", ".mov", ".avi", ".webm"}
@@ -23,7 +24,7 @@ def scan_directory(directory_path: str, recursive: bool = True, modalities: List
         return []
 
     if modalities is None:
-        modalities = ["docs", "images", "audio", "video", "other"]
+        modalities = ["docs", "data", "images", "audio", "video", "other"]
 
     files_info = []
     pattern = "**/*" if recursive else "*"
@@ -118,7 +119,7 @@ def scan_single_file(file_path: str, max_preview_rows: int = 10) -> Dict[str, An
         "name": p.name,
         "abs_path": str(p.resolve()),
         "rel_path": p.name,
-        "modality": "docs",
+        "modality": "data",
         "extension": ext,
         "size": size_str,
         "size_bytes": stat.st_size,

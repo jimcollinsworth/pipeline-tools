@@ -133,13 +133,50 @@ class TestPipelineTools(unittest.TestCase):
         self.assertEqual(get_domain_system_prompt("legal_domain"), custom_prompt)
 
     def test_modality_classification(self):
-        """[Scanner] Verify file extensions are correctly classified into modalities (docs, images, audio, video)."""
+        """[Scanner] Verify file extensions are correctly classified into modalities (docs, data, images, audio, video, other)."""
         self.assertEqual(classify_modality(".pdf"), "docs")
         self.assertEqual(classify_modality(".md"), "docs")
+        self.assertEqual(classify_modality(".csv"), "data")
+        self.assertEqual(classify_modality(".tsv"), "data")
+        self.assertEqual(classify_modality(".tab"), "data")
         self.assertEqual(classify_modality(".png"), "images")
         self.assertEqual(classify_modality(".mp3"), "audio")
         self.assertEqual(classify_modality(".mp4"), "video")
         self.assertEqual(classify_modality(".unknown_ext_xyz"), "other")
+        self.assertEqual(classify_modality(""), "other")
+
+    def test_scanner_modality_filtering(self):
+        """[Scanner] Verify directory scanner filters by modality (docs excludes csv; data includes csv; other includes unlisted)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "guide.pdf").write_text("dummy pdf", encoding="utf-8")
+            (tmp_path / "records.csv").write_text("a,b,c\n1,2,3", encoding="utf-8")
+            (tmp_path / "binary.xyz").write_text("raw binary", encoding="utf-8")
+
+            # 1. Scan with only docs -> only guide.pdf
+            docs_only = scan_directory(tmp_dir, modalities=["docs"])
+            self.assertEqual(len(docs_only), 1)
+            self.assertEqual(docs_only[0]["name"], "guide.pdf")
+
+            # 2. Scan with only data -> only records.csv
+            data_only = scan_directory(tmp_dir, modalities=["data"])
+            self.assertEqual(len(data_only), 1)
+            self.assertEqual(data_only[0]["name"], "records.csv")
+            self.assertEqual(data_only[0]["modality"], "data")
+
+            # 3. Scan with only other -> only binary.xyz
+            other_only = scan_directory(tmp_dir, modalities=["other"])
+            self.assertEqual(len(other_only), 1)
+            self.assertEqual(other_only[0]["name"], "binary.xyz")
+            self.assertEqual(other_only[0]["modality"], "other")
+
+            # 4. Scan with docs and data -> both guide.pdf and records.csv, but not binary.xyz
+            docs_and_data = scan_directory(tmp_dir, modalities=["docs", "data"])
+            names = [f["name"] for f in docs_and_data]
+            self.assertIn("guide.pdf", names)
+            self.assertIn("records.csv", names)
+            self.assertNotIn("binary.xyz", names)
 
     def test_scanner_on_project_dir(self):
         """[Scanner] Verify directory scanner recursively discovers project files and metadata."""
@@ -594,6 +631,18 @@ class TestPipelineTools(unittest.TestCase):
             doc_html = DBManager.format_media_preview_html("C:/data/doc.pdf", modality="docs", file_type=".pdf")
             self.assertIn("<a href=", doc_html)
             self.assertIn("View PDF", doc_html)
+
+            data_html = DBManager.format_media_preview_html("C:/data/table.csv", modality="data", file_type=".csv")
+            self.assertIn("<a href=", data_html)
+            self.assertIn("View Data", data_html)
+
+            text_doc_html = DBManager.format_media_preview_html("C:/data/readme.md", modality="docs", file_type=".md")
+            self.assertIn("<a href=", text_doc_html)
+            self.assertIn("View Doc", text_doc_html)
+
+            other_html = DBManager.format_media_preview_html("C:/data/blob.bin", modality="other", file_type=".bin")
+            self.assertIn("<a href=", other_html)
+            self.assertIn("View File", other_html)
         finally:
             if temp_img.exists():
                 try:

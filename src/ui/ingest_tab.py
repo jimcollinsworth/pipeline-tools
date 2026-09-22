@@ -38,8 +38,8 @@ def render_ingest_tab(tab=None):
             with gr.Row():
                 modality_filters = gr.CheckboxGroup(
                     label="Include Modalities",
-                    choices=["docs", "images", "audio", "video", "other"],
-                    value=["docs", "images", "audio", "video"],
+                    choices=["docs", "data", "images", "audio", "video", "other"],
+                    value=["docs", "data", "images", "audio", "video"],
                     scale=3
                 )
                 recursive_check = gr.Checkbox(label="Recursive Subdirectories", value=True, scale=1)

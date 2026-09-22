@@ -629,11 +629,11 @@ class TestAudioMelSpectrogram(unittest.TestCase):
         datatypes = res["datatypes"]
         data = res["data"]
 
-        # Verify side-by-side output columns exist for both UDFs
+        # Verify side-by-side image columns exist for both UDFs and shape text columns are omitted
         self.assertIn("mel_spectrogram_img", headers)
         self.assertIn("chroma_img", headers)
-        self.assertIn("mel_spectrogram_shape", headers)
-        self.assertIn("chroma_shape", headers)
+        self.assertNotIn("mel_spectrogram_shape", headers)
+        self.assertNotIn("chroma_shape", headers)
 
         # Verify HTML datatypes for both images
         mel_img_idx = headers.index("mel_spectrogram_img")

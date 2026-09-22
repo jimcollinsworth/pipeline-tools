@@ -299,7 +299,7 @@ def _resolve_sample_audio_paths(domain: str, table_name: str, cols: List[str], s
 def _eval_mel_spectrogram_sample(domain: str, table_name: str, sample_count: int = 2, **kwargs) -> Dict[str, Any]:
     """Dry-run mel spectrogram on sample rows from table."""
     from src.db.manager import DBManager
-    from src.audio.spectrogram import compute_mel_spectrogram_core, render_mel_spectrogram_image_core
+    from src.audio.spectrogram import render_mel_spectrogram_image_core
 
     res = DBManager.get_table_data(domain, table_name, limit=sample_count, lightweight=False)
     cols = res.get("columns", [])
@@ -313,7 +313,7 @@ def _eval_mel_spectrogram_sample(domain: str, table_name: str, sample_count: int
             "data": [[f"Table '{domain}.{table_name}' is empty."]]
         }
 
-    headers = ["Status", "Row ID", "File Name", "mel_spectrogram_shape", "mel_spectrogram_img"]
+    headers = ["Status", "Row ID", "File Name", "mel_spectrogram_img"]
     rows = []
 
     sr = kwargs.get("sr", 22050)
@@ -331,26 +331,21 @@ def _eval_mel_spectrogram_sample(domain: str, table_name: str, sample_count: int
         file_path = str(row_dict.get("file_path") or audio_fallback.get(str(row_id)) or audio_fallback.get(str(file_name)) or audio_fallback.get(f"idx_{idx}") or "")
         modality = str(row_dict.get("modality", "")).lower()
 
-        spec = None
         img_html = "—"
-        shape_str = "None (Non-audio)"
 
         if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
-            spec = compute_mel_spectrogram_core(file_path, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length)
-            if spec is not None:
-                shape_str = f"{list(spec.shape)} ({colormap})"
-                img = render_mel_spectrogram_image_core(file_path, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
-                if img is not None:
-                    uri = DBManager.pil_to_base64_data_uri(img, size=(140, 60))
-                    if uri:
-                        img_html = f'<img src="{uri}" alt="spectrogram" style="height:48px; max-width:140px; border-radius:4px; object-fit:contain; display:block; margin:auto;" />'
+            img = render_mel_spectrogram_image_core(file_path, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
+            if img is not None:
+                uri = DBManager.pil_to_base64_data_uri(img, size=(140, 60))
+                if uri:
+                    img_html = f'<img src="{uri}" alt="spectrogram" style="height:48px; max-width:140px; border-radius:4px; object-fit:contain; display:block; margin:auto;" />'
 
-        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), shape_str, img_html])
+        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), img_html])
 
     return {
         "status": "success",
         "headers": headers,
-        "datatypes": ["str", "str", "str", "str", "html"],
+        "datatypes": ["str", "str", "str", "html"],
         "data": rows,
         "count": len(rows),
         "is_udf": True
@@ -399,7 +394,7 @@ UDFRegistry.register(
 def _eval_mfcc_sample(domain: str, table_name: str, sample_count: int = 2, **kwargs) -> Dict[str, Any]:
     """Dry-run MFCC on sample rows from table."""
     from src.db.manager import DBManager
-    from src.audio.spectrogram import compute_mfcc_core, render_mfcc_image_core
+    from src.audio.spectrogram import render_mfcc_image_core
 
     res = DBManager.get_table_data(domain, table_name, limit=sample_count, lightweight=False)
     cols = res.get("columns", [])
@@ -413,7 +408,7 @@ def _eval_mfcc_sample(domain: str, table_name: str, sample_count: int = 2, **kwa
             "data": [[f"Table '{domain}.{table_name}' is empty."]]
         }
 
-    headers = ["Status", "Row ID", "File Name", "mfcc_shape", "mfcc_img"]
+    headers = ["Status", "Row ID", "File Name", "mfcc_img"]
     rows = []
 
     sr = kwargs.get("sr", 22050)
@@ -431,26 +426,21 @@ def _eval_mfcc_sample(domain: str, table_name: str, sample_count: int = 2, **kwa
         file_path = str(row_dict.get("file_path") or audio_fallback.get(str(row_id)) or audio_fallback.get(str(file_name)) or audio_fallback.get(f"idx_{idx}") or "")
         modality = str(row_dict.get("modality", "")).lower()
 
-        mfcc_arr = None
         img_html = "—"
-        shape_str = "None (Non-audio)"
 
         if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
-            mfcc_arr = compute_mfcc_core(file_path, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
-            if mfcc_arr is not None:
-                shape_str = f"{list(mfcc_arr.shape)} ({colormap})"
-                img = render_mfcc_image_core(file_path, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
-                if img is not None:
-                    uri = DBManager.pil_to_base64_data_uri(img, size=(140, 60))
-                    if uri:
-                        img_html = f'<img src="{uri}" alt="mfcc" style="height:48px; max-width:140px; border-radius:4px; object-fit:contain; display:block; margin:auto;" />'
+            img = render_mfcc_image_core(file_path, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
+            if img is not None:
+                uri = DBManager.pil_to_base64_data_uri(img, size=(140, 60))
+                if uri:
+                    img_html = f'<img src="{uri}" alt="mfcc" style="height:48px; max-width:140px; border-radius:4px; object-fit:contain; display:block; margin:auto;" />'
 
-        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), shape_str, img_html])
+        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), img_html])
 
     return {
         "status": "success",
         "headers": headers,
-        "datatypes": ["str", "str", "str", "str", "html"],
+        "datatypes": ["str", "str", "str", "html"],
         "data": rows,
         "count": len(rows),
         "is_udf": True
@@ -493,7 +483,7 @@ UDFRegistry.register(
 def _eval_chroma_sample(domain: str, table_name: str, sample_count: int = 2, **kwargs) -> Dict[str, Any]:
     """Dry-run Chroma STFT on sample rows from table."""
     from src.db.manager import DBManager
-    from src.audio.spectrogram import compute_chroma_core, render_chroma_image_core
+    from src.audio.spectrogram import render_chroma_image_core
 
     res = DBManager.get_table_data(domain, table_name, limit=sample_count, lightweight=False)
     cols = res.get("columns", [])
@@ -507,7 +497,7 @@ def _eval_chroma_sample(domain: str, table_name: str, sample_count: int = 2, **k
             "data": [[f"Table '{domain}.{table_name}' is empty."]]
         }
 
-    headers = ["Status", "Row ID", "File Name", "chroma_shape", "chroma_img"]
+    headers = ["Status", "Row ID", "File Name", "chroma_img"]
     rows = []
 
     sr = kwargs.get("sr", 22050)
@@ -525,26 +515,21 @@ def _eval_chroma_sample(domain: str, table_name: str, sample_count: int = 2, **k
         file_path = str(row_dict.get("file_path") or audio_fallback.get(str(row_id)) or audio_fallback.get(str(file_name)) or audio_fallback.get(f"idx_{idx}") or "")
         modality = str(row_dict.get("modality", "")).lower()
 
-        chroma_arr = None
         img_html = "—"
-        shape_str = "None (Non-audio)"
 
         if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
-            chroma_arr = compute_chroma_core(file_path, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length)
-            if chroma_arr is not None:
-                shape_str = f"{list(chroma_arr.shape)} ({colormap})"
-                img = render_chroma_image_core(file_path, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
-                if img is not None:
-                    uri = DBManager.pil_to_base64_data_uri(img, size=(140, 60))
-                    if uri:
-                        img_html = f'<img src="{uri}" alt="chroma" style="height:48px; max-width:140px; border-radius:4px; object-fit:contain; display:block; margin:auto;" />'
+            img = render_chroma_image_core(file_path, sr=sr, n_chroma=n_chroma, n_fft=n_fft, hop_length=hop_length, colormap=colormap)
+            if img is not None:
+                uri = DBManager.pil_to_base64_data_uri(img, size=(140, 60))
+                if uri:
+                    img_html = f'<img src="{uri}" alt="chroma" style="height:48px; max-width:140px; border-radius:4px; object-fit:contain; display:block; margin:auto;" />'
 
-        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), shape_str, img_html])
+        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), img_html])
 
     return {
         "status": "success",
         "headers": headers,
-        "datatypes": ["str", "str", "str", "str", "html"],
+        "datatypes": ["str", "str", "str", "html"],
         "data": rows,
         "count": len(rows),
         "is_udf": True

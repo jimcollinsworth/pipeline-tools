@@ -816,4 +816,22 @@ This journal records verbatim developer instructions, architectural directives, 
    - Full On-Demand E2E Suite (`uv run python -m tests --e2e`): **66 Passed, 0 Failed, 0 Errors** in 43s.
    - Bumped patch version to `1.3.2` in `pyproject.toml`.
 
+---
 
+## 📅 2026-09-22: Visual-Only Sample Previews for Audio UDFs (v1.3.9)
+
+**Context:** Refining the dry-run sample preview table for audio visualizer UDFs (`mel_spectrogram`, `chroma`, `mfcc`).
+
+**Verbatim Instruction:**
+> `no need to include the shape columns for mel and chroma, just the image`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Visual-First Preview Tables (`src/core/udf_registry.py`)**:
+   - Removed intermediate `mel_spectrogram_shape`, `chroma_shape`, and `mfcc_shape` text columns from sample evaluation outputs.
+   - Sample test previews now cleanly present `["Status", "Row ID", "File Name", "<name>_img"]` with rich HTML inline visualizations and zero text clutter.
+2. **Eliminated Redundant Computation**:
+   - Audio arrays are no longer redundantly computed twice during dry-run evaluations (previously computed once for shape extraction and once for image rendering). `render_<name>_image_core` is invoked directly, improving dry-run throughput.
+3. **Verification & Versioning**:
+   - Updated test assertions in `tests/test_audio_spectrogram.py` to verify `assertNotIn("<name>_shape", headers)` and uniform row column counts.
+   - All 102 automated tests pass cleanly (`102 Passed, 0 Failed, 0 Errors`).
+   - Bumped patch version to `1.3.9` in `pyproject.toml`.

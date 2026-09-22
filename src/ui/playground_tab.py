@@ -138,9 +138,10 @@ def render_playground_tab(tab=None):
                     scale=1
                 )
                 limit_rows_input = gr.Number(
-                    label="Max Batch Rows (0=all)",
+                    label="Total Rows to Process (0=all)",
                     value=0,
                     precision=0,
+                    info="0 = Process ALL rows in table. Set N > 0 (e.g. 10) to limit execution to the first N rows.",
                     scale=1
                 )
 
@@ -379,10 +380,18 @@ def render_playground_tab(tab=None):
                        progress=gr.Progress(track_tqdm=False)):
         if not domain or not table_name:
             gr.Warning("Domain and Table selection required.")
-            return "#### Status: ⚠️ Domain and Table selection required.", "#### 📤 Output Table: ⚠️ Missing Selection", gr.update(headers=["Error"], value=[["Domain and Table selection required."]])
+            yield "#### Status: ⚠️ Domain and Table selection required.", "#### 📤 Output Table: ⚠️ Missing Selection", gr.update(headers=["Error"], value=[["Domain and Table selection required."]])
+            return
         if not model:
             gr.Warning("Model selection required.")
-            return "#### Status: ⚠️ Model selection required.", "#### 📤 Output Table: ⚠️ Missing Model", gr.update(headers=["Error"], value=[[f"{provider} model selection required."]])
+            yield "#### Status: ⚠️ Model selection required.", "#### 📤 Output Table: ⚠️ Missing Model", gr.update(headers=["Error"], value=[[f"{provider} model selection required."]])
+            return
+
+        running_banner = (
+            f"### ⏳ Sample Dry-Run Test in Progress...\n"
+            f"> 🧪 Evaluating prompt / UDF on **{sample_count} sample rows** using **[{provider}] {model}**..."
+        )
+        yield running_banner, "#### 📤 Output Table: ⏳ Evaluating Sample Rows...", gr.update()
 
         sys_prompt = get_domain_system_prompt(domain)
 
@@ -447,11 +456,11 @@ def render_playground_tab(tab=None):
                 ) else "str"
                 for i, c in enumerate(headers)
             ]
-            return status_msg, out_hdr, gr.update(headers=headers, datatype=datatypes, value=res["data"])
+            yield status_msg, out_hdr, gr.update(headers=headers, datatype=datatypes, value=res["data"])
         else:
             err_msg = res.get("message", "Test execution failed")
             gr.Error(err_msg)
-            return f"#### Status: ❌ Test Failed: {err_msg}", "#### 📤 Output Table: ❌ Error", gr.update(headers=["Error"], value=[[err_msg]])
+            yield f"#### Status: ❌ Test Failed: {err_msg}", "#### 📤 Output Table: ❌ Error", gr.update(headers=["Error"], value=[[err_msg]])
 
     test_sample_btn.click(
         fn=on_test_sample,
@@ -467,10 +476,20 @@ def render_playground_tab(tab=None):
                         progress=gr.Progress(track_tqdm=False)):
         if not domain or not table_name:
             gr.Warning("Select a valid Domain and Table first.")
-            return "### ⚠️ Missing Target\n> Select a valid Domain and Table first.", gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            yield "### ⚠️ Missing Target\n> Select a valid Domain and Table first.", gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            return
         if not model:
             gr.Warning("Select a valid model first.")
-            return f"### ⚠️ Missing Model\n> Select a valid {provider} model first.", gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            yield f"### ⚠️ Missing Model\n> Select a valid {provider} model first.", gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            return
+
+        limit_desc = f"first **{int(limit_num)}** rows" if limit_num and int(limit_num) > 0 else "**ALL** rows in table"
+        running_banner = (
+            f"### ⏳ Batch Execution in Progress...\n"
+            f"> ⚙️ Executing prompt / UDF pipeline on `{domain}.{table_name}` using **[{provider}] {model}** across {limit_desc}.\n"
+            f"> Please wait while Pixeltable processes computed columns..."
+        )
+        yield running_banner, gr.update(), gr.update(), gr.update(), "#### 📤 Output Table: ⏳ Executing Batch...", gr.update()
 
         sys_prompt = get_domain_system_prompt(domain)
 
@@ -546,10 +565,10 @@ def render_playground_tab(tab=None):
                 datatype=out_datatypes,
                 value=res.get("output_data", [])
             )
-            return res["message"], in_info, in_df, in_pills, out_hdr, out_df
+            yield res["message"], in_info, in_df, in_pills, out_hdr, out_df
         else:
             gr.Error(res.get("message", "Batch execution failed"))
-            return res.get("message", "Error"), gr.update(), gr.update(), gr.update(), "#### 📤 Output Table: ❌ Execution Failed", gr.update()
+            yield res.get("message", "Error"), gr.update(), gr.update(), gr.update(), "#### 📤 Output Table: ❌ Execution Failed", gr.update()
 
     commit_batch_btn.click(
         fn=on_commit_batch,

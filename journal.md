@@ -13,6 +13,28 @@ This journal records verbatim developer instructions, architectural directives, 
 
 ---
 
+## 📅 2026-09-22: Instant Batch Visual Feedback & Execution Row Limit Clarification (v1.3.12)
+
+**Context:** The developer reported a lack of clear visual feedback during `💾 Execute on Table & Save Columns` button execution ("are we running?"), overlapping status text, and requested an explanation of how `Max Batch Rows (0=all)` works and why the term "batch" was misleading.
+
+**Verbatim Instruction:**
+> `there isn't much feedback when pressing the 'execute on columns...' are we running, how does the batch rows setting work`
+> `there is a separate test rows and batch rows, explain`
+> `so the word batch is missleading`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Generator-Based Instant Visual Feedback (`src/ui/playground_tab.py`)**:
+   - Converted `on_test_sample` and `on_commit_batch` event handlers into Python generators (`yield`).
+   - Clicking `💾 Execute on Table & Save Columns` or `🚀 Run Test on Sample Rows` instantly yields a prominent `⏳ Batch Execution in Progress...` banner displaying the target table, active model, and total execution row limit before starting heavy computations.
+   - Upon completion, the panel yields a formatted `✅ Batch Execution Successful!` summary detailing enriched rows and created columns.
+2. **Ambiguity Resolution for Row Settings**:
+   - Renamed label from `Max Batch Rows (0=all)` to `Total Rows to Process (0=all)` to avoid confusing table row limits with chunk/batch size parameters.
+   - Clarified distinction between `Sample Test Rows` (read-only dry-run preview on 1–10 sample rows) and `Total Rows to Process (0=all)` (permanent schema mutation attachment across target table rows).
+3. **Comprehensive TDD Verification**:
+   - Executed full test suite (`uv run python -m tests`) with all 110 tests passing cleanly (`110 Passed, 0 Failed, 0 Errors`).
+
+---
+
 ## 📅 2026-09-22: Unified Slash Intellisense (Skills, UDFs, Segmenters), Multi-UDF Prompts & Callback Hardening (v1.3.8)
 
 **Context:** The developer requested adding registered UDFs and Segmenters to the in-textbox slash Intellisense popup, sorted alphabetically with distinct type badges (`[Skill]`, `[UDF]`, `[Segmenter]`) and descriptions. Additionally, during a live test of multi-UDF prompts (`"mel_spectrograph and chroma for {file_name}"`), a `progress_callback` argument mismatch (`cb() missing 1 required positional argument: 'detail'`) was discovered and fixed.

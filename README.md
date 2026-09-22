@@ -45,7 +45,8 @@ A multimodal ETL and prompt-engineering workbench powered by **Pixeltable** and 
   - **`mfcc` (Mel-Frequency Cepstral Coefficients)**: Vocal timbre, speaker identity, and speech characteristics (`mfcc` array and `mfcc_img` preview).
   - **`chroma` (Chroma STFT)**: 12 semitone pitch classes for musical pitch, harmonic analysis, and vowel tonality (`chroma` array and `chroma_img` preview).
   - **`audio_stats`**: Audio and noise summary metrics (RMS energy, Zero Crossing Rate, Spectral Centroid, Rolloff, silence ratio, duration) stored as `pxt.Json` for Voice Activity Detection (VAD) and noise floor analysis.
-  - **Prompt-Driven Execution (`UDFRegistry`)**: Call any UDF via slash commands (e.g. `/mfcc n_mfcc=20 colormap=plasma`, `/chroma n_chroma=12`, `/audio_stats`) or natural language triggers (e.g. `"mel spectrogram of {file_name}"`), test on 1–N sample rows, and declaratively batch-commit.
+  - **`yamnet` (Audio Event Classification)**: Deep neural network acoustic scene and sound event classification using Google's pre-trained YAMNet model via ONNX Runtime across 521 AudioSet categories (`sound_category`, `sound_events`, `sound_scores`).
+  - **Prompt-Driven Execution (`UDFRegistry`)**: Call any UDF via slash commands (e.g. `/yamnet top_k=5 min_confidence=0.1`, `/mfcc n_mfcc=20 colormap=plasma`, `/chroma n_chroma=12`, `/audio_stats`) or natural language triggers (e.g. `"mel spectrogram of {file_name}"`, `"classify sound events with yamnet"`), test on 1–N sample rows, and declaratively batch-commit.
   - **In-App Registry Help**: Full searchable documentation accordion in Data Enhancement with schemas, parameter types, defaults, and usage examples.
   - Automatic minimum width upscaling for short clips, PyAV audio fallback (`.m4a`, `.aac`, `.mp3`), and null-safe execution on mixed-modality datasets.
 - **Embedded Multimodal Media & Interactive Inspector**:

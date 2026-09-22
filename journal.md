@@ -835,3 +835,34 @@ This journal records verbatim developer instructions, architectural directives, 
    - Updated test assertions in `tests/test_audio_spectrogram.py` to verify `assertNotIn("<name>_shape", headers)` and uniform row column counts.
    - All 102 automated tests pass cleanly (`102 Passed, 0 Failed, 0 Errors`).
    - Bumped patch version to `1.3.9` in `pyproject.toml`.
+
+---
+
+## 📅 2026-09-22: YAMNet Audio Event Classification & Shape Column Removal (v1.3.10)
+
+**Context:** Integrating deep neural network audio event tagging and acoustic scene recognition (YAMNet) and eliminating shape/JSON clutter from UDF previews.
+
+**Verbatim Instruction:**
+> `also for rms_mean, zcr mean... keep the columns but not the json`
+> `lets add yamnet next /brainstorming /using-superpowers`
+> `yes. and remove any shape column generation from all the udfs`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Lightweight Runtime Selection (`onnxruntime`)**:
+   - Legacy `tflite-runtime` lacks Python 3.13 Windows wheels and cannot be cleanly built from source.
+   - Selected `onnxruntime` (~20 MB) with official pre-built Python 3.13 support to execute Google's pre-trained YAMNet model (`yamnet.onnx`, 15.3 MB) and 521-class AudioSet taxonomy map (`yamnet_class_map.csv`), auto-cached in `~/.cache/pipeline_tools/models/yamnet/`.
+2. **Audio Classification Outputs & UDFs (`src/audio/yamnet.py`)**:
+   - Audio is resampled and normalized to 16 kHz mono float32.
+   - Outputs:
+     - `sound_category` (str): Top single detected category (e.g. `"Telephone"`, `"Speech"`, `"Music"`).
+     - `sound_events` (str): Top-K human-readable summary with confidence percentages.
+     - `sound_scores` (dict): Structured JSON dictionary of top-K category probabilities.
+   - Declaratively attached via `@pxt.udf` functions (`yamnet_primary_category`, `yamnet_sound_events`, `yamnet_scores`) and batch helper `attach_yamnet_columns`.
+3. **Registry & Sample Preview (`src/core/udf_registry.py`)**:
+   - Registered `yamnet` with slash command `/yamnet top_k=5 min_confidence=0.1` and natural language triggers (`"classify audio events with yamnet"`).
+   - Clean preview headers: `["Status", "Row ID", "File Name", "Primary Sound", "Top Sound Events"]` with zero shape columns.
+   - Dropped `Stats (JSON)` column from `_eval_audio_stats_sample`, retaining individual metric columns (`Duration (s)`, `RMS Mean`, `ZCR Mean`, `Centroid (Hz)`, `Silence Ratio`).
+4. **Verification & Versioning**:
+   - Created comprehensive test suite `tests/test_yamnet.py` (8 tests) and updated `tests/test_audio_spectrogram.py` and `tests/test_app.py`.
+   - Full test suite verified: **110 Passed, 0 Failed, 0 Errors** in 23s.
+   - Incremented version to `1.3.10` in `pyproject.toml`.

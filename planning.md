@@ -118,6 +118,11 @@ flowchart TD
   - Native Pixeltable views created via `pxt.create_view` ensure zero data duplication, full back-lineage to parent records, and automatic chunking upon new ingestions.
   - Interactive dry-run preview DataFrame and quick preset buttons (`📄 Split Pages`, `📝 Split Paragraphs`, `🔤 Split Sentences`, `🎙️ Audio Segments`, `🎬 Video Frames`).
   - Verified with 15 dedicated test cases (`tests/test_segmentation.py`) covering all modalities (PDF, text, audio, video) within the 96-test clean suite (`96 Passed, 0 Failed, 0 Errors`).
+- [x] **YAMNet Audio Event Classification & Visual-First Previews (v1.3.10)**
+  - Integrated Google's pre-trained YAMNet deep neural network via lightweight `onnxruntime` (~15 MB model) across 521 AudioSet categories.
+  - Implemented declarative Pixeltable computed columns (`sound_category`, `sound_events`, `sound_scores`) and prompt-driven execution via `/yamnet top_k=5 min_confidence=0.1`.
+  - Refined dry-run sample test previews across all audio UDFs to eliminate intermediate shape text columns (`*_shape`) and verbose raw JSON columns (`Stats (JSON)`), presenting visual-first, human-readable previews.
+  - Expanded test suite with 8 dedicated YAMNet tests in `tests/test_yamnet.py`, bringing the clean test suite to 110 tests (`110 Passed, 0 Failed, 0 Errors`).
 
 ### Phase 4: Multimodal Vision & Entity Classification Engines (Planned)
 - [ ] **Hugging Face & YOLO Vision Classification Engines**

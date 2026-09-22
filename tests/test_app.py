@@ -1155,6 +1155,11 @@ def run_tests(include_e2e=None):
         suite.addTests(loader.loadTestsFromTestCase(TestSegmentation))
     except Exception:
         pass
+    try:
+        from tests.test_yamnet import TestYAMNet
+        suite.addTests(loader.loadTestsFromTestCase(TestYAMNet))
+    except Exception:
+        pass
 
     if include_e2e:
         try:

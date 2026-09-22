@@ -211,7 +211,8 @@ class UDFRegistry:
                 "mel_spectrogram": "`mel_spectrogram` (Array), `mel_spectrogram_img` (Image)",
                 "mfcc": "`mfcc` (Array), `mfcc_img` (Image)",
                 "chroma": "`chroma` (Array), `chroma_img` (Image)",
-                "audio_stats": "`audio_stats` (JSON)"
+                "audio_stats": "`audio_stats` (JSON)",
+                "yamnet": "`sound_category` (String), `sound_events` (String), `sound_scores` (JSON)"
             }
             out_cols = cols_map.get(udf.name, f"`{udf.name}`")
 
@@ -248,11 +249,13 @@ class UDFRegistry:
             "   - `/mfcc n_mfcc=20 colormap=plasma`",
             "   - `/chroma n_chroma=12 colormap=coolwarm`",
             "   - `/audio_stats sr=22050 hop_length=512`",
+            "   - `/yamnet top_k=5 min_confidence=0.1`",
             "2. **Natural Language Trigger Mode**: Include the trigger phrase in your user prompt:",
             "   - `Compute the mel spectrogram for {file_name}`",
             "   - `Extract mfcc voice timbre for {file_name}`",
             "   - `Analyze pitch classes and chroma of {file_name}`",
             "   - `Calculate audio stats and noise floor for {file_name}`",
+            "   - `Classify sound events in {file_name} with yamnet`",
             "3. **Testing vs. Batching**:",
             "   - Click **🚀 Run Test on Sample Rows** to audition the UDF on 1–N sample records with inline graphical previews.",
             "   - Click **💾 Execute on Table & Save Columns** to declaratively attach computed columns across the entire dataset."
@@ -588,7 +591,7 @@ def _eval_audio_stats_sample(domain: str, table_name: str, sample_count: int = 2
             "data": [[f"Table '{domain}.{table_name}' is empty."]]
         }
 
-    headers = ["Status", "Row ID", "File Name", "Duration (s)", "RMS Mean", "ZCR Mean", "Centroid (Hz)", "Silence Ratio", "Stats (JSON)"]
+    headers = ["Status", "Row ID", "File Name", "Duration (s)", "RMS Mean", "ZCR Mean", "Centroid (Hz)", "Silence Ratio"]
     rows = []
 
     sr = kwargs.get("sr", 22050)
@@ -608,7 +611,6 @@ def _eval_audio_stats_sample(domain: str, table_name: str, sample_count: int = 2
         zcr_s = "—"
         cent_s = "—"
         sil_s = "—"
-        stats_json = "None (Non-audio)"
 
         if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
             stats = compute_audio_stats_core(file_path, sr=sr, hop_length=hop_length)
@@ -618,14 +620,13 @@ def _eval_audio_stats_sample(domain: str, table_name: str, sample_count: int = 2
                 zcr_s = str(stats.get("zcr_mean", "—"))
                 cent_s = str(stats.get("spectral_centroid_mean", "—"))
                 sil_s = str(stats.get("silence_ratio", "—"))
-                stats_json = json.dumps(stats, indent=2)
 
-        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), dur_s, rms_s, zcr_s, cent_s, sil_s, stats_json])
+        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), dur_s, rms_s, zcr_s, cent_s, sil_s])
 
     return {
         "status": "success",
         "headers": headers,
-        "datatypes": ["str", "str", "str", "str", "str", "str", "str", "str", "str"],
+        "datatypes": ["str", "str", "str", "str", "str", "str", "str", "str"],
         "data": rows,
         "count": len(rows),
         "is_udf": True
@@ -657,6 +658,92 @@ UDFRegistry.register(
         },
         attach_fn=_attach_audio_stats_batch,
         sample_eval_fn=_eval_audio_stats_sample
+    )
+)
+
+
+# -------------------------------------------------------------------------
+# UDF Definitions: YAMNet Audio Event Classification
+# -------------------------------------------------------------------------
+def _eval_yamnet_sample(domain: str, table_name: str, sample_count: int = 2, **kwargs) -> Dict[str, Any]:
+    """Dry-run YAMNet audio event classification on sample rows from table."""
+    from src.db.manager import DBManager
+    from src.audio.yamnet import classify_audio_yamnet_core
+
+    res = DBManager.get_table_data(domain, table_name, limit=sample_count, lightweight=False)
+    cols = res.get("columns", [])
+    data = res.get("data", [])
+
+    if not data:
+        return {
+            "status": "error",
+            "message": f"Table '{domain}.{table_name}' has no rows to test.",
+            "headers": ["Error"],
+            "data": [[f"Table '{domain}.{table_name}' is empty."]]
+        }
+
+    headers = ["Status", "Row ID", "File Name", "Primary Sound", "Top Sound Events"]
+    rows = []
+
+    top_k = kwargs.get("top_k", 5)
+    min_confidence = kwargs.get("min_confidence", 0.05)
+
+    audio_fallback = _resolve_sample_audio_paths(domain, table_name, cols, sample_count)
+
+    for idx, row in enumerate(data):
+        row_dict = dict(zip(cols, row))
+        row_id = row_dict.get("id", str(idx + 1))
+        file_name = row_dict.get("file_name", f"Row {idx + 1}")
+        file_path = str(row_dict.get("file_path") or audio_fallback.get(str(row_id)) or audio_fallback.get(str(file_name)) or audio_fallback.get(f"idx_{idx}") or "")
+        modality = str(row_dict.get("modality", "")).lower()
+
+        primary_s = "—"
+        events_s = "None (Non-audio)"
+
+        if modality == "audio" or Path(file_path).suffix.lower() in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"]:
+            pred = classify_audio_yamnet_core(file_path, top_k=top_k, min_confidence=min_confidence)
+            if pred is not None:
+                primary_s = str(pred.get("primary_category", "Unknown"))
+                events_s = str(pred.get("sound_events", primary_s))
+
+        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), primary_s, events_s])
+
+    return {
+        "status": "success",
+        "headers": headers,
+        "datatypes": ["str", "str", "str", "str", "str"],
+        "data": rows,
+        "count": len(rows),
+        "is_udf": True
+    }
+
+
+def _attach_yamnet_batch(domain: str, table_name: str, **kwargs) -> Dict[str, Any]:
+    """Declaratively attach YAMNet computed columns to table."""
+    from src.audio.yamnet import attach_yamnet_columns
+    return attach_yamnet_columns(domain, table_name, **kwargs)
+
+
+UDFRegistry.register(
+    UDFDefinition(
+        name="yamnet",
+        description="Classify audio events and acoustic scenes using Google's pre-trained YAMNet deep neural network (521 AudioSet categories).",
+        aliases=[
+            "yamnet",
+            "sound classification",
+            "audio classification",
+            "audio events",
+            "sound events",
+            "acoustic scene",
+            "sound categories",
+            "/yamnet"
+        ],
+        parameters={
+            "top_k": {"type": int, "default": 5, "description": "Number of top sound categories to extract"},
+            "min_confidence": {"type": float, "default": 0.05, "description": "Minimum confidence threshold (0.0 to 1.0)"}
+        },
+        attach_fn=_attach_yamnet_batch,
+        sample_eval_fn=_eval_yamnet_sample
     )
 )
 

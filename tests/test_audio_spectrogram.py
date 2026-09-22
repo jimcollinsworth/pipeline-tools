@@ -458,6 +458,9 @@ class TestAudioMelSpectrogram(unittest.TestCase):
         )
         self.assertEqual(stats_sample["status"], "success")
         self.assertIn("Duration (s)", stats_sample["headers"])
+        self.assertIn("RMS Mean", stats_sample["headers"])
+        self.assertIn("ZCR Mean", stats_sample["headers"])
+        self.assertNotIn("Stats (JSON)", stats_sample["headers"])
         self.assertTrue(stats_sample.get("is_udf", False))
 
     def test_21_isolated_row_inspection_with_arrays_and_labels(self):

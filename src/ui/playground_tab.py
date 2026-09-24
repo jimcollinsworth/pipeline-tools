@@ -482,11 +482,11 @@ def render_playground_tab(tab=None):
                         progress=gr.Progress(track_tqdm=False)):
         if not domain or not table_name:
             gr.Warning("Select a valid Domain and Table first.")
-            yield "### ⚠️ Missing Target\n> Select a valid Domain and Table first.", gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            yield "### ⚠️ Missing Target\n> Select a valid Domain and Table first.", gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
             return
         if not model:
             gr.Warning("Select a valid model first.")
-            yield f"### ⚠️ Missing Model\n> Select a valid {provider} model first.", gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            yield f"### ⚠️ Missing Model\n> Select a valid {provider} model first.", gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
         limit_desc = f"first **{int(limit_num)}** rows" if limit_num and int(limit_num) > 0 else "**ALL** rows in table"
@@ -495,7 +495,7 @@ def render_playground_tab(tab=None):
             f"> ⚙️ Executing prompt / UDF pipeline on `{domain}.{table_name}` using **[{provider}] {model}** across {limit_desc}.\n"
             f"> Please wait while Pixeltable processes computed columns..."
         )
-        yield running_banner, gr.update(), gr.update(), gr.update(), "#### 📤 Output Table: ⏳ Executing Batch...", gr.update()
+        yield running_banner, gr.update(), gr.update(), gr.update(), "#### 📤 Output Table: ⏳ Executing Batch...", gr.update(), gr.update()
 
         sys_prompt = get_domain_system_prompt(domain)
 
@@ -743,4 +743,6 @@ def render_playground_tab(tab=None):
         "output_table": output_table,
         "context_activity_badge": context_activity_badge,
         "refresh_activity_btn": refresh_activity_btn,
+        "commit_batch_btn": commit_batch_btn,
+        "on_commit_batch": on_commit_batch,
     }

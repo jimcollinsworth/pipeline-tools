@@ -1082,5 +1082,26 @@ This journal records verbatim developer instructions, architectural directives, 
    - Full automated test suite verified: **118 Passed, 0 Failed, 0 Errors** in 28s.
    - Bumped patch version to `1.3.20` in `pyproject.toml` and synchronized `uv.lock`.
 
+---
+
+## 📅 2026-09-24: Fix Batch Execution Yield Arity Mismatch in Data Enhancement (v1.3.21)
+
+**Context:** The developer reported that clicking "Execute on Table & Save Columns" in the Data Enhancement tab crashed with a Gradio `ValueError: A function (on_commit_batch) didn't return enough output values (needed: 7, returned: 6)`.
+
+**Verbatim Instruction:**
+> `test run works but execute fails`
+> `ValueError: A function (on_commit_batch) didn't return enough output values (needed: 7, returned: 6).`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Generator Yield Arity Alignment (`src/ui/playground_tab.py`)**:
+   - Diagnosed that when `context_activity_badge` was added as the 7th output of `commit_batch_btn.click`, the final success/error yields were updated to 7 items, but the early validation yields (missing target domain/table, missing model) and the initial running progress banner yield in `on_commit_batch` still returned 6 items.
+   - Added `gr.update()` as the 7th element to all early and in-flight progress yields in `on_commit_batch`.
+2. **Automated Generator Yield Verification (`tests/test_app.py`)**:
+   - Added `test_playground_on_commit_batch_yield_arity` to test every yield branch of `on_commit_batch` (missing target, missing model, running banner, completion) to guarantee `len(yielded) == 7` matches the UI component output count.
+3. **Verification & Versioning**:
+   - Full automated test suite verified: **119 Passed, 0 Failed, 0 Errors** in 28s.
+   - Bumped patch version to `1.3.21` in `pyproject.toml` and synchronized `uv.lock`.
+
+
 
 

@@ -805,6 +805,60 @@ class TestPipelineTools(unittest.TestCase):
         self.assertIn("FastAPI", summary)
         self.assertIn("Pixeltable", summary)
 
+    def test_playground_on_commit_batch_yield_arity(self):
+        """[UI] Verify on_commit_batch yields exactly 7 output values matching commit_batch_btn outputs on every step."""
+        import gradio as gr
+        from unittest.mock import MagicMock, patch
+        from src.ui.playground_tab import render_playground_tab
+
+        with gr.Blocks():
+            components = render_playground_tab()
+
+        on_commit_batch = components["on_commit_batch"]
+        dummy_progress = MagicMock()
+
+        # 1. Test missing domain/table early yield
+        gen = on_commit_batch(
+            domain="", table_name="", provider="Gemini", model="gemini-2.5-flash",
+            prompt_template="test", output_mode="⚡ Auto-Split JSON Keys into Columns",
+            target_col="out", mode="append", limit_num=0, is_lightweight=True,
+            sample_count=2, progress=dummy_progress
+        )
+        first_yield = next(gen)
+        self.assertEqual(len(first_yield), 7, f"Expected 7 output values for missing target, got {len(first_yield)}")
+
+        # 2. Test missing model early yield
+        gen = on_commit_batch(
+            domain=self.TEST_DOMAIN, table_name="test_tbl", provider="Gemini", model="",
+            prompt_template="test", output_mode="⚡ Auto-Split JSON Keys into Columns",
+            target_col="out", mode="append", limit_num=0, is_lightweight=True,
+            sample_count=2, progress=dummy_progress
+        )
+        first_yield = next(gen)
+        self.assertEqual(len(first_yield), 7, f"Expected 7 output values for missing model, got {len(first_yield)}")
+
+        # 3. Test running banner yield and completion yield with mocked controller
+        mock_res = {
+            "status": "success",
+            "message": "Enrichment completed",
+            "rows_processed": 2,
+            "columns_created": ["entity"],
+            "output_headers": ["id", "entity"],
+            "output_data": [["1", "test"]]
+        }
+        with patch("src.controllers.playground_controller.PlaygroundController.commit_batch_flow", return_value=mock_res):
+            gen = on_commit_batch(
+                domain=self.TEST_DOMAIN, table_name="test_tbl", provider="Gemini", model="gemini-2.5-flash",
+                prompt_template="test", output_mode="⚡ Auto-Split JSON Keys into Columns",
+                target_col="out", mode="append", limit_num=0, is_lightweight=True,
+                sample_count=2, progress=dummy_progress
+            )
+            running_yield = next(gen)
+            self.assertEqual(len(running_yield), 7, f"Expected 7 output values for running banner, got {len(running_yield)}")
+
+            completion_yield = next(gen)
+            self.assertEqual(len(completion_yield), 7, f"Expected 7 output values for completion, got {len(completion_yield)}")
+
     def test_context_tab_ui_flows(self):
         """[UI] Verify Context View handlers (on_load_context, on_save_system_prompt, on_export_context) execute cleanly."""
         import gradio as gr

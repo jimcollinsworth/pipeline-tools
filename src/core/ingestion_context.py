@@ -261,14 +261,22 @@ class IngestionContext:
     def export_to_markdown(self, export_dir: str = "exports") -> Path:
         """
         Export accumulated dataset context to exports/{domain}-{table}-ingestion-context.md
-        with YAML frontmatter and JSON-LD structured metadata.
+        with YAML frontmatter and JSON-LD structured metadata, plus companion JSON cache.
         """
         out_dir = Path(export_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         file_path = out_dir / f"{self.domain}-{self.table}-ingestion-context.md"
+        json_file_path = out_dir / f"{self.domain}-{self.table}-ingestion-context.json"
 
         content = self.format_markdown_register()
         file_path.write_text(content, encoding="utf-8")
+
+        # Persist companion JSON file for instant lossless hydration
+        try:
+            json_file_path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        except Exception as json_err:
+            logger.warning(f"Could not write companion context JSON: {json_err}")
+
         logger.info(f"Saved ingestion context knowledge register to {file_path}")
         return file_path
 
@@ -301,6 +309,86 @@ class IngestionContext:
             metadata=data.get("metadata", {})
         )
 
+    @classmethod
+    def load_from_export(cls, domain: str, table: str, export_dir: str = "exports") -> Optional["IngestionContext"]:
+        """
+        Load persisted context from exports/{domain}-{table}-ingestion-context.json,
+        or fall back to parsing the Markdown knowledge register (.md).
+        """
+        out_dir = Path(export_dir)
+        d = (domain or "default").strip()
+        t = (table or "raw_assets").strip()
+        json_file = out_dir / f"{d}-{t}-ingestion-context.json"
+        md_file = out_dir / f"{d}-{t}-ingestion-context.md"
+
+        # 1. Primary: load from companion JSON
+        if json_file.exists():
+            try:
+                data = json.loads(json_file.read_text(encoding="utf-8"))
+                return cls.from_dict(data)
+            except Exception as e:
+                logger.warning(f"Failed to read context JSON {json_file}: {e}")
+
+        # 2. Fallback: parse Markdown register
+        if md_file.exists():
+            try:
+                text = md_file.read_text(encoding="utf-8")
+                ctx = cls(domain=d, table=t)
+                in_entities = False
+                in_taxonomies = False
+                for line in text.splitlines():
+                    trimmed = line.strip()
+                    if trimmed.startswith("## 1. Discovered Entity Register"):
+                        in_entities = True
+                        in_taxonomies = False
+                        continue
+                    elif trimmed.startswith("## 2. Taxonomies & Themes"):
+                        in_entities = False
+                        in_taxonomies = True
+                        continue
+                    elif trimmed.startswith("## 3. Record-by-Record") or trimmed.startswith("## 4. Structured Schema"):
+                        in_entities = False
+                        in_taxonomies = False
+                        continue
+
+                    # Parse Markdown table row: | **Entity** | `cat` | mentions | first_seen |
+                    if in_entities and trimmed.startswith("|") and not trimmed.startswith("|---") and not trimmed.startswith("| Canonical Entity"):
+                        parts = [p.strip() for p in trimmed.split("|")[1:-1]]
+                        if len(parts) >= 3:
+                            raw_name = parts[0].strip().strip("*` ").strip()
+                            raw_cat = parts[1].strip().strip("*` ").strip() if len(parts) > 1 else "general"
+                            raw_mentions = 1
+                            try:
+                                raw_mentions = int(re.sub(r'[^\d]', '', parts[2]))
+                            except Exception:
+                                pass
+                            first_seen = parts[3].strip() if len(parts) > 3 else datetime.now().isoformat()
+                            if raw_name:
+                                ctx.entities[raw_name] = {
+                                    "canonical": raw_name,
+                                    "category": raw_cat,
+                                    "mentions": raw_mentions,
+                                    "first_seen": first_seen
+                                }
+                                ctx.entity_aliases[raw_name.lower()] = raw_name
+
+                    # Parse taxonomies: - **Key**: v1, v2
+                    if in_taxonomies and trimmed.startswith("- **"):
+                        m = re.match(r'-\s*\*\*([^*]+)\*\*:\s*(.*)', trimmed)
+                        if m:
+                            key = m.group(1).strip().lower()
+                            vals = [v.strip() for v in m.group(2).split(",") if v.strip()]
+                            if key == "global themes":
+                                ctx.global_themes = vals
+                            else:
+                                ctx.taxonomies[key] = vals
+
+                return ctx
+            except Exception as e:
+                logger.warning(f"Failed to parse context Markdown {md_file}: {e}")
+
+        return None
+
 
 class IngestionContextManager:
     """Manages active IngestionContext instances across domains and tables."""
@@ -308,12 +396,13 @@ class IngestionContextManager:
 
     @classmethod
     def get_context(cls, domain: str = "default", table: str = "raw_assets") -> IngestionContext:
-        """Retrieve or create the active IngestionContext for the specified domain and table."""
+        """Retrieve, hydrate from disk, or create the active IngestionContext for domain/table."""
         d = (domain or "default").strip()
         t = (table or "raw_assets").strip()
         key = f"{d}.{t}"
         if key not in cls._instances:
-            cls._instances[key] = IngestionContext(domain=d, table=t)
+            persisted = IngestionContext.load_from_export(d, t)
+            cls._instances[key] = persisted if persisted is not None else IngestionContext(domain=d, table=t)
         return cls._instances[key]
 
     @classmethod
@@ -324,4 +413,5 @@ class IngestionContextManager:
         key = f"{d}.{t}"
         cls._instances[key] = IngestionContext(domain=d, table=t)
         return cls._instances[key]
+
 

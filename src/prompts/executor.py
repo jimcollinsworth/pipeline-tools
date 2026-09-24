@@ -331,16 +331,66 @@ class PromptExecutor:
             created_columns = [primary_col] + extracted_cols
             updated_count = total_rows
 
-            # Dynamic context export (RES-12)
-            ctx = IngestionContext(domain=table_dir, table=table_name)
-            ctx.record_row(
-                file_name="DeclarativeBatch",
-                modality="batch_computed",
-                content_snippet=prompt_template[:150],
-                summary=f"Computed {len(created_columns)} columns via [{provider}] '{model}'",
-                extracted_entities=extracted_cols,
-                extracted_tags=[provider, model]
-            )
+            # Dynamic context export & entity accumulation (RES-12)
+            from src.core.ingestion_context import IngestionContextManager
+            ctx = IngestionContextManager.get_context(domain=table_dir, table=table_name)
+
+            # Sample computed rows to extract actual entity values, summaries, and themes
+            try:
+                available_table_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
+                inspect_cols = [c for c in created_columns if c in available_table_cols]
+                if inspect_cols:
+                    sample_query = table.select(*[table[c] for c in inspect_cols]).limit(100)
+                    sample_df = sample_query.collect().to_pandas()
+                    for _, s_row in sample_df.iterrows():
+                        row_entities = []
+                        row_summary = ""
+                        for col_name in inspect_cols:
+                            val = s_row.get(col_name)
+                            if val is None:
+                                continue
+                            col_lower = str(col_name).lower()
+                            if "summary" in col_lower and isinstance(val, str) and not row_summary:
+                                row_summary = val[:250]
+                            # Detect entity/tag/category columns
+                            if any(k in col_lower for k in ["entit", "topic", "tag", "keyword", "concept", "categor", "item"]):
+                                if isinstance(val, (list, tuple, set)):
+                                    for item in val:
+                                        if item and isinstance(item, str) and item.strip():
+                                            row_entities.append(item.strip())
+                                elif isinstance(val, str) and val.strip():
+                                    cleaned = val.strip()
+                                    if cleaned.startswith("[") and cleaned.endswith("]"):
+                                        try:
+                                            parsed = json.loads(cleaned)
+                                            if isinstance(parsed, list):
+                                                row_entities.extend([str(x).strip() for x in parsed if str(x).strip()])
+                                        except Exception:
+                                            pass
+                                    if not row_entities:
+                                        parts = [p.strip().strip("•-*\"'") for p in re.split(r'[,;\n]+', cleaned) if p.strip()]
+                                        row_entities.extend(parts)
+
+                        if row_entities or row_summary:
+                            ctx.record_row(
+                                file_name="DeclarativeBatch",
+                                modality="batch_computed",
+                                content_snippet=prompt_template[:150],
+                                summary=row_summary or f"Computed columns: {', '.join(created_columns)}",
+                                extracted_entities=row_entities if row_entities else None,
+                                extracted_tags=[provider, model]
+                            )
+            except Exception as extract_err:
+                logger.warning(f"Error sampling entities for context: {extract_err}")
+
+            if not ctx.row_summaries:
+                ctx.record_row(
+                    file_name="DeclarativeBatch",
+                    modality="batch_computed",
+                    content_snippet=prompt_template[:150],
+                    summary=f"Computed {len(created_columns)} columns via [{provider}] '{model}'",
+                    extracted_tags=[provider, model]
+                )
             context_file = ctx.export_to_markdown()
 
             cols_summary = ", ".join(f"`{c}`" for c in created_columns)
@@ -418,14 +468,48 @@ class PromptExecutor:
 
             updated_count = total_rows
 
-            ctx = IngestionContext(domain=table_dir, table=table_name)
-            ctx.record_row(
-                file_name="DeclarativeBatch",
-                modality="batch_computed",
-                content_snippet=prompt_template[:150],
-                summary=f"Computed column '{safe_col}' via [{provider}] '{model}'",
-                extracted_tags=[provider, model]
-            )
+            from src.core.ingestion_context import IngestionContextManager
+            ctx = IngestionContextManager.get_context(domain=table_dir, table=table_name)
+            try:
+                available_table_cols = list(table.columns()) if callable(table.columns) else list(table._schema.keys())
+                if safe_col in available_table_cols:
+                    sample_query = table.select(table[safe_col]).limit(100)
+                    sample_df = sample_query.collect().to_pandas()
+                    for _, s_row in sample_df.iterrows():
+                        val = s_row.get(safe_col)
+                        if val is None:
+                            continue
+                        col_lower = str(safe_col).lower()
+                        row_entities = []
+                        row_summary = ""
+                        if "summary" in col_lower and isinstance(val, str):
+                            row_summary = val[:250]
+                        if any(k in col_lower for k in ["entit", "topic", "tag", "keyword", "concept", "categor"]):
+                            if isinstance(val, (list, tuple, set)):
+                                row_entities = [str(x).strip() for x in val if x and str(x).strip()]
+                            elif isinstance(val, str) and val.strip():
+                                parts = [p.strip().strip("•-*\"'") for p in re.split(r'[,;\n]+', val.strip()) if p.strip()]
+                                row_entities = parts
+                        if row_entities or row_summary:
+                            ctx.record_row(
+                                file_name="DeclarativeBatch",
+                                modality="batch_computed",
+                                content_snippet=prompt_template[:150],
+                                summary=row_summary or f"Computed column '{safe_col}' via [{provider}] '{model}'",
+                                extracted_entities=row_entities if row_entities else None,
+                                extracted_tags=[provider, model]
+                            )
+            except Exception as extract_err:
+                logger.warning(f"Error sampling single-column context: {extract_err}")
+
+            if not ctx.row_summaries:
+                ctx.record_row(
+                    file_name="DeclarativeBatch",
+                    modality="batch_computed",
+                    content_snippet=prompt_template[:150],
+                    summary=f"Computed column '{safe_col}' via [{provider}] '{model}'",
+                    extracted_tags=[provider, model]
+                )
             context_file = ctx.export_to_markdown()
 
             DBManager.record_operation(

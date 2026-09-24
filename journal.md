@@ -1015,3 +1015,27 @@ This journal records verbatim developer instructions, architectural directives, 
    - Verified clean zero-warning startup via `uv run python -c "from src.db.manager import DBManager; DBManager.heal_postgres_locks()"`.
    - All 110 automated tests pass cleanly (`110 Passed, 0 Failed, 0 Errors`).
    - Bumped patch version to `1.3.11` in `pyproject.toml`.
+
+---
+
+## 📅 2026-09-24: Ingestion Context Persistence, Entity Cell Extraction & Manager Wiring (v1.3.18)
+
+**Context:** Resolving Context View showing "Entities Tracked: 0" after prompt data enhancement runs on tables like `personal.documents_short`.
+
+**Verbatim Instruction:**
+> `i just ran a data enhancement on documents-short, worked fine, see the new columns, but context view says there are none and need to run data enhancement. analyze whats going on, check your tests on the context processing and verify entities are found during the tests. clarify where this context data is stored in the app also /chrome-devtools /using-superpowers`
+> `do the fixes, run the new tests, merge and deploy, notify me with a github release`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Persistent State Hydration & Companion JSON (`src/core/ingestion_context.py`)**:
+   - Fixed `IngestionContextManager.get_context(domain, table)` to automatically hydrate state from disk if present on disk.
+   - Added companion JSON cache (`exports/{domain}-{table}-ingestion-context.json`) alongside Markdown exports (`exports/{domain}-{table}-ingestion-context.md`) for instant, lossless deserialization.
+   - Added fallback Markdown parser in `IngestionContext.load_from_export` capable of reconstructing entity registries, categories, mentions, taxonomies, and themes directly from Markdown knowledge registers while preserving underscored identifiers (`doc_summary`, `action_items`).
+2. **Context Manager Integration & Row Entity Extraction (`src/prompts/executor.py`, `src/db/manager.py`)**:
+   - Replaced orphaned local `IngestionContext(...)` instantiations in `PromptExecutor.apply_prompt_to_table` and `DBManager` with `IngestionContextManager.get_context(...)`, ensuring mutations update the shared application state.
+   - Replaced naive recording of database column names (`extracted_cols`) with bounded row sampling (`limit(100)`) of generated columns, extracting structured lists, JSON arrays, and delimited entities into `ctx.record_row` and `ctx.normalize_entity`.
+3. **Test Suite Expansion & Verification (`tests/test_controllers.py`)**:
+   - Added TDD unit tests `test_ingestion_context_disk_persistence_and_hydration` and `test_declarative_prompt_updates_shared_context_and_extracts_entities`.
+   - Full automated test suite verified: **116 Passed, 0 Failed, 0 Errors** in 26s.
+   - Bumped patch version to `1.3.18` in `pyproject.toml` and synchronized `uv.lock`.
+

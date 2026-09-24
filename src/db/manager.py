@@ -621,8 +621,8 @@ class DBManager:
             total_files = len(files_info)
 
             # Initialize dynamic ingestion context accumulator (RES-12)
-            from src.core.ingestion_context import IngestionContext
-            ctx = IngestionContext(domain=safe_dir, table=safe_tbl)
+            from src.core.ingestion_context import IngestionContextManager
+            ctx = IngestionContextManager.get_context(domain=safe_dir, table=safe_tbl)
 
             # Chunked Batch Streaming Ingestion (Supporting 10,000+ files in bounded O(1) heap RAM)
             BATCH_SIZE = 100
@@ -760,8 +760,8 @@ class DBManager:
             table = cls.get_or_create_table(safe_dir, safe_tbl)
 
             # Initialize dynamic ingestion context accumulator (RES-12)
-            from src.core.ingestion_context import IngestionContext
-            ctx = IngestionContext(domain=safe_dir, table=safe_tbl)
+            from src.core.ingestion_context import IngestionContextManager
+            ctx = IngestionContextManager.get_context(domain=safe_dir, table=safe_tbl)
 
             ext = p.suffix.lower()
             delimiter = "\t" if ext in [".tsv", ".tab"] else ","

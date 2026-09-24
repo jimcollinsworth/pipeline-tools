@@ -381,3 +381,95 @@ class TestControllers(unittest.TestCase):
         # Clean up test export
         Path(export_res["file_path"]).unlink(missing_ok=True)
 
+    def test_ingestion_context_disk_persistence_and_hydration(self):
+        """[Context] Verify IngestionContext persists to disk and hydrates automatically on fresh get_context()."""
+        from src.controllers.context_controller import ContextController
+        from src.core.ingestion_context import IngestionContextManager
+
+        tbl_name = "ctrl_ctx_persist_tbl"
+        ctx = IngestionContextManager.reset_context(self.TEST_DOMAIN, tbl_name)
+        ctx.normalize_entity("Gemini", "llm")
+        ctx.normalize_entity("Pixeltable", "database")
+        ctx.record_row(
+            file_name="report.txt",
+            modality="docs",
+            content_snippet="Test report",
+            extracted_tags=["ai", "database"]
+        )
+
+        exported_path = ctx.export_to_markdown()
+        self.assertTrue(Path(exported_path).exists())
+
+        # Simulate fresh process / empty memory cache
+        IngestionContextManager._instances.clear()
+
+        # Re-fetch from manager - should automatically hydrate from disk
+        reloaded_ctx = IngestionContextManager.get_context(self.TEST_DOMAIN, tbl_name)
+        self.assertEqual(len(reloaded_ctx.entities), 2, "Entities were not rehydrated from disk into memory")
+        self.assertIn("Gemini", reloaded_ctx.entities)
+        self.assertIn("Pixeltable", reloaded_ctx.entities)
+        self.assertIn("ai", reloaded_ctx.taxonomies.get("tags", []))
+
+        # Verify ContextController also reflects hydrated state
+        state = ContextController.load_context_state(self.TEST_DOMAIN, tbl_name)
+        self.assertEqual(state["entity_count"], 2)
+        self.assertEqual(len(state["entity_rows"]), 2)
+
+        # Cleanup
+        Path(exported_path).unlink(missing_ok=True)
+        json_path = Path(str(exported_path).replace(".md", ".json"))
+        json_path.unlink(missing_ok=True)
+
+    def test_declarative_prompt_updates_shared_context_and_extracts_entities(self):
+        """[Context] Verify PromptExecutor records extracted entities into IngestionContextManager and persists."""
+        from src.prompts.executor import PromptExecutor
+        from src.controllers.context_controller import ContextController
+        from src.core.ingestion_context import IngestionContextManager
+        import pixeltable as pxt
+
+        tbl_name = "ctrl_ctx_enhancement_tbl"
+        full_tbl = f"{self.TEST_DOMAIN}.{tbl_name}"
+        try:
+            pxt.drop_table(full_tbl, if_not_exists="ignore")
+        except Exception:
+            pass
+
+        t = pxt.create_table(full_tbl, {"file_name": pxt.String, "content": pxt.String, "metadata": pxt.Json})
+        t.insert([
+            {"file_name": "doc1.txt", "content": "About PostgreSQL and Python", "metadata": {}},
+            {"file_name": "doc2.txt", "content": "About Gradio and Pixeltable", "metadata": {}}
+        ])
+
+        # Mock LLMService.generate to return structured JSON string with key_entities
+        mock_response = '{"key_entities": ["PostgreSQL", "Pixeltable"], "doc_summary": "Architecture report"}'
+        with patch("src.core.llm_service.LLMService.generate", return_value=mock_response):
+            res = PromptExecutor.apply_prompt_to_table(
+                model="llama3.2",
+                prompt_template="Extract entities from {content}",
+                system_prompt="You are a data extractor.",
+                table_dir=self.TEST_DOMAIN,
+                table_name=tbl_name,
+                provider="Ollama",
+                auto_split=True
+            )
+            self.assertEqual(res["status"], "success")
+
+        # Verify IngestionContextManager has the extracted entities
+        ctx = IngestionContextManager.get_context(self.TEST_DOMAIN, tbl_name)
+        self.assertGreaterEqual(len(ctx.entities), 2)
+        self.assertIn("PostgreSQL", ctx.entities)
+        self.assertIn("Pixeltable", ctx.entities)
+
+        # Verify ContextController load_context_state reflects them
+        state = ContextController.load_context_state(self.TEST_DOMAIN, tbl_name)
+        self.assertGreaterEqual(state["entity_count"], 2)
+
+        # Cleanup table and export
+        try:
+            pxt.drop_table(full_tbl, if_not_exists="ignore")
+        except Exception:
+            pass
+        if "context_file" in res and res["context_file"]:
+            Path(res["context_file"]).unlink(missing_ok=True)
+            Path(str(res["context_file"]).replace(".md", ".json")).unlink(missing_ok=True)
+

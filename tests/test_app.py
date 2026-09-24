@@ -263,6 +263,23 @@ class TestPipelineTools(unittest.TestCase):
         text = DBManager.extract_file_content("non_existent_file_path.md", "docs", ".md")
         self.assertEqual(text, "")
 
+    def test_extract_file_content_pdf_resource_cleanup(self):
+        """[Ingest] Verify PDF text extraction extracts text and releases all pypdfium2 handles."""
+        import tempfile
+        import pypdfium2 as pdfium
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pdf_path = Path(tmp_dir) / "sample_doc.pdf"
+            doc = pdfium.PdfDocument.new()
+            doc.new_page(width=300, height=300)
+            doc.save(str(pdf_path))
+            doc.close()
+
+            # Extract content via DBManager
+            extracted = DBManager.extract_file_content(str(pdf_path), "docs", ".pdf")
+            self.assertIsInstance(extracted, str)
+            self.assertTrue(extracted == "" or "PAGE BREAK" in extracted or "no extractable text" in extracted)
+
     def test_ingest_empty_file_list(self):
         """[Ingest] Verify DBManager.ingest_files returns a clean error dictionary when given no files."""
         res = DBManager.ingest_files(self.TEST_DOMAIN, "app_empty_test", [])

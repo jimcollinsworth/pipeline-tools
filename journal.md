@@ -1039,3 +1039,27 @@ This journal records verbatim developer instructions, architectural directives, 
    - Full automated test suite verified: **116 Passed, 0 Failed, 0 Errors** in 26s.
    - Bumped patch version to `1.3.18` in `pyproject.toml` and synchronized `uv.lock`.
 
+---
+
+## 📅 2026-09-24: PyPDFium2 C-Handle Cleanup & Dynamic Semantic Version Display (v1.3.19)
+
+**Context:** Eliminating noisy `pypdfium2` shutdown warnings (`The following objects are still open and will now be closed: [<PdfDocument...>]`) and displaying the full dynamic semantic version ID throughout the application.
+
+**Verbatim Instruction:**
+> `i got this message on last exit, is there processing that continues even after the pipeline app has given me a processing complete? how do we know ?`
+> `yes`
+> `also, display full version id in app`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Explicit C-Level PDF Resource Cleanup (`src/db/manager.py`, `src/core/segmenter_registry.py`)**:
+   - Wrapped `pypdfium2.PdfDocument` in Python `with` context blocks.
+   - Enclosed all `page.get_textpage()` and `pdf.get_page()` extractions in explicit `try ... finally` blocks closing `textpage.close()` and `page.close()`, guaranteeing zero lingering C-level handles at process exit.
+2. **Dynamic Semantic Versioning (`src/core/config.py`, `app.py`)**:
+   - Added `get_app_version()` to resolve the full semantic version dynamically from package metadata or `pyproject.toml`.
+   - Updated Gradio Blocks title, top application banner header, and CLI startup logs to display the complete dynamic version (e.g. `v1.3.19`).
+3. **Verification & Versioning**:
+   - Added `test_extract_file_content_pdf_resource_cleanup` in `tests/test_app.py`.
+   - Full automated test suite verified: **117 Passed, 0 Failed, 0 Errors** in 28s.
+   - Bumped patch version to `1.3.19` in `pyproject.toml` and synchronized `uv.lock`.
+
+

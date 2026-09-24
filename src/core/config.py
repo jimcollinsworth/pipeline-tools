@@ -158,3 +158,20 @@ def update_last_entry(**kwargs) -> Settings:
 def get_settings() -> Settings:
     return load_settings()
 
+def get_app_version() -> str:
+    """Retrieve full dynamic semantic version from package metadata or pyproject.toml."""
+    try:
+        from importlib.metadata import version
+        return version("pipeline-tools")
+    except Exception:
+        pass
+    try:
+        pyproject = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
+        if pyproject.exists():
+            m = re.search(r'version\s*=\s*["\']([^"\']+)["\']', pyproject.read_text(encoding="utf-8"))
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return "1.3.19"
+

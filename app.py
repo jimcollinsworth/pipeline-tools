@@ -11,7 +11,7 @@ import atexit
 from pathlib import Path
 import json
 import gradio as gr
-from src.core.config import get_settings
+from src.core.config import get_settings, get_app_version
 from src.core.skills import SkillsRegistry
 from src.core.udf_registry import UDFRegistry
 from src.core.segmenter_registry import SegmenterRegistry
@@ -631,11 +631,12 @@ def create_app():
     except Exception:
         pass
 
-    with gr.Blocks(title="Pipeline Tools v1.3", fill_width=True) as demo:
+    app_version = get_app_version()
+    with gr.Blocks(title=f"Pipeline Tools v{app_version}", fill_width=True) as demo:
         gr.Markdown(
-            """
+            f"""
             <div class="app-header">
-                <h1>PIPELINE TOOLS v1.3 // Multimodal Workbench</h1>
+                <h1>PIPELINE TOOLS <span style="font-size: 0.8em; opacity: 0.85;">v{app_version}</span> // Multimodal Workbench</h1>
                 <p>Declarative Ingestion (Pixeltable) &bull; Segmentation &bull; Data Enhancement &bull; Context Knowledge &bull; View & Export</p>
             </div>
             """
@@ -710,7 +711,7 @@ if __name__ == "__main__":
         cmd = [sys.executable, "-m", "gradio", "app.py", "--watch-dirs", "src"]
         sys.exit(subprocess.call(cmd))
 
-    print("\n⏳ Initializing Pipeline Tools workbench & database...", flush=True)
+    print(f"\n⏳ Initializing Pipeline Tools v{get_app_version()} workbench & database...", flush=True)
     demo = create_app()
     port = 7860
 

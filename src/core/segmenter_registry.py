@@ -362,15 +362,21 @@ def _preview_split_pages(domain: str, table_name: str, sample_count: int = 2, **
         if file_path and Path(file_path).suffix.lower() == ".pdf" and Path(file_path).is_file():
             try:
                 import pypdfium2 as pdfium
-                pdf = pdfium.PdfDocument(file_path)
-                for page_idx, page in enumerate(pdf):
-                    textpage = page.get_textpage()
-                    page_text = textpage.get_text_range().strip()
-                    char_count = str(len(page_text))
-                    snippet = (page_text[:140] + "...") if len(page_text) > 140 else (page_text or "[Empty Page]")
-                    rows.append(["🔬 Page Preview", row_id, file_name, f"Page {page_idx + 1}", char_count, snippet])
-                    pages_found += 1
-                pdf.close()
+                with pdfium.PdfDocument(file_path) as pdf:
+                    for page_idx in range(len(pdf)):
+                        page = pdf.get_page(page_idx)
+                        try:
+                            textpage = page.get_textpage()
+                            try:
+                                page_text = textpage.get_text_range().strip()
+                                char_count = str(len(page_text))
+                                snippet = (page_text[:140] + "...") if len(page_text) > 140 else (page_text or "[Empty Page]")
+                                rows.append(["🔬 Page Preview", row_id, file_name, f"Page {page_idx + 1}", char_count, snippet])
+                                pages_found += 1
+                            finally:
+                                textpage.close()
+                        finally:
+                            page.close()
             except Exception:
                 pass
 

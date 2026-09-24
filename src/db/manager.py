@@ -555,17 +555,22 @@ class DBManager:
             elif ext == ".pdf":
                 try:
                     import pypdfium2 as pdfium
-                    pdf = pdfium.PdfDocument(p)
                     pages_text = []
-                    for page_idx in range(len(pdf)):
-                        page = pdf.get_page(page_idx)
-                        textpage = page.get_textpage()
-                        text = textpage.get_text_range()
-                        if text and text.strip():
-                            # Filter non-printable / raw binary bytes
-                            clean_text = "".join(c for c in text if c.isprintable() or c in "\n\r\t")
-                            if clean_text.strip():
-                                pages_text.append(clean_text.strip())
+                    with pdfium.PdfDocument(p) as pdf:
+                        for page_idx in range(len(pdf)):
+                            page = pdf.get_page(page_idx)
+                            try:
+                                textpage = page.get_textpage()
+                                try:
+                                    text = textpage.get_text_range()
+                                    if text and text.strip():
+                                        clean_text = "".join(c for c in text if c.isprintable() or c in "\n\r\t")
+                                        if clean_text.strip():
+                                            pages_text.append(clean_text.strip())
+                                finally:
+                                    textpage.close()
+                            finally:
+                                page.close()
                     if pages_text:
                         return "\n\n--- PAGE BREAK ---\n\n".join(pages_text)
                     return "[Scanned/Image PDF - no extractable text found]"

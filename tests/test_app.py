@@ -763,9 +763,9 @@ class TestPipelineTools(unittest.TestCase):
 
         self.assertIsNotNone(demo)
         
-        # Verify critical affordances exist in the constructed component tree
         button_labels = [c.value for c in demo.blocks.values() if isinstance(c, gr.Button)]
         self.assertIn("🔄 Load / Refresh Table", button_labels, "Load / Refresh Table button missing from UI components.")
+        self.assertIn("🔄 Refresh Activity", button_labels, "Refresh Activity button missing from UI components.")
         self.assertIn("💾 Save System Prompt", button_labels, "Save System Prompt button missing from UI components.")
         self.assertIn("🔍 Inspect CSV File", button_labels, "Inspect CSV File button missing from UI components.")
         self.assertIn("🔍 Scan Directory", button_labels, "Scan Directory button missing from UI components.")
@@ -778,6 +778,32 @@ class TestPipelineTools(unittest.TestCase):
         radio_choices = [getattr(c, "choices", None) for c in demo.blocks.values() if isinstance(c, gr.Radio)]
         has_mode_radio = any(choices and "📄 Single Row-Oriented File (CSV)" in str(choices) for choices in radio_choices)
         self.assertTrue(has_mode_radio, "Dual Ingest Mode radio missing from UI.")
+
+    def test_playground_context_activity_badge_wiring(self):
+        """[UI] Verify Data Enhancement tab wires context_activity_badge and refresh_activity_btn."""
+        import gradio as gr
+        from src.ui.playground_tab import render_playground_tab
+        from src.controllers.context_controller import ContextController
+        from src.core.ingestion_context import IngestionContextManager
+
+        with gr.Blocks():
+            components = render_playground_tab()
+
+        self.assertIn("context_activity_badge", components)
+        self.assertIn("refresh_activity_btn", components)
+        self.assertIsNotNone(components["context_activity_badge"])
+        self.assertIsNotNone(components["refresh_activity_btn"])
+
+        # Test dynamic summary computation
+        test_tbl = "test_activity_badge_tbl"
+        ctx = IngestionContextManager.get_context(self.TEST_DOMAIN, test_tbl)
+        ctx.normalize_entity("FastAPI", "framework")
+        ctx.normalize_entity("Pixeltable", "database")
+
+        summary = ContextController.get_minimal_activity_summary(self.TEST_DOMAIN, test_tbl)
+        self.assertIn("**Entities Tracked:** `2`", summary)
+        self.assertIn("FastAPI", summary)
+        self.assertIn("Pixeltable", summary)
 
     def test_context_tab_ui_flows(self):
         """[UI] Verify Context View handlers (on_load_context, on_save_system_prompt, on_export_context) execute cleanly."""

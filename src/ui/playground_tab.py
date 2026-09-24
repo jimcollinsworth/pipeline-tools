@@ -194,9 +194,12 @@ def render_playground_tab(tab=None):
 
             # Minimal Context Activity Accordion (Issue #3)
             with gr.Accordion("🧠 Context Knowledge & Activity", open=False, elem_classes=["context-activity-accordion"]):
-                context_activity_badge = gr.Markdown(
-                    ContextController.get_minimal_activity_summary(initial_domain, initial_table)
-                )
+                with gr.Row():
+                    context_activity_badge = gr.Markdown(
+                        ContextController.get_minimal_activity_summary(initial_domain, initial_table),
+                        scale=5
+                    )
+                    refresh_activity_btn = gr.Button("🔄 Refresh Activity", size="sm", variant="secondary", scale=1)
 
         # -------------------------------------------------------------------------
         # Section 3: Consolidated Full-Width Two-Table Workbench
@@ -291,12 +294,13 @@ def render_playground_tab(tab=None):
             datatype=["str", "str"],
             value=[["Ready", f"Loaded table '{dom}.{new_tbl}'. Run sample test or commit batch to generate output."]]
         )
-        return gr.update(choices=res["choices"], value=new_tbl), banner, info, df_update, pills, reset_out_header, reset_out_df
+        badge = ContextController.get_minimal_activity_summary(dom, new_tbl)
+        return gr.update(choices=res["choices"], value=new_tbl), banner, info, df_update, pills, reset_out_header, reset_out_df, badge
 
     domain_dropdown.change(
         fn=on_domain_change,
         inputs=[domain_dropdown, preview_mode_toggle, sample_count_slider],
-        outputs=[table_dropdown, domain_prompt_banner, input_table_header, input_table, available_columns_info, output_table_header, output_table]
+        outputs=[table_dropdown, domain_prompt_banner, input_table_header, input_table, available_columns_info, output_table_header, output_table, context_activity_badge]
     )
 
     def on_table_change(selected_table, current_domain, is_lightweight, sample_count):
@@ -311,20 +315,22 @@ def render_playground_tab(tab=None):
                 datatype=["str", "str"],
                 value=[["Ready", f"Loaded table '{current_domain}.{tbl_str}'. Run sample test or commit batch to generate output."]]
             )
-            return info, df_update, pills, reset_out_header, reset_out_df
+            badge = ContextController.get_minimal_activity_summary(current_domain, tbl_str)
+            return info, df_update, pills, reset_out_header, reset_out_df, badge
 
         return (
             "⚠️ Select a table name.",
             gr.update(headers=[], value=[]),
             "💡 **Available Column Placeholders:** *None*",
             "#### 📤 Output Table: *No table selected*",
-            gr.update(headers=[], value=[])
+            gr.update(headers=[], value=[]),
+            gr.update(value="⚠️ *No table selected.*")
         )
 
     table_dropdown.change(
         fn=on_table_change,
         inputs=[table_dropdown, domain_dropdown, preview_mode_toggle, sample_count_slider],
-        outputs=[input_table_header, input_table, available_columns_info, output_table_header, output_table]
+        outputs=[input_table_header, input_table, available_columns_info, output_table_header, output_table, context_activity_badge]
     )
 
     preview_mode_toggle.change(
@@ -565,10 +571,11 @@ def render_playground_tab(tab=None):
                 datatype=out_datatypes,
                 value=res.get("output_data", [])
             )
-            yield res["message"], in_info, in_df, in_pills, out_hdr, out_df
+            badge_update = ContextController.get_minimal_activity_summary(domain, table_name)
+            yield res["message"], in_info, in_df, in_pills, out_hdr, out_df, badge_update
         else:
             gr.Error(res.get("message", "Batch execution failed"))
-            yield res.get("message", "Error"), gr.update(), gr.update(), gr.update(), "#### 📤 Output Table: ❌ Execution Failed", gr.update()
+            yield res.get("message", "Error"), gr.update(), gr.update(), gr.update(), "#### 📤 Output Table: ❌ Execution Failed", gr.update(), gr.update()
 
     commit_batch_btn.click(
         fn=on_commit_batch,
@@ -577,7 +584,7 @@ def render_playground_tab(tab=None):
             prompt_template_input, output_mode_radio, target_column_input, write_mode_radio,
             limit_rows_input, preview_mode_toggle, sample_count_slider
         ],
-        outputs=[batch_status_markdown, input_table_header, input_table, available_columns_info, output_table_header, output_table],
+        outputs=[batch_status_markdown, input_table_header, input_table, available_columns_info, output_table_header, output_table, context_activity_badge],
         show_progress_on=[batch_status_markdown]
     )
 
@@ -607,13 +614,25 @@ def render_playground_tab(tab=None):
             datatype=["str"] * len(out_headers),
             value=out_data
         )
+        badge = ContextController.get_minimal_activity_summary(clean_dir, clean_tbl)
 
-        return batch_msg, in_info, in_df, in_pills, out_hdr, out_df
+        return batch_msg, in_info, in_df, in_pills, out_hdr, out_df, badge
 
     undo_batch_btn.click(
         fn=on_undo_batch,
         inputs=[domain_dropdown, table_dropdown, preview_mode_toggle, sample_count_slider],
-        outputs=[batch_status_markdown, input_table_header, input_table, available_columns_info, output_table_header, output_table]
+        outputs=[batch_status_markdown, input_table_header, input_table, available_columns_info, output_table_header, output_table, context_activity_badge]
+    )
+
+    def on_refresh_activity(domain, table_name):
+        clean_dir = domain.strip() if domain else "default"
+        clean_tbl = table_name.strip() if table_name else "raw_assets"
+        return ContextController.get_minimal_activity_summary(clean_dir, clean_tbl)
+
+    refresh_activity_btn.click(
+        fn=on_refresh_activity,
+        inputs=[domain_dropdown, table_dropdown],
+        outputs=[context_activity_badge]
     )
 
     # -------------------------------------------------------------------------
@@ -697,6 +716,7 @@ def render_playground_tab(tab=None):
             )
 
             info, df_update, pills = load_input_table(dom, tbl, lightweight=is_lightweight, sample_count=sample_count)
+            badge = ContextController.get_minimal_activity_summary(dom, tbl)
             
             return (
                 gr.update(choices=latest_domains, value=dom),
@@ -704,13 +724,14 @@ def render_playground_tab(tab=None):
                 format_domain_prompt_banner(dom),
                 info,
                 df_update,
-                pills
+                pills,
+                badge
             )
 
         tab.select(
             fn=on_tab_select,
             inputs=[domain_dropdown, table_dropdown, preview_mode_toggle, sample_count_slider],
-            outputs=[domain_dropdown, table_dropdown, domain_prompt_banner, input_table_header, input_table, available_columns_info]
+            outputs=[domain_dropdown, table_dropdown, domain_prompt_banner, input_table_header, input_table, available_columns_info, context_activity_badge]
         )
 
     return {
@@ -720,4 +741,6 @@ def render_playground_tab(tab=None):
         "model_dropdown": model_dropdown,
         "input_table": input_table,
         "output_table": output_table,
+        "context_activity_badge": context_activity_badge,
+        "refresh_activity_btn": refresh_activity_btn,
     }

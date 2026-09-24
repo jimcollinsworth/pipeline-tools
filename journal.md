@@ -1062,4 +1062,25 @@ This journal records verbatim developer instructions, architectural directives, 
    - Full automated test suite verified: **117 Passed, 0 Failed, 0 Errors** in 28s.
    - Bumped patch version to `1.3.19` in `pyproject.toml` and synchronized `uv.lock`.
 
+---
+
+## 📅 2026-09-24: Dynamic Context Knowledge Activity Wiring & Manual Refresh in Data Enhancement (v1.3.20)
+
+**Context:** The developer observed that after running prompt data enhancement and entity extraction on `personal.documents_short`, the output table displayed the newly created entity columns, but the Data Enhancement tab's `🧠 Context Knowledge & Activity` accordion displayed `Entities Tracked: 0`.
+
+**Verbatim Instruction:**
+> `i ran an enhancement, and see entities in the output table columns, but no entities are listed in content knowledge and activity. check the contenxt processing on this page`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Dynamic Event Output Wiring (`src/ui/playground_tab.py`)**:
+   - Diagnosed that entity extraction and context persistence were working correctly in the backend (102 entities were tracked and saved to disk in `exports/personal-documents_short-ingestion-context.json`), but the `context_activity_badge` in `render_playground_tab` was a static `gr.Markdown` rendered once on startup and not included in any Gradio output callbacks.
+   - Wired `context_activity_badge` to the output tuples of `on_domain_change` (`domain_dropdown.change`), `on_table_change` (`table_dropdown.change`), `on_commit_batch` (`commit_batch_btn.click`), `on_undo_batch` (`undo_batch_btn.click`), and `on_tab_select` (`tab.select`).
+2. **Dedicated Manual Refresh Button (`src/ui/playground_tab.py`)**:
+   - Added a `🔄 Refresh Activity` button (`refresh_activity_btn`) beside the activity badge in the `🧠 Context Knowledge & Activity` accordion row so users can instantly refresh context stats on demand.
+3. **Verification & Versioning**:
+   - Added unit test `test_playground_context_activity_badge_wiring` in `tests/test_app.py` and verified all UI affordances.
+   - Full automated test suite verified: **118 Passed, 0 Failed, 0 Errors** in 28s.
+   - Bumped patch version to `1.3.20` in `pyproject.toml` and synchronized `uv.lock`.
+
+
 

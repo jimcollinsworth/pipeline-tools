@@ -36,6 +36,7 @@ class SegmentationController:
     def handle_domain_change(domain: str, prompt: str = "") -> Dict[str, Any]:
         """Handle domain dropdown change: discovers tables and suggests initial view name."""
         clean_dir = domain.strip() if domain else "default"
+        update_last_entry(last_domain=clean_dir)
         tables = DBManager.list_tables(clean_dir) or ["raw_assets"]
         first_table = tables[0]
         suggested_view = SegmentationController.suggest_view_name(first_table, prompt)
@@ -49,6 +50,7 @@ class SegmentationController:
     def handle_table_change(domain: str, table_name: str, prompt: str = "") -> Dict[str, Any]:
         """Handle source table change: suggests target view name."""
         clean_tbl = table_name.strip() if table_name else "raw_assets"
+        update_last_entry(last_table=clean_tbl)
         suggested_view = SegmentationController.suggest_view_name(clean_tbl, prompt)
         return {
             "suggested_view_name": suggested_view

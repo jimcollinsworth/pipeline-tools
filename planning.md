@@ -259,6 +259,9 @@ flowchart TD
 | RES-25 | Dual Ingestion Modes (Directory Multi-Asset vs CSV Row Documents) | Complete | Added single row-oriented file (CSV/TSV) ingestion parsing each row into individual document records with chunked batch streaming, primary text column selection, and automatic metadata placeholder resolution in prompts (resolves Issue #6). |
 | RES-26 | Declarative Audio DSP & Mel Spectrogram Pipeline | Complete | Implemented dual-representation audio Mel Spectrogram extraction via `@pxt.udf` computed columns (`pxt.Array` matrix + `pxt.Image` visual spectrogram), null-safe handling, and interactive Media Inspector rendering. |
 | RES-27 | Audio DSP Suite & Prompt-Driven Declarative UDFs (MFCC, Chroma, Audio Stats) | Complete | Expanded Librosa audio analysis with MFCC (vocal timbre), Chroma STFT (12 pitch classes), and Audio & Noise Stats (RMS, ZCR, centroid, rolloff, silence ratio). Added prompt-driven slash commands, UDFRegistry schema help, and sample presets. |
+| RES-28 | Automatic Scanned PDF & Document Image OCR (RapidOCR ONNX) | Complete | Integrated offline ONNX-powered character recognition (`rapidocr-onnxruntime`) as automatic fallback for image-only PDFs during ingestion, and as declarative `@pxt.udf` `/ocr` computed column with sample preview and batch attachment. (126 tests passing). |
+| RES-29 | Ollama Vision & Multimodal Image Models (Issue #10) | Open | Tracked enhancement to leverage local Ollama vision models (e.g. `moondream`, `llava`) and Gemini Vision for deep visual layout understanding, form/table extraction, and visual Q&A. |
+
 
 
 

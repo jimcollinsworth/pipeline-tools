@@ -54,8 +54,7 @@ def render_tables_tab(tab=None):
 
     initial_provider = settings.last_provider or settings.default_provider or "Ollama"
     initial_models = LLMService.list_models_for_provider(initial_provider)
-    if not initial_models:
-        initial_models = [settings.default_ollama_model or "llama3.2"]
+    initial_model = settings.last_model if settings.last_model in initial_models else (initial_models[0] if initial_models else "")
 
     with gr.Column():
         gr.Markdown("### 📊 View & Export (Pixeltable DataTables & Markdown Reports)")
@@ -179,7 +178,7 @@ def render_tables_tab(tab=None):
                 export_model_dropdown = gr.Dropdown(
                     label="Model Identifier",
                     choices=initial_models,
-                    value=settings.last_model or initial_models[0],
+                    value=initial_model,
                     allow_custom_value=True,
                     scale=3
                 )
@@ -297,17 +296,35 @@ def render_tables_tab(tab=None):
             cols
         )
 
-    def on_domain_change(domain):
-        """Update table dropdown choices and active system prompt info when domain selection changes."""
+    def on_domain_change(domain, current_export_provider, current_export_model):
+        """Update table dropdown choices, domain prompt info, and live models when domain changes."""
         res = TablesController.handle_domain_change(domain)
         dom = domain.strip() if domain else "default"
-        return gr.update(choices=res["choices"], value=res["value"]), format_tables_prompt_info(dom)
+        banner = format_tables_prompt_info(dom)
+
+        prov = current_export_provider or "Ollama"
+        latest_models = LLMService.list_models_for_provider(prov)
+        curr_settings = get_settings()
+        target_default = curr_settings.default_gemini_model if prov == "Gemini" else curr_settings.default_ollama_model
+        if current_export_model in latest_models:
+            new_model = current_export_model
+        elif target_default in latest_models:
+            new_model = target_default
+        else:
+            new_model = latest_models[0] if latest_models else ""
+
+        return (
+            gr.update(choices=res["choices"], value=res["value"]),
+            banner,
+            gr.update(choices=latest_models, value=new_model)
+        )
 
     def on_export_provider_change(provider):
         models = LLMService.list_models_for_provider(provider)
-        if not models:
-            models = ["gemini-3.7-flash"] if provider == "Gemini" else ["llama3.2"]
-        return gr.update(choices=models, value=models[0])
+        curr_settings = get_settings()
+        target_default = curr_settings.default_gemini_model if provider == "Gemini" else curr_settings.default_ollama_model
+        val = target_default if target_default in models else (models[0] if models else "")
+        return gr.update(choices=models, value=val)
 
     def load_preset(preset_key):
         preset = MarkdownExporter.PRESETS.get(preset_key)
@@ -427,8 +444,8 @@ def render_tables_tab(tab=None):
     # It does NOT directly update the DataFrame to prevent duplicate event cascades.
     domain_dropdown.change(
         fn=on_domain_change,
-        inputs=[domain_dropdown],
-        outputs=[table_dropdown, domain_prompt_info]
+        inputs=[domain_dropdown, export_provider_dropdown, export_model_dropdown],
+        outputs=[table_dropdown, domain_prompt_info, export_model_dropdown]
     )
 
     # Rule 2: Explicit Load / Refresh Table button and child dropdown sequentially load table data.
@@ -622,7 +639,7 @@ def render_tables_tab(tab=None):
     )
 
     if tab is not None:
-        def on_tab_select(current_domain, current_table):
+        def on_tab_select(current_domain, current_table, current_export_prov, current_export_mod):
             latest_domains = DBManager.list_dirs() or ["default"]
             curr_settings = get_settings()
             dom = curr_settings.last_domain if curr_settings.last_domain in latest_domains else (
@@ -633,17 +650,28 @@ def render_tables_tab(tab=None):
             tbl = curr_settings.last_table if curr_settings.last_table in latest_tables else (
                 current_table if current_table in latest_tables else latest_tables[0]
             )
+
+            prov = current_export_prov or curr_settings.last_provider or curr_settings.default_provider or "Ollama"
+            latest_models = LLMService.list_models_for_provider(prov)
+            target_default = curr_settings.default_gemini_model if prov == "Gemini" else curr_settings.default_ollama_model
+            if current_export_mod in latest_models:
+                mod = current_export_mod
+            elif target_default in latest_models:
+                mod = target_default
+            else:
+                mod = latest_models[0] if latest_models else ""
             
             return (
                 gr.update(choices=latest_domains, value=dom),
                 gr.update(choices=latest_tables, value=tbl),
-                format_tables_prompt_info(dom)
+                format_tables_prompt_info(dom),
+                gr.update(choices=latest_models, value=mod)
             )
 
         tab.select(
             fn=on_tab_select,
-            inputs=[domain_dropdown, table_dropdown],
-            outputs=[domain_dropdown, table_dropdown, domain_prompt_info]
+            inputs=[domain_dropdown, table_dropdown, export_provider_dropdown, export_model_dropdown],
+            outputs=[domain_dropdown, table_dropdown, domain_prompt_info, export_model_dropdown]
         )
 
     return {

@@ -825,3 +825,85 @@ UDFRegistry.register(
         sample_eval_fn=_eval_yamnet_sample
     )
 )
+
+
+# -------------------------------------------------------------------------
+# UDF Definitions: Optical Character Recognition (RapidOCR)
+# -------------------------------------------------------------------------
+def _eval_ocr_sample(domain: str, table_name: str, sample_count: int = 2, **kwargs) -> Dict[str, Any]:
+    """Dry-run OCR text extraction on sample rows from table."""
+    from src.db.manager import DBManager
+    from src.core.ocr import ocr_document_core
+
+    res = DBManager.get_table_data(domain, table_name, limit=sample_count, lightweight=False)
+    cols = res.get("columns", [])
+    data = res.get("data", [])
+
+    if not data:
+        return {
+            "status": "error",
+            "message": f"Table '{domain}.{table_name}' has no rows to test.",
+            "headers": ["Error"],
+            "data": [[f"Table '{domain}.{table_name}' is empty."]]
+        }
+
+    headers = ["Status", "Row ID", "File Name", "Extracted OCR Text"]
+    rows = []
+    max_pages = int(kwargs.get("max_pages", 5))
+
+    for idx, row in enumerate(data):
+        row_dict = dict(zip(cols, row))
+        row_id = row_dict.get("id", str(idx + 1))
+        file_name = row_dict.get("file_name", f"Row {idx + 1}")
+        file_path = str(row_dict.get("file_path") or row_dict.get("doc") or row_dict.get("image") or "")
+
+        extracted = ""
+        if file_path and Path(file_path).exists():
+            extracted = ocr_document_core(file_path, max_pages=max_pages)
+
+        preview = extracted.strip()
+        if len(preview) > 300:
+            preview = preview[:300] + "... [truncated]"
+        elif not preview:
+            preview = "[No text detected via OCR or file not found]"
+
+        rows.append(["🧪 UDF Sample Test", str(row_id), str(file_name), preview])
+
+    return {
+        "status": "success",
+        "headers": headers,
+        "datatypes": ["str", "str", "str", "str"],
+        "data": rows,
+        "count": len(rows),
+        "is_udf": True
+    }
+
+
+def _attach_ocr_batch(domain: str, table_name: str, **kwargs) -> Dict[str, Any]:
+    """Declaratively attach OCR computed column to table."""
+    from src.core.ocr import attach_ocr_columns
+    return attach_ocr_columns(domain, table_name, **kwargs)
+
+
+UDFRegistry.register(
+    UDFDefinition(
+        name="ocr",
+        description="Extract optical character recognition (OCR) text from scanned PDFs and document images using RapidOCR (ONNXRuntime).",
+        aliases=[
+            "ocr",
+            "pdf ocr",
+            "scanned ocr",
+            "extract text ocr",
+            "optical character recognition",
+            "/ocr",
+            "/pdf_ocr"
+        ],
+        parameters={
+            "max_pages": {"type": int, "default": 10, "description": "Maximum number of PDF pages to render and OCR (default 10)"},
+            "column_name": {"type": str, "default": "ocr_text", "description": "Target computed column name to attach to table"}
+        },
+        attach_fn=_attach_ocr_batch,
+        sample_eval_fn=_eval_ocr_sample
+    )
+)
+

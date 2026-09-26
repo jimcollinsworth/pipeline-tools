@@ -86,13 +86,42 @@ def load_env_file():
 
 load_env_file()
 
+def normalize_ollama_host(host: Optional[str]) -> str:
+    """
+    Normalize and sanitize Ollama server URL for client connections.
+    Converts daemon bind addresses (e.g. 0.0.0.0, 0.0.0.0:11434, :11434)
+    into valid client-reachable loopback URLs (http://localhost:11434).
+    """
+    if not host or not str(host).strip():
+        return "http://localhost:11434"
+    h = str(host).strip().rstrip("/")
+    # Handle daemon bind formats like "0.0.0.0", "0.0.0.0:11434", ":11434"
+    if h == "0.0.0.0" or h.startswith("0.0.0.0:"):
+        port = h.split(":", 1)[1] if ":" in h else "11434"
+        return f"http://localhost:{port}"
+    if h.startswith("http://0.0.0.0") or h.startswith("https://0.0.0.0"):
+        h = h.replace("0.0.0.0", "localhost", 1)
+    if not (h.startswith("http://") or h.startswith("https://")):
+        h = f"http://{h}"
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(h)
+        if not parsed.port and parsed.hostname in ("localhost", "127.0.0.1"):
+            h = f"{h}:11434"
+    except Exception:
+        pass
+    return h
+
 def load_settings() -> Settings:
     settings = Settings()
+    has_saved_host = False
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 settings = Settings(**data)
+                if "ollama_host" in data and data["ollama_host"]:
+                    has_saved_host = True
         except Exception:
             pass
             
@@ -102,11 +131,14 @@ def load_settings() -> Settings:
     elif "default" not in settings.domain_system_prompts:
         settings.domain_system_prompts["default"] = settings.last_system_prompt or DEFAULT_SYSTEM_PROMPT
 
-    # Environment variable fallbacks
+    # Environment variable fallbacks (preserve saved config.json settings)
     if not settings.gemini_api_key and os.environ.get("GEMINI_API_KEY"):
         settings.gemini_api_key = os.environ.get("GEMINI_API_KEY")
-    if os.environ.get("OLLAMA_HOST"):
+    if not has_saved_host and os.environ.get("OLLAMA_HOST"):
         settings.ollama_host = os.environ.get("OLLAMA_HOST")
+
+    # Always normalize ollama_host so bind addresses or malformed strings are valid client URLs
+    settings.ollama_host = normalize_ollama_host(settings.ollama_host)
 
     # In cloud container environments (Hugging Face Spaces), default to Gemini
     if os.environ.get("SPACE_ID"):
@@ -118,6 +150,7 @@ def load_settings() -> Settings:
     return settings
 
 def save_settings(settings: Settings) -> Settings:
+    settings.ollama_host = normalize_ollama_host(settings.ollama_host)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(settings.model_dump(), f, indent=2)
     return settings
@@ -159,12 +192,7 @@ def get_settings() -> Settings:
     return load_settings()
 
 def get_app_version() -> str:
-    """Retrieve full dynamic semantic version from package metadata or pyproject.toml."""
-    try:
-        from importlib.metadata import version
-        return version("pipeline-tools")
-    except Exception:
-        pass
+    """Retrieve full dynamic semantic version from pyproject.toml or package metadata."""
     try:
         pyproject = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
         if pyproject.exists():
@@ -173,5 +201,10 @@ def get_app_version() -> str:
                 return m.group(1)
     except Exception:
         pass
-    return "1.3.19"
+    try:
+        from importlib.metadata import version
+        return version("pipeline-tools")
+    except Exception:
+        pass
+    return "1.3.22"
 

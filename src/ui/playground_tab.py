@@ -46,7 +46,7 @@ def render_playground_tab(tab=None):
 
     initial_provider = settings.last_provider or settings.default_provider or "Ollama"
     initial_models = LLMService.list_models_for_provider(initial_provider)
-    initial_model = settings.last_model if settings.last_model in initial_models else (initial_models[0] if initial_models else "gemini-3.6-flash")
+    initial_model = settings.last_model if settings.last_model in initial_models else (initial_models[0] if initial_models else "")
 
     # Discover initial table preview for instant data display and placeholder hints
     initial_preview = PlaygroundController.load_table_preview(
@@ -280,12 +280,23 @@ def render_playground_tab(tab=None):
         outputs=[model_dropdown]
     )
 
-    def on_domain_change(selected_domain, is_lightweight, sample_count):
-        """Discover tables, refresh domain prompt banner, and load table preview when domain changes."""
+    def on_domain_change(selected_domain, is_lightweight, sample_count, current_provider, current_model):
+        """Discover tables, refresh domain prompt banner, load table preview, and refresh live models when domain changes."""
         res = PlaygroundController.handle_domain_change(selected_domain)
         dom = selected_domain.strip() if selected_domain else "default"
         banner = format_domain_prompt_banner(dom)
         new_tbl = res["value"]
+
+        # Automatically refresh live models for the active provider on domain switch
+        latest_models = LLMService.list_models_for_provider(current_provider)
+        curr_settings = get_settings()
+        target_default = curr_settings.default_gemini_model if current_provider == "Gemini" else curr_settings.default_ollama_model
+        if current_model in latest_models:
+            new_model_val = current_model
+        elif target_default in latest_models:
+            new_model_val = target_default
+        else:
+            new_model_val = latest_models[0] if latest_models else ""
 
         info, df_update, pills = load_input_table(dom, new_tbl, lightweight=is_lightweight, sample_count=sample_count)
         reset_out_header = "#### 📤 Output Table (Ready for Test or Batch Execution)"
@@ -295,12 +306,22 @@ def render_playground_tab(tab=None):
             value=[["Ready", f"Loaded table '{dom}.{new_tbl}'. Run sample test or commit batch to generate output."]]
         )
         badge = ContextController.get_minimal_activity_summary(dom, new_tbl)
-        return gr.update(choices=res["choices"], value=new_tbl), banner, info, df_update, pills, reset_out_header, reset_out_df, badge
+        return (
+            gr.update(choices=res["choices"], value=new_tbl),
+            gr.update(choices=latest_models, value=new_model_val),
+            banner,
+            info,
+            df_update,
+            pills,
+            reset_out_header,
+            reset_out_df,
+            badge
+        )
 
     domain_dropdown.change(
         fn=on_domain_change,
-        inputs=[domain_dropdown, preview_mode_toggle, sample_count_slider],
-        outputs=[table_dropdown, domain_prompt_banner, input_table_header, input_table, available_columns_info, output_table_header, output_table, context_activity_badge]
+        inputs=[domain_dropdown, preview_mode_toggle, sample_count_slider, provider_dropdown, model_dropdown],
+        outputs=[table_dropdown, model_dropdown, domain_prompt_banner, input_table_header, input_table, available_columns_info, output_table_header, output_table, context_activity_badge]
     )
 
     def on_table_change(selected_table, current_domain, is_lightweight, sample_count):
@@ -703,7 +724,7 @@ def render_playground_tab(tab=None):
     # Tab Synchronization
     # -------------------------------------------------------------------------
     if tab is not None:
-        def on_tab_select(current_domain, current_table, is_lightweight, sample_count):
+        def on_tab_select(current_domain, current_table, is_lightweight, sample_count, current_prov, current_mod):
             latest_domains = DBManager.list_dirs() or ["default"]
             curr_settings = get_settings()
             dom = curr_settings.last_domain if curr_settings.last_domain in latest_domains else (
@@ -715,12 +736,23 @@ def render_playground_tab(tab=None):
                 current_table if current_table in latest_tables else latest_tables[0]
             )
 
+            prov = current_prov or curr_settings.last_provider or curr_settings.default_provider or "Ollama"
+            latest_models = LLMService.list_models_for_provider(prov)
+            target_default = curr_settings.default_gemini_model if prov == "Gemini" else curr_settings.default_ollama_model
+            if current_mod in latest_models:
+                mod = current_mod
+            elif target_default in latest_models:
+                mod = target_default
+            else:
+                mod = latest_models[0] if latest_models else ""
+
             info, df_update, pills = load_input_table(dom, tbl, lightweight=is_lightweight, sample_count=sample_count)
             badge = ContextController.get_minimal_activity_summary(dom, tbl)
             
             return (
                 gr.update(choices=latest_domains, value=dom),
                 gr.update(choices=latest_tables, value=tbl),
+                gr.update(choices=latest_models, value=mod),
                 format_domain_prompt_banner(dom),
                 info,
                 df_update,
@@ -730,8 +762,8 @@ def render_playground_tab(tab=None):
 
         tab.select(
             fn=on_tab_select,
-            inputs=[domain_dropdown, table_dropdown, preview_mode_toggle, sample_count_slider],
-            outputs=[domain_dropdown, table_dropdown, domain_prompt_banner, input_table_header, input_table, available_columns_info, context_activity_badge]
+            inputs=[domain_dropdown, table_dropdown, preview_mode_toggle, sample_count_slider, provider_dropdown, model_dropdown],
+            outputs=[domain_dropdown, table_dropdown, model_dropdown, domain_prompt_banner, input_table_header, input_table, available_columns_info, context_activity_badge]
         )
 
     return {

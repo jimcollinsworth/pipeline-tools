@@ -9,9 +9,15 @@ without requiring Gradio web server initialization.
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+import sys
+
+# Add project root to sys.path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from src.controllers.ingest_controller import IngestController
 from src.controllers.playground_controller import PlaygroundController
 from src.controllers.tables_controller import TablesController
+from src.core.llm_service import LLMService
 from src.db.manager import DBManager, PIXELTABLE_AVAILABLE
 
 class TestControllers(unittest.TestCase):
@@ -108,6 +114,13 @@ class TestControllers(unittest.TestCase):
         prov_res = PlaygroundController.handle_provider_change("Ollama")
         self.assertIn("choices", prov_res)
         self.assertIn("value", prov_res)
+
+        # When provider has no models (unreachable or invalid host), choices is [] and value is ""
+        with patch.object(LLMService, "list_models_for_provider", return_value=[]):
+            empty_res = PlaygroundController.handle_provider_change("Ollama")
+            self.assertEqual(empty_res["choices"], [])
+            self.assertEqual(empty_res["value"], "")
+            self.assertNotIn("llama3.2", empty_res["choices"])
 
         # Domain change
         dom_res = PlaygroundController.handle_domain_change("default")

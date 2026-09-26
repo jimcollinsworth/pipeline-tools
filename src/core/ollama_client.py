@@ -4,8 +4,9 @@ import json
 from typing import List, Dict, Any, Tuple, Optional
 
 class OllamaClient:
-    def __init__(self, host: str = "http://localhost:11434"):
-        self.host = host.rstrip("/")
+    def __init__(self, host: Optional[str] = "http://localhost:11434"):
+        from src.core.config import normalize_ollama_host
+        self.host = normalize_ollama_host(host).rstrip("/")
 
     def check_connection(self) -> Tuple[bool, str]:
         """Test if Ollama server is running and accessible."""

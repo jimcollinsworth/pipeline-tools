@@ -11,6 +11,38 @@ tags: ["mentoring", "architecture", "testing", "directives", "tdd", "pixeltable"
 
 This journal records verbatim developer instructions, architectural directives, mentoring inputs, rules creation, and key technical pivots for the **Pipeline Tools** project. These entries capture high-impact guidance and generalized lessons for future development.
 
+## 📅 2026-09-26: Automatic Scanned PDF & Document Image OCR (RapidOCR ONNX), Declarative `/ocr` UDF & Multimodal Vision Tracking (v1.3.23)
+
+**Context:** Scanned and image-only PDFs previously returned `[Scanned/Image PDF - no extractable text found]` during ingestion because `pypdfium2` found zero digital text streams. The developer approved Option 1 (`rapidocr-onnxruntime`), directed the creation of an end-to-end integration test verifying the OCR pipeline, and requested a future feature ticket to take advantage of local Ollama vision models (e.g. `moondream:latest`) and other image LLMs.
+
+**Verbatim Instruction:**
+> `option 1 lets do that, you can create a new test for end2end ocr check. later we will want to take advantage of ollama and other image models, so add a future feature ticket for that enhancement.`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Lightweight Offline OCR Engine (`src/core/ocr.py`, `pyproject.toml`)**:
+   - Integrated `rapidocr-onnxruntime` with OpenCV, Shapely, and PyClipper. Uses pre-packaged ONNX models for detection and recognition without requiring external Tesseract binaries, Java runtimes, or system-level installs.
+   - Designed a lazy singleton `get_ocr_engine()` to avoid repeated ONNX model initialization overhead.
+   - Implemented high-resolution PDF page rendering via `pypdfium2` (`scale=2.0` ~ 144 DPI) with explicit C-handle closing (`page.close()`) to prevent resource leakage on Windows.
+2. **Automatic Ingestion Fallback (`src/db/manager.py`)**:
+   - In `DBManager.extract_file_content()`, when `pypdfium2` extracts 0 characters from a PDF, it automatically falls back to `ocr_pdf_pages(p, max_pages=10)`. Scanned invoices, receipts, and archived records now ingest with full searchable text content.
+3. **Prompt-Driven Declarative Pixeltable UDF (`src/core/udf_registry.py`)**:
+   - Defined `@pxt.udf` function `pxt_ocr_document(file_path: str, max_pages: int = 10) -> str`.
+   - Registered `ocr` in `UDFRegistry` with aliases (`/ocr`, `/pdf_ocr`, `ocr`, `extract text ocr`), supporting both slash commands and natural language triggers.
+   - Built `_eval_ocr_sample()` dry-run preview and `attach_ocr_columns()` declarative batch column attachment, adhering strictly to the zero-imperative-loop invariant.
+4. **End-to-End Integration Test Suite (`tests/test_ocr.py`)**:
+   - Added `TestOCR` verifying:
+     - Synthetic PIL image text rendering and OCR extraction.
+     - Scanned image-only PDF generation (0 digital text streams) and `pypdfium2` rendering + OCR.
+     - `DBManager.extract_file_content` automatic OCR fallback.
+     - `UDFRegistry` prompt matching, parameter parsing, and markdown help.
+     - Dry-run sample evaluation and declarative Pixeltable computed column attachment.
+   - Full test suite expanded to **126 tests** (all 125 active deterministic tests pass cleanly).
+5. **Future Multimodal Vision Model Tracking (GitHub Issue #10)**:
+   - Filed official feature ticket via `github-reporter`: *"Feature: Ollama Vision & Multimodal Image Model Integration for Document Intelligence"* ([Issue #10](https://github.com/jimcollinsworth/pipeline-tools/issues/10)).
+   - Updated `planning.md` with `RES-28` and `RES-29`.
+
+---
+
 ## 📅 2026-09-22: Modality Separation for Tabular Data (`data`), Dedicated `other` Category & Accurate Media Preview Badges (v1.3.17)
 
 **Context:** The developer directed that CSV/tabular files should be removed from `docs` and placed under a new `data` modality category (for row-type files like `.csv`, `.tsv`, `.tab`). Additionally, an `other` modality button was requested to select all files not included in the other categories, and the scanned table media preview badge was corrected so CSV files no longer render as `📄 View PDF`.
@@ -1102,6 +1134,31 @@ This journal records verbatim developer instructions, architectural directives, 
    - Full automated test suite verified: **119 Passed, 0 Failed, 0 Errors** in 28s.
    - Bumped patch version to `1.3.21` in `pyproject.toml` and synchronized `uv.lock`.
 
+---
 
+## 📅 2026-09-26: Ollama Host Normalization, Config Precedence & AppContainer Named Pipe Diagnosis (v1.3.22)
 
+**Context:** The developer noted that in the Settings tab, entering and saving `http://localhost:11434` appeared to succeed, but the host repeatedly reverted to `0.0.0.0`, resulting in zero discovered Ollama models across all workbench tabs. Additionally, investigated Windows sandbox execution permissions and embedded PostgreSQL IPC constraints.
 
+**Verbatim Instruction:**
+> `im testing now, ollama model list works ok in settings can see models, have to use http://localhost:11434 and connection works, says it saved port, but it doesn't. gets reset to 0.0.0.0 and other panels don't show any ollama models. confirm and correct existing tests`
+
+**Key Decisions & Engineering Takeaways:**
+1. **Root Cause Analysis (Host Override & Windows AppContainer Constraints)**:
+   - **Environment Variable Override (`OLLAMA_HOST=0.0.0.0`)**: In `src/core/config.py`, `load_settings()` previously evaluated `if os.environ.get("OLLAMA_HOST"): settings.ollama_host = os.environ.get("OLLAMA_HOST")` without checking if `ollama_host` had already been explicitly saved in `config.json`. Because the user had `OLLAMA_HOST=0.0.0.0` defined in Windows environment variables (a standard daemon bind address), every call to `load_settings()` immediately clobbered `config.json` back to `0.0.0.0`.
+   - **Invalid Client URL**: Connecting to `0.0.0.0` or `http://0.0.0.0:11434` fails on Windows (`[WinError 10049] The requested address is not valid in its context` or `unknown url type`), causing all model discovery queries to fail silently.
+   - **PostgreSQL Sandbox Named Pipe Restriction**: Diagnosed that running embedded PostgreSQL inside an AppContainer terminal sandbox fails with `FATAL: could not create signal listener pipe ... error code 5 (ERROR_ACCESS_DENIED)` because Windows blocks low-integrity AppContainers from creating system-level named pipes (`\\.\pipe\pgsignal_*`). Running natively via Turbo mode or allowing host execution resolves this.
+2. **Client URL Normalization & Config Precedence (`src/core/config.py`, `src/core/ollama_client.py`)**:
+   - Added `normalize_ollama_host(host: Optional[str]) -> str` to convert server bind addresses (`0.0.0.0`, `0.0.0.0:11434`, `:11434`, `localhost`) into valid client-reachable loopback URLs (`http://localhost:11434`).
+   - Updated `load_settings()` so explicitly saved `ollama_host` in `config.json` strictly takes precedence over environment variable defaults.
+   - Updated `OllamaClient.__init__` to automatically normalize host inputs.
+3. **Auto-Persisting Verified Connections in Settings (`src/ui/settings_tab.py`)**:
+   - In `test_and_fetch_ollama`, successful connection tests now automatically persist the verified `ollama_host` to `config.json` via `update_last_entry()` and format the clean URL back into the input box.
+4. **Schema & Runner Hardening (`src/db/manager.py`, `tests/test_app.py`)**:
+   - Made `file_path` optional (`Optional[pxt.String]`) in base table creation, allowing synthetic and non-file records without validation errors.
+   - Fixed `CleanTestResult` to use `getattr(test, "_testMethodDoc", None)` to safely handle unittest `_ErrorHolder` objects.
+   - Guarded `postmaster.pid` self-healing against falsely deleting live PID files during file-lock read exceptions.
+5. **Verification & Versioning**:
+   - Added unit tests `test_normalize_ollama_host` and `test_ollama_host_config_precedence` in `tests/test_app.py`.
+   - Full automated test suite verified: **120 Passed, 0 Failed, 0 Errors** in 25s (`uv run python -m tests`).
+   - Bumped patch version to `1.3.22` in `pyproject.toml`.

@@ -631,6 +631,19 @@ def create_app():
     except Exception:
         pass
 
+    # Pre-flight LLM provider validation to prevent displaying invalid/unreachable services
+    try:
+        from src.core.llm_service import LLMService
+        startup_status = LLMService.validate_startup_connections()
+        ollama_stat = startup_status.get("ollama", {})
+        if not ollama_stat.get("connected"):
+            print(f"  ⚠️ [Startup] Ollama server at {get_settings().ollama_host} is not accessible: {ollama_stat.get('message')}. Unreachable Ollama models will not be displayed.", flush=True)
+        else:
+            n_models = len(ollama_stat.get("models", []))
+            print(f"  ✅ [Startup] Verified Ollama connection ({n_models} installed models discovered)", flush=True)
+    except Exception as e:
+        print(f"  ⚠️ [Startup] LLM provider pre-flight warning: {e}", flush=True)
+
     app_version = get_app_version()
     with gr.Blocks(title=f"Pipeline Tools v{app_version}", fill_width=True) as demo:
         gr.Markdown(

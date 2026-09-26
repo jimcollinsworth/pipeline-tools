@@ -20,10 +20,12 @@ class PlaygroundController:
         """Discover models for provider and resolve last/default choice."""
         models = LLMService.list_models_for_provider(selected_provider)
         curr = get_settings()
-        if selected_provider == "Gemini":
-            chosen = curr.default_gemini_model if curr.default_gemini_model in models else (models[0] if models else "gemini-3.7-flash")
+        if not models:
+            chosen = ""
+        elif selected_provider == "Gemini":
+            chosen = curr.default_gemini_model if curr.default_gemini_model in models else models[0]
         else:
-            chosen = curr.default_ollama_model if curr.default_ollama_model in models else (models[0] if models else "llama3.2")
+            chosen = curr.default_ollama_model if curr.default_ollama_model in models else models[0]
         update_last_entry(last_provider=selected_provider, last_model=chosen)
         return {
             "choices": models,

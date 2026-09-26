@@ -7,7 +7,7 @@ system prompts, and exporting canonical knowledge registers with YAML/JSON-LD me
 
 import gradio as gr
 from src.controllers.context_controller import ContextController
-from src.core.config import get_settings
+from src.core.config import get_settings, update_last_entry
 from src.db.manager import DBManager
 
 
@@ -113,9 +113,11 @@ def render_context_tab(tab=None):
         )
 
     def on_domain_change(domain):
-        tables = DBManager.list_tables(domain) or ["raw_assets"]
+        clean_dom = domain.strip() if domain else "default"
+        tables = DBManager.list_tables(clean_dom) or ["raw_assets"]
         sel_tbl = tables[0]
-        prompt, badge, entities, reg = on_load_context(domain, sel_tbl)
+        update_last_entry(last_domain=clean_dom, last_table=sel_tbl)
+        prompt, badge, entities, reg = on_load_context(clean_dom, sel_tbl)
         return (
             gr.update(choices=tables, value=sel_tbl),
             prompt,

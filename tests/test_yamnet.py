@@ -11,6 +11,7 @@ import tempfile
 import numpy as np
 import soundfile as sf
 from pathlib import Path
+from typing import Optional
 from PIL import Image
 
 import pixeltable as pxt
@@ -64,7 +65,7 @@ class TestYAMNet(unittest.TestCase):
             "file_name": pxt.String,
             "file_path": pxt.String,
             "modality": pxt.String,
-            "audio": pxt.Audio
+            "audio": Optional[pxt.Audio]
         }
         tbl = pxt.create_table(full_table, schema=schema, if_exists="replace")
         tbl.insert([

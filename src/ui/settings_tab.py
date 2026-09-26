@@ -12,6 +12,24 @@ def render_settings_tab(tab=None):
         domains.insert(0, "default")
     initial_domain = settings.last_domain if settings.last_domain in domains else domains[0]
 
+    # Pre-flight check Ollama on initial render
+    ollama_client = OllamaClient(host=settings.ollama_host)
+    ollama_ok, ollama_msg = ollama_client.check_connection()
+    if ollama_ok:
+        raw_ollama_models = ollama_client.list_models()
+        ollama_models_data = [
+            [m["name"], m["size"], m["family"], m["parameter_size"], m["quantization"], m["modified_at"]]
+            for m in raw_ollama_models
+        ]
+        ollama_model_names = [m["name"] for m in raw_ollama_models]
+        def_ollama = settings.default_ollama_model if settings.default_ollama_model in ollama_model_names else (ollama_model_names[0] if ollama_model_names else "")
+        initial_ollama_status = ollama_msg
+    else:
+        ollama_models_data = []
+        ollama_model_names = []
+        def_ollama = ""
+        initial_ollama_status = f"❌ {ollama_msg}"
+
     with gr.Column():
         gr.Markdown("### ⚙️ Engine Settings & Multi-Provider LLM Configuration")
         gr.Markdown("Manage local Ollama instance, Google Gemini API keys, default models, and storage directories.")
@@ -26,7 +44,7 @@ def render_settings_tab(tab=None):
                 )
                 ollama_status_box = gr.Textbox(
                     label="Ollama Status",
-                    value="Not checked",
+                    value=initial_ollama_status,
                     interactive=False
                 )
                 test_ollama_btn = gr.Button("🔄 Test Ollama Connection", variant="secondary")
@@ -74,15 +92,15 @@ def render_settings_tab(tab=None):
                 ollama_models_table = gr.Dataframe(
                     headers=["Name", "Size", "Family", "Parameters", "Quantization", "Modified"],
                     datatype=["str", "str", "str", "str", "str", "str"],
-                    value=[],
+                    value=ollama_models_data,
                     interactive=False,
                     wrap=True,
                     max_height=200
                 )
                 default_ollama_dropdown = gr.Dropdown(
                     label="Default Ollama Model",
-                    choices=[settings.default_ollama_model],
-                    value=settings.default_ollama_model,
+                    choices=ollama_model_names,
+                    value=def_ollama,
                     allow_custom_value=True
                 )
 
@@ -118,16 +136,18 @@ def render_settings_tab(tab=None):
 
     # Event handlers
     def test_and_fetch_ollama(host):
-        client = OllamaClient(host=host)
+        from src.core.config import normalize_ollama_host, update_last_entry
+        clean_host = normalize_ollama_host(host)
+        client = OllamaClient(host=clean_host)
         ok, msg = client.check_connection()
         if not ok:
             gr.Error(msg)
-            return msg, [], gr.update(choices=[])
+            return clean_host, msg, [], gr.update(choices=[], value="")
         
         models = client.list_models()
         if not models:
             gr.Warning(f"{msg} (No models found)")
-            return f"{msg} (No models found)", [], gr.update(choices=[])
+            return clean_host, f"{msg} (No models found)", [], gr.update(choices=[], value="")
         
         rows = [
             [m["name"], m["size"], m["family"], m["parameter_size"], m["quantization"], m["modified_at"]]
@@ -136,8 +156,9 @@ def render_settings_tab(tab=None):
         names = [m["name"] for m in models]
         curr_settings = get_settings()
         selected = curr_settings.default_ollama_model if curr_settings.default_ollama_model in names else (names[0] if names else "")
-        gr.Info("Connected to Ollama successfully!")
-        return msg, rows, gr.update(choices=names, value=selected)
+        update_last_entry(ollama_host=clean_host)
+        gr.Info(f"Connected to Ollama! Saved host: {clean_host}")
+        return clean_host, msg, rows, gr.update(choices=names, value=selected)
 
     def test_gemini_key(api_key):
         client = GeminiClient(api_key=api_key)
@@ -165,9 +186,11 @@ def render_settings_tab(tab=None):
             return msg, gr.update(), gr.update()
 
     def on_save_settings(host, def_ollama, gemini_key, def_gemini, def_provider, pt_dir, exp_dir):
+        from src.core.config import normalize_ollama_host
         curr = get_settings()
+        clean_host = normalize_ollama_host(host)
         updated = Settings(
-            ollama_host=host.strip(),
+            ollama_host=clean_host,
             default_ollama_model=def_ollama.strip() if def_ollama else "llama3.2",
             gemini_api_key=gemini_key.strip() if gemini_key else None,
             default_gemini_model=def_gemini.strip() if def_gemini else "gemini-3.6-flash",
@@ -188,7 +211,7 @@ def render_settings_tab(tab=None):
     test_ollama_btn.click(
         fn=test_and_fetch_ollama,
         inputs=[ollama_host_input],
-        outputs=[ollama_status_box, ollama_models_table, default_ollama_dropdown]
+        outputs=[ollama_host_input, ollama_status_box, ollama_models_table, default_ollama_dropdown]
     )
 
     test_gemini_btn.click(
@@ -210,4 +233,27 @@ def render_settings_tab(tab=None):
         ],
         outputs=[save_status_box]
     )
+
+    if tab is not None:
+        def on_settings_tab_select():
+            curr = get_settings()
+            client = OllamaClient(host=curr.ollama_host)
+            ok, msg = client.check_connection()
+            if ok:
+                models = client.list_models()
+                rows = [
+                    [m["name"], m["size"], m["family"], m["parameter_size"], m["quantization"], m["modified_at"]]
+                    for m in models
+                ]
+                names = [m["name"] for m in models]
+                val = curr.default_ollama_model if curr.default_ollama_model in names else (names[0] if names else "")
+                return curr.ollama_host, msg, rows, gr.update(choices=names, value=val)
+            else:
+                return curr.ollama_host, f"❌ {msg}", [], gr.update(choices=[], value="")
+
+        tab.select(
+            fn=on_settings_tab_select,
+            inputs=[],
+            outputs=[ollama_host_input, ollama_status_box, ollama_models_table, default_ollama_dropdown]
+        )
 

@@ -166,6 +166,7 @@ def render_ingest_tab(tab=None):
         if not selected_domain:
             return gr.update(choices=["raw_assets"], value="raw_assets")
         clean_dir = selected_domain.strip()
+        update_last_entry(last_domain=clean_dir)
         tables_list = DBManager.list_tables(clean_dir)
         if not tables_list:
             tables_list = ["raw_assets"]

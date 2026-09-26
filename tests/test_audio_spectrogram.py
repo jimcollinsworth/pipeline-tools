@@ -5,6 +5,7 @@ import tempfile
 import numpy as np
 import soundfile as sf
 from pathlib import Path
+from typing import Optional
 from PIL import Image
 
 # Ensure project root is in sys.path
@@ -114,7 +115,7 @@ class TestAudioMelSpectrogram(unittest.TestCase):
             "file_name": pxt.String,
             "file_path": pxt.String,
             "modality": pxt.String,
-            "audio": pxt.Audio,
+            "audio": Optional[pxt.Audio],
         }
         tbl = pxt.create_table(full_table_path, schema=schema, if_exists="replace")
 
@@ -521,8 +522,8 @@ class TestAudioMelSpectrogram(unittest.TestCase):
         table_path = f"{self.domain}.audio_custom_arrays"
         schema = {
             "file_name": pxt.String,
-            "mfcc_custom": pxt.Array,
-            "chroma_custom": pxt.Array
+            "mfcc_custom": Optional[pxt.Array],
+            "chroma_custom": Optional[pxt.Array]
         }
         tbl = pxt.create_table(table_path, schema=schema, if_exists="replace")
 

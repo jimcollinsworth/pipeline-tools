@@ -343,14 +343,59 @@ class TestPipelineTools(unittest.TestCase):
 
     def test_llm_service_router(self):
         """[Router] Verify unified LLMService routes queries and model discovery between Ollama and Gemini."""
+        from src.core.config import Settings
         self.assertIn("Ollama", LLMService.PROVIDERS)
         self.assertIn("Gemini", LLMService.PROVIDERS)
 
         gemini_models = LLMService.list_models_for_provider("Gemini")
         self.assertIn("gemini-3.6-flash", gemini_models)
 
+        # 1. Invalid / unreachable Ollama host returns empty list (NEVER fallback dummy models)
+        unreachable_settings = Settings(ollama_host="http://127.0.0.1:59999")
+        bad_ollama_models = LLMService.list_models_for_provider("Ollama", settings=unreachable_settings)
+        self.assertEqual(bad_ollama_models, [])
+        self.assertNotIn("llama3.2", bad_ollama_models)
+        self.assertNotIn("mistral", bad_ollama_models)
+
+        bad_ok, bad_msg = LLMService.check_connection("Ollama", settings=unreachable_settings)
+        self.assertFalse(bad_ok)
+
+        # Pre-flight startup validation catches unreachable host
+        startup_stat = LLMService.validate_startup_connections(settings=unreachable_settings)
+        self.assertFalse(startup_stat["ollama"]["connected"])
+        self.assertEqual(startup_stat["ollama"]["models"], [])
+
+        # 2. Reachable queries return list of models
         ollama_models = LLMService.list_models_for_provider("Ollama")
-        self.assertTrue(len(ollama_models) > 0)
+        self.assertTrue(isinstance(ollama_models, list))
+
+    def test_normalize_ollama_host(self):
+        """[Config] Verify normalize_ollama_host converts bind addresses (0.0.0.0) and naked hosts to client loopback URLs."""
+        from src.core.config import normalize_ollama_host
+        self.assertEqual(normalize_ollama_host("0.0.0.0"), "http://localhost:11434")
+        self.assertEqual(normalize_ollama_host("0.0.0.0:11434"), "http://localhost:11434")
+        self.assertEqual(normalize_ollama_host("http://0.0.0.0:11434"), "http://localhost:11434")
+        self.assertEqual(normalize_ollama_host("localhost"), "http://localhost:11434")
+        self.assertEqual(normalize_ollama_host("http://localhost:11434"), "http://localhost:11434")
+        self.assertEqual(normalize_ollama_host("http://127.0.0.1:11434"), "http://127.0.0.1:11434")
+        self.assertEqual(normalize_ollama_host("http://custom-host:8000"), "http://custom-host:8000")
+        self.assertEqual(normalize_ollama_host(""), "http://localhost:11434")
+
+    def test_ollama_host_config_precedence(self):
+        """[Config] Verify saved config.json ollama_host takes precedence over OLLAMA_HOST environment variable."""
+        import tempfile
+        from unittest.mock import patch
+        from src.core.config import load_settings, save_settings, Settings
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fake_config_file = Path(tmp_dir) / "config.json"
+            fake_settings = Settings(ollama_host="http://localhost:11434")
+            with patch("src.core.config.CONFIG_FILE", fake_config_file):
+                save_settings(fake_settings)
+                # Simulate environment variable set to daemon bind 0.0.0.0
+                with patch.dict(os.environ, {"OLLAMA_HOST": "0.0.0.0"}):
+                    loaded = load_settings()
+                    self.assertEqual(loaded.ollama_host, "http://localhost:11434")
 
     def test_cloud_hf_space_config_defaults(self):
         """[Config] Verify environment adaptation defaults to Gemini in Hugging Face Spaces cloud container."""
@@ -1247,7 +1292,7 @@ class CleanTestResult(unittest.TestResult):
         super().addSuccess(test)
         self.successes += 1
         elapsed = time.time() - (self.test_start_time or time.time())
-        doc = test._testMethodDoc or test.id()
+        doc = getattr(test, "_testMethodDoc", None) or test.id()
         self.stream.write(f"  [{self.test_count}/{self.total_tests}] PASS ({elapsed:.3f}s)  {doc}\n")
         self.stream.write("  " + "-" * 72 + "\n")
         self.stream.flush()
@@ -1255,7 +1300,7 @@ class CleanTestResult(unittest.TestResult):
     def addError(self, test, err):
         super().addError(test, err)
         elapsed = time.time() - (self.test_start_time or time.time())
-        doc = test._testMethodDoc or test.id()
+        doc = getattr(test, "_testMethodDoc", None) or test.id()
         self.stream.write(f"\n  [{self.test_count}/{self.total_tests}] ERROR ({elapsed:.3f}s)  {doc}\n")
         self.stream.write(f"      {err[0].__name__}: {err[1]}\n")
         self.stream.write("  " + "-" * 72 + "\n")
@@ -1264,7 +1309,7 @@ class CleanTestResult(unittest.TestResult):
     def addFailure(self, test, err):
         super().addFailure(test, err)
         elapsed = time.time() - (self.test_start_time or time.time())
-        doc = test._testMethodDoc or test.id()
+        doc = getattr(test, "_testMethodDoc", None) or test.id()
         self.stream.write(f"\n  [{self.test_count}/{self.total_tests}] FAIL ({elapsed:.3f}s)  {doc}\n")
         self.stream.write(f"      {err[0].__name__}: {err[1]}\n")
         self.stream.write("  " + "-" * 72 + "\n")
@@ -1304,6 +1349,11 @@ def run_tests(include_e2e=None):
     try:
         from tests.test_yamnet import TestYAMNet
         suite.addTests(loader.loadTestsFromTestCase(TestYAMNet))
+    except Exception:
+        pass
+    try:
+        from tests.test_ocr import TestOCR
+        suite.addTests(loader.loadTestsFromTestCase(TestOCR))
     except Exception:
         pass
 

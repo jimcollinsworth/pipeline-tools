@@ -115,14 +115,14 @@ class DBManager:
         # Collect any PIDs explicitly recorded in target postmaster.pid files
         known_target_pids = set()
         for pgdata in target_dirs:
-            pid_file = pgdata / "postmaster.pid"
-            if pid_file.exists():
-                try:
+            try:
+                pid_file = pgdata / "postmaster.pid"
+                if pid_file.exists():
                     lines = pid_file.read_text(encoding="utf-8", errors="ignore").strip().splitlines()
                     if lines and lines[0].strip().isdigit():
                         known_target_pids.add(int(lines[0].strip()))
-                except Exception:
-                    pass
+            except Exception:
+                pass
 
         # Step 1: Sweep and terminate dangling postgres processes belonging to Pixeltable or target pgdata
         if psutil is not None and force_purge_orphans:
@@ -204,7 +204,8 @@ class DBManager:
                         stale = True
                 except Exception as e:
                     logger.warning(f"Error checking postmaster.pid: {e}")
-                    stale = True
+                    stale = False
+                    is_active_server = True
 
                 if stale:
                     had_stale_lock = True
@@ -438,18 +439,18 @@ class DBManager:
                     {
                         "id": uuid7(),
                         "file_name": pxt.String,
-                        "file_path": pxt.String,
-                        "rel_path": pxt.String,
-                        "modality": pxt.String,
-                        "file_type": pxt.String,
-                        "file_size": pxt.Int,
-                        "content": pxt.String,
-                        "doc": pxt.Document,
-                        "image": pxt.Image,
-                        "audio": pxt.Audio,
-                        "video": pxt.Video,
-                        "metadata": pxt.Json,
-                        "created_at": pxt.Timestamp
+                        "file_path": Optional[pxt.String],
+                        "rel_path": Optional[pxt.String],
+                        "modality": Optional[pxt.String],
+                        "file_type": Optional[pxt.String],
+                        "file_size": Optional[pxt.Int],
+                        "content": Optional[pxt.String],
+                        "doc": Optional[pxt.Document],
+                        "image": Optional[pxt.Image],
+                        "audio": Optional[pxt.Audio],
+                        "video": Optional[pxt.Video],
+                        "metadata": Optional[pxt.Json],
+                        "created_at": Optional[pxt.Timestamp]
                     },
                     primary_key=["id"],
                     if_exists="ignore"
@@ -573,6 +574,16 @@ class DBManager:
                                 page.close()
                     if pages_text:
                         return "\n\n--- PAGE BREAK ---\n\n".join(pages_text)
+
+                    # Automatic OCR Fallback for Scanned / Image-only PDFs
+                    try:
+                        from src.core.ocr import ocr_pdf_pages
+                        ocr_result = ocr_pdf_pages(p, max_pages=10)
+                        if ocr_result and ocr_result.strip():
+                            return ocr_result
+                    except Exception as ocr_err:
+                        logger.warning(f"OCR fallback failed on {p}: {ocr_err}")
+
                     return "[Scanned/Image PDF - no extractable text found]"
                 except Exception as pdf_err:
                     return f"[Error extracting PDF text: {str(pdf_err)}]"

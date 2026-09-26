@@ -369,6 +369,15 @@ def _preview_split_pages(domain: str, table_name: str, sample_count: int = 2, **
                             textpage = page.get_textpage()
                             try:
                                 page_text = textpage.get_text_range().strip()
+                                if not page_text:
+                                    try:
+                                        from src.core.ocr import ocr_image
+                                        pil_img = page.render(scale=1.0).to_pil()
+                                        ocr_res = ocr_image(pil_img)
+                                        if ocr_res and ocr_res.strip():
+                                            page_text = f"[OCR] {ocr_res.strip()}"
+                                    except Exception:
+                                        pass
                                 char_count = str(len(page_text))
                                 snippet = (page_text[:140] + "...") if len(page_text) > 140 else (page_text or "[Empty Page]")
                                 rows.append(["🔬 Page Preview", row_id, file_name, f"Page {page_idx + 1}", char_count, snippet])

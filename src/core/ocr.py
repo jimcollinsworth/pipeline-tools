@@ -28,10 +28,30 @@ def get_ocr_engine():
             raise
     return _ocr_engine_instance
 
+def clean_ocr_text(text: str) -> str:
+    """
+    Post-process OCR output to restore natural word spacing for English text.
+    Handles fused words from ONNX OCR tokens (e.g. PascalCase, punctuation spacing, numbers).
+    """
+    if not text:
+        return ""
+    import re
+    # Separate lowercase followed by uppercase: "EdgewaterBeach" -> "Edgewater Beach"
+    t = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+    # Punctuation spacing: "Ferrario,President" -> "Ferrario, President"
+    t = re.sub(r'([,;:])([A-Za-z])', r'\1 \2', t)
+    # Number spacing: "January28,2021" -> "January 28, 2021"
+    t = re.sub(r'([A-Za-z])(\d)', r'\1 \2', t)
+    t = re.sub(r',(\d)', r', \1', t)
+    # Dot spacing: "MichaelE.Jackson" -> "Michael E. Jackson"
+    t = re.sub(r'(\.)([A-Za-z])', r'\1 \2', t)
+    return t
+
+
 def ocr_image(image_input: Union[Image.Image, np.ndarray, str, Path]) -> str:
     """
     Perform optical character recognition on a PIL Image, NumPy array, or image file path.
-    Returns extracted text lines joined by newlines.
+    Returns extracted text lines joined by newlines with natural spacing.
     """
     if image_input is None:
         return ""
@@ -56,13 +76,14 @@ def ocr_image(image_input: Union[Image.Image, np.ndarray, str, Path]) -> str:
             return ""
 
         # Extract text strings from bounding box results: [[box, text, score], ...]
-        lines = [item[1].strip() for item in result if len(item) > 1 and item[1].strip()]
+        lines = [clean_ocr_text(item[1].strip()) for item in result if len(item) > 1 and item[1].strip()]
         return "\n".join(lines)
     except Exception as e:
         logger.warning(f"Error during image OCR: {e}")
         return ""
 
-def ocr_pdf_pages(pdf_path: Union[str, Path], max_pages: int = 10, scale: float = 2.0) -> str:
+
+def ocr_pdf_pages(pdf_path: Union[str, Path], max_pages: int = 10, scale: float = 1.5) -> str:
     """
     Render PDF pages to high-resolution images via pypdfium2 and extract text via OCR.
     Enforces C-level resource cleanup and bounds extraction to max_pages.
